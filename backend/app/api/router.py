@@ -31,6 +31,7 @@ from app.api.environments import router as environments_router
 from app.api.template_notebooks import router as template_notebooks_router
 from app.api.notifications import router as notifications_router
 from app.api.backups import router as backups_router
+from app.api.costs import router as costs_router
 
 api_router = APIRouter()
 
@@ -65,3 +66,4 @@ api_router.include_router(environments_router)
 api_router.include_router(template_notebooks_router)
 api_router.include_router(notifications_router)
 api_router.include_router(backups_router)
+api_router.include_router(costs_router)
