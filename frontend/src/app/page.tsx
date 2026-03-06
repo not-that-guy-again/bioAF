@@ -8,7 +8,7 @@ import { SystemHealth } from "@/components/dashboard/SystemHealth";
 import { ComponentInventory } from "@/components/dashboard/ComponentInventory";
 import { isAuthenticated } from "@/lib/auth";
 import { api } from "@/lib/api";
-import type { HealthStatus, ComponentState, Experiment, ExperimentListResponse, PipelineRun, PipelineRunListResponse } from "@/lib/types";
+import type { HealthStatus, ComponentState, Experiment, ExperimentListResponse, PipelineRun, PipelineRunListResponse, QCDashboardSummary } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ExperimentStatusBadge } from "@/components/experiments/ExperimentStatusBadge";
 import Link from "next/link";
@@ -19,6 +19,7 @@ export default function HomePage() {
   const [components, setComponents] = useState<ComponentState[]>([]);
   const [recentExperiments, setRecentExperiments] = useState<Experiment[]>([]);
   const [activeRuns, setActiveRuns] = useState<PipelineRun[]>([]);
+  const [recentQC, setRecentQC] = useState<QCDashboardSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,16 +30,18 @@ export default function HomePage() {
 
     async function fetchData() {
       try {
-        const [healthData, compData, expData, runsData] = await Promise.all([
+        const [healthData, compData, expData, runsData, qcData] = await Promise.all([
           api.get<HealthStatus>("/api/health/status"),
           api.get<{ components: ComponentState[] }>("/api/components"),
           api.get<ExperimentListResponse>("/api/experiments?page=1&page_size=5").catch(() => ({ experiments: [], total: 0, page: 1, page_size: 5 })),
           api.get<PipelineRunListResponse>("/api/pipeline-runs?status=running&page_size=5").catch(() => ({ runs: [], total: 0, page: 1, page_size: 5 })),
+          api.get<QCDashboardSummary[]>("/api/qc-dashboards").catch(() => [] as QCDashboardSummary[]),
         ]);
         setHealth(healthData);
         setComponents(compData.components);
         setRecentExperiments(expData.experiments);
         setActiveRuns(runsData.runs);
+        setRecentQC(qcData.slice(0, 5));
       } catch {
         // Error handled by api client
       } finally {
@@ -76,7 +79,7 @@ export default function HomePage() {
 
           <ComponentInventory components={components} />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
             <div className="bg-white rounded-lg shadow p-6 border-l-4 border-bioaf-400">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold">Recent Experiments</h3>
@@ -140,6 +143,39 @@ export default function HomePage() {
                       )}
                     </Link>
                   ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-400">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Recent QC Results</h3>
+                <Link href="/results" className="text-sm text-bioaf-600 hover:text-bioaf-700">
+                  View all →
+                </Link>
+              </div>
+              {recentQC.length === 0 ? (
+                <p className="text-sm text-gray-400">No QC dashboards yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {recentQC.map((qc) => {
+                    const qualityColor: Record<string, string> = {
+                      excellent: "bg-green-100 text-green-700",
+                      good: "bg-blue-100 text-blue-700",
+                      acceptable: "bg-yellow-100 text-yellow-700",
+                      concerning: "bg-red-100 text-red-700",
+                    };
+                    return (
+                      <div key={qc.id} className="flex items-center justify-between p-2 rounded hover:bg-gray-50 -mx-2">
+                        <div>
+                          <p className="text-sm font-medium">Run #{qc.pipeline_run_id}</p>
+                          <p className="text-xs text-gray-500">{qc.cell_count != null ? `${qc.cell_count.toLocaleString()} cells` : ""}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${qualityColor[qc.quality_rating] || "bg-gray-100 text-gray-700"}`}>
+                          {qc.quality_rating}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -42,3 +42,37 @@ resource "google_service_account_iam_member" "qc_dashboard_workload_identity" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[bioaf-qc/qc-dashboard]"
 }
+
+# GKE namespace for cellxgene
+resource "kubernetes_namespace" "cellxgene" {
+  count = var.enable_cellxgene ? 1 : 0
+
+  metadata {
+    name = "bioaf-cellxgene"
+    labels = {
+      component   = "cellxgene"
+      environment = var.environment
+    }
+  }
+}
+
+# GKE namespace for QC dashboard
+resource "kubernetes_namespace" "qc_dashboard" {
+  count = var.enable_qc_dashboard ? 1 : 0
+
+  metadata {
+    name = "bioaf-qc"
+    labels = {
+      component   = "qc-dashboard"
+      environment = var.environment
+    }
+  }
+}
+
+# QC dashboard needs write access for generating plot images
+resource "google_project_iam_member" "qc_dashboard_storage_write" {
+  count   = var.enable_qc_dashboard ? 1 : 0
+  project = var.project_id
+  role    = "roles/storage.objectCreator"
+  member  = "serviceAccount:${google_service_account.qc_dashboard[0].email}"
+}

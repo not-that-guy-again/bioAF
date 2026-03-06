@@ -42,6 +42,7 @@ export default function PipelineLauncherPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, pipelineKey]);
 
   useEffect(() => {
@@ -284,6 +285,8 @@ function ParameterForm({
   values: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
 }) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   if (!schema?.definitions) {
     return (
       <div className="text-sm text-gray-500">
@@ -296,8 +299,6 @@ function ParameterForm({
       </div>
     );
   }
-
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const managedParams = new Set(["input", "outdir"]);
 

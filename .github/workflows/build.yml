@@ -22,7 +22,8 @@ jobs:
       - name: Build image (no push)
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./backend
+          file: docker/Dockerfile.backend
           push: false
           tags: bioaf/bioaf:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha

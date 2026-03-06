@@ -507,3 +507,199 @@ export interface PipelineAddRequest {
   version?: string | null;
   description?: string | null;
 }
+
+// Phase 5 — Data Management + Visualization
+
+export interface FileResponse {
+  id: number;
+  filename: string;
+  gcs_uri: string;
+  size_bytes: number | null;
+  md5_checksum: string | null;
+  file_type: string;
+  tags: string[];
+  uploader: UserSummary | null;
+  upload_timestamp: string;
+  created_at: string;
+}
+
+export interface FileListResponse {
+  files: FileResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface FileUploadInitiateResponse {
+  upload_id: string;
+  signed_url: string;
+  gcs_uri: string;
+}
+
+export interface DatasetExperimentSummary {
+  experiment_id: number;
+  experiment_name: string;
+  status: string;
+  organism: string | null;
+  tissue: string | null;
+  sample_count: number;
+  file_count: number;
+  total_size_bytes: number;
+  pipeline_run_count: number;
+  has_qc_dashboard: boolean;
+  has_cellxgene: boolean;
+  owner: UserSummary | null;
+  created_at: string;
+}
+
+export interface DatasetSearchResult {
+  experiments: DatasetExperimentSummary[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface DocumentResponse {
+  id: number;
+  title: string | null;
+  file: FileResponse | null;
+  has_extracted_text: boolean;
+  linked_experiment_id: number | null;
+  linked_sample_id: number | null;
+  linked_pipeline_run_id: number | null;
+  created_at: string;
+}
+
+export interface DocumentSearchResponse {
+  documents: DocumentResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface BucketStats {
+  bucket_name: string;
+  total_bytes: number;
+  object_count: number;
+  by_storage_class: Record<string, number>;
+  cost_estimate_monthly: number;
+}
+
+export interface LifecyclePolicyStatus {
+  bucket_name: string;
+  rules: Record<string, unknown>[];
+  enabled: boolean;
+}
+
+export interface StorageDashboard {
+  buckets: BucketStats[];
+  total_bytes: number;
+  total_cost_estimate_monthly: number;
+  lifecycle_policies: LifecyclePolicyStatus[];
+  last_updated: string;
+}
+
+export interface CellxgenePublicationResponse {
+  id: number;
+  dataset_name: string;
+  stable_url: string | null;
+  status: string;
+  file: FileResponse | null;
+  experiment_id: number | null;
+  published_by: UserSummary | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+export interface QCMetrics {
+  cell_count: number | null;
+  median_reads_per_cell: number | null;
+  median_genes_per_cell: number | null;
+  median_umi_per_cell: number | null;
+  mito_pct_median: number | null;
+  doublet_score_median: number | null;
+  saturation: number | null;
+  quality_rating: string;
+}
+
+export interface QCPlot {
+  plot_type: string;
+  title: string;
+  file_id: number;
+  download_url?: string | null;
+}
+
+export interface QCDashboardResponse {
+  id: number;
+  pipeline_run_id: number;
+  experiment_id: number | null;
+  metrics: QCMetrics;
+  summary_text: string;
+  plots: QCPlot[];
+  status: string;
+  generated_at: string | null;
+  created_at: string;
+}
+
+export interface QCDashboardSummary {
+  id: number;
+  pipeline_run_id: number;
+  quality_rating: string;
+  cell_count: number | null;
+  status: string;
+  generated_at: string | null;
+}
+
+export interface PlotArchiveResponse {
+  id: number;
+  title: string | null;
+  file: FileResponse | null;
+  experiment_id: number | null;
+  pipeline_run_id: number | null;
+  notebook_session_id: number | null;
+  tags: string[];
+  thumbnail_url: string | null;
+  indexed_at: string;
+}
+
+export interface PlotArchiveListResponse {
+  plots: PlotArchiveResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface SearchHit {
+  entity_type: string;
+  entity_id: number;
+  title: string;
+  snippet: string | null;
+  experiment_id: number | null;
+  relevance_score: number | null;
+}
+
+export interface SearchResult {
+  results: SearchHit[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ProvenanceNode {
+  entity_type: string;
+  entity_id: number;
+  label: string;
+  timestamp: string | null;
+  children: number[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ProvenanceChain {
+  experiment: ProvenanceNode;
+  samples: ProvenanceNode[];
+  fastq_uploads: ProvenanceNode[];
+  pipeline_runs: ProvenanceNode[];
+  outputs: ProvenanceNode[];
+  cellxgene_publications: ProvenanceNode[];
+  qc_dashboards: ProvenanceNode[];
+}

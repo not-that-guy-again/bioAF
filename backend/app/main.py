@@ -64,6 +64,8 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_idle_session_check_loop()))
     background_tasks.append(asyncio.create_task(_quota_reset_loop()))
     background_tasks.append(asyncio.create_task(_pipeline_monitor_loop()))
+    background_tasks.append(asyncio.create_task(_plot_archive_watcher_loop()))
+    background_tasks.append(asyncio.create_task(_storage_stats_refresh_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -140,6 +142,47 @@ async def _pipeline_monitor_loop():
             break
         except Exception as e:
             logger.error("Pipeline monitor error: %s", e)
+
+
+async def _plot_archive_watcher_loop():
+    """Scan results bucket for new image files every 60 seconds."""
+    from app.database import async_session_factory
+    from app.services.plot_archive_service import PlotArchiveService
+
+    while True:
+        try:
+            await asyncio.sleep(60)
+            async with async_session_factory() as session:
+                await PlotArchiveService.scan_and_index(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Plot archive watcher error: %s", e)
+
+
+async def _storage_stats_refresh_loop():
+    """Refresh storage stats every hour."""
+    from app.database import async_session_factory
+    from app.services.storage_service import StorageService
+    from app.models.organization import Organization
+    from sqlalchemy import select
+
+    while True:
+        try:
+            await asyncio.sleep(3600)
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await StorageService.refresh_storage_stats(session, org.id)
+                        await session.commit()
+                    except Exception as e:
+                        logger.warning("Storage refresh failed for org %d: %s", org.id, e)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Storage stats refresh error: %s", e)
 
 
 app = FastAPI(

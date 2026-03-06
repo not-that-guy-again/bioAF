@@ -28,6 +28,7 @@ export default function PipelineRunsPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     loadRuns();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, page, statusFilter]);
 
   async function loadRuns() {

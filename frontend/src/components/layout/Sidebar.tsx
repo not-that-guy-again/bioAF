@@ -8,11 +8,11 @@ import { getCurrentUser } from "@/lib/auth";
 const navItems = [
   { label: "Home", href: "/", icon: "home", active: true },
   { label: "Experiments", href: "/experiments", icon: "flask", active: true },
-  { label: "Data", href: "/data", icon: "database", active: false, phase: "Phase 3" },
+  { label: "Data", href: "/data", icon: "database", active: true },
   { label: "Compute", href: "/compute", icon: "server", active: true },
   { label: "Pipeline Catalog", href: "/pipelines", icon: "workflow", active: true, compBioOnly: true },
   { label: "Pipeline Runs", href: "/pipelines/runs", icon: "play", active: true, compBioOnly: true },
-  { label: "Results", href: "/results", icon: "chart", active: false, phase: "Phase 5" },
+  { label: "Results", href: "/results", icon: "chart", active: true },
   { label: "Components", href: "/components", icon: "puzzle", active: true },
   { label: "Templates", href: "/admin/templates", icon: "template", active: true, adminOnly: true },
   { label: "Users & Roles", href: "/admin/users", icon: "users", active: true, adminOnly: true },
@@ -45,7 +45,6 @@ export function Sidebar() {
               label={item.label}
               href={item.href}
               active={item.active}
-              phase={item.phase}
               isCurrentPage={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)}
             />
           );

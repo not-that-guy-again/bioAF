@@ -50,6 +50,7 @@ export default function PipelineRunDetailPage() {
     if (!run || !["running", "pending"].includes(run.status)) return;
     const interval = setInterval(loadRun, 10000);
     return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run?.status, loadRun]);
 
   async function handleCancel() {
@@ -97,10 +98,12 @@ export default function PipelineRunDetailPage() {
   useEffect(() => {
     if (activeTab === "report") loadReport();
     if (activeTab === "provenance") loadProvenance();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, runId]);
 
   useEffect(() => {
     if (selectedProcess && activeTab === "logs") loadLogs(selectedProcess);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProcess, activeTab]);
 
   if (loading) {

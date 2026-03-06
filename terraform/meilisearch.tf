@@ -28,3 +28,37 @@ resource "google_compute_disk" "meilisearch_data" {
     environment = var.environment
   }
 }
+
+# GKE namespace for Meilisearch
+resource "kubernetes_namespace" "meilisearch" {
+  count = var.enable_meilisearch ? 1 : 0
+
+  metadata {
+    name = "bioaf-meilisearch"
+    labels = {
+      component   = "meilisearch"
+      environment = var.environment
+    }
+  }
+}
+
+# Meilisearch master key stored as K8s secret
+resource "kubernetes_secret" "meilisearch_master_key" {
+  count = var.enable_meilisearch ? 1 : 0
+
+  metadata {
+    name      = "meilisearch-master-key"
+    namespace = kubernetes_namespace.meilisearch[0].metadata[0].name
+  }
+
+  data = {
+    MEILI_MASTER_KEY = var.meilisearch_master_key
+  }
+}
+
+variable "meilisearch_master_key" {
+  description = "Meilisearch master key for API authentication"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
