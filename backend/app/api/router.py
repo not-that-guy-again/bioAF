@@ -33,6 +33,8 @@ from app.api.notifications import router as notifications_router
 from app.api.backups import router as backups_router
 from app.api.costs import router as costs_router
 from app.api.upgrades import router as upgrades_router
+from app.api.access_logs import router as access_logs_router
+from app.api.activity_feed import router as activity_feed_router
 
 api_router = APIRouter()
 
@@ -69,3 +71,5 @@ api_router.include_router(notifications_router)
 api_router.include_router(backups_router)
 api_router.include_router(costs_router)
 api_router.include_router(upgrades_router)
+api_router.include_router(access_logs_router)
+api_router.include_router(activity_feed_router)
