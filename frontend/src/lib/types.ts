@@ -72,6 +72,8 @@ export type ExperimentStatus =
   | "sequencing"
   | "fastq_uploaded"
   | "processing"
+  | "pipeline_complete"
+  | "reviewed"
   | "analysis"
   | "complete";
 
@@ -151,6 +153,9 @@ export interface SampleBrief {
   sample_id_external: string | null;
   organism: string | null;
   tissue_type: string | null;
+  molecule_type: string | null;
+  library_prep_method: string | null;
+  library_layout: string | null;
   qc_status: QCStatus | null;
   status: SampleStatus;
   created_at: string;
@@ -159,6 +164,8 @@ export interface SampleBrief {
 export interface BatchBrief {
   id: number;
   name: string;
+  instrument_model: string | null;
+  instrument_platform: string | null;
   sample_count: number;
   created_at: string;
 }
@@ -187,6 +194,9 @@ export interface Sample {
   viability_pct: number | null;
   cell_count: number | null;
   prep_notes: string | null;
+  molecule_type: string | null;
+  library_prep_method: string | null;
+  library_layout: string | null;
   qc_status: QCStatus | null;
   qc_notes: string | null;
   status: SampleStatus;
@@ -200,6 +210,9 @@ export interface Batch {
   prep_date: string | null;
   operator: UserSummary | null;
   sequencer_run_id: string | null;
+  instrument_model: string | null;
+  instrument_platform: string | null;
+  quality_score_encoding: string | null;
   notes: string | null;
   sample_count: number;
   created_at: string;
@@ -256,6 +269,9 @@ export interface SampleCreateRequest {
   viability_pct?: number | null;
   cell_count?: number | null;
   prep_notes?: string | null;
+  molecule_type?: string | null;
+  library_prep_method?: string | null;
+  library_layout?: string | null;
   qc_status?: string | null;
   qc_notes?: string | null;
 }
@@ -265,6 +281,9 @@ export interface BatchCreateRequest {
   prep_date?: string | null;
   operator_user_id?: number | null;
   sequencer_run_id?: string | null;
+  instrument_model?: string | null;
+  instrument_platform?: string | null;
+  quality_score_encoding?: string | null;
   notes?: string | null;
 }
 
@@ -466,6 +485,8 @@ export interface PipelineRun {
   error_message: string | null;
   work_dir: string | null;
   slurm_job_id: string | null;
+  reference_genome: string | null;
+  alignment_algorithm: string | null;
   resume_from_run_id: number | null;
   started_at: string | null;
   completed_at: string | null;
@@ -494,6 +515,8 @@ export interface PipelineRunLaunchRequest {
   sample_ids?: number[] | null;
   parameters: Record<string, unknown>;
   resume_from_run_id?: number | null;
+  reference_genome?: string | null;
+  alignment_algorithm?: string | null;
 }
 
 export interface PipelineRunCompareResponse {
@@ -837,5 +860,47 @@ export interface TemplateNotebookResponse {
 
 export interface TemplateNotebookListResponse {
   notebooks: TemplateNotebookResponse[];
+  total: number;
+}
+
+// Phase 8 — MINSEQE Metadata + Pipeline Reviews
+
+export type ReviewVerdict = "approved" | "approved_with_caveats" | "rejected" | "revision_requested";
+
+export interface ControlledVocabularyValue {
+  id: number;
+  field_name: string;
+  allowed_value: string;
+  display_label: string | null;
+  display_order: number;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+export interface ControlledVocabularyFieldsResponse {
+  fields: string[];
+}
+
+export interface SampleVerdictEntry {
+  sample_id: number;
+  verdict: ReviewVerdict;
+  notes: string | null;
+}
+
+export interface PipelineRunReview {
+  id: number;
+  pipeline_run_id: number;
+  reviewer: UserSummary;
+  verdict: ReviewVerdict;
+  notes: string | null;
+  sample_verdicts: SampleVerdictEntry[] | null;
+  recommended_exclusions: number[] | null;
+  is_active: boolean;
+  reviewed_at: string;
+  created_at: string;
+}
+
+export interface PipelineRunReviewListResponse {
+  reviews: PipelineRunReview[];
   total: number;
 }

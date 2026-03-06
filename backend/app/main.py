@@ -79,6 +79,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_backup_health_check_loop()))
     background_tasks.append(asyncio.create_task(_cost_billing_sync_loop()))
     background_tasks.append(asyncio.create_task(_version_check_loop()))
+    background_tasks.append(asyncio.create_task(_review_reminder_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -301,6 +302,22 @@ async def _version_check_loop():
             break
         except Exception as e:
             logger.error("Version check error: %s", e)
+
+
+async def _review_reminder_loop():
+    """Check for unreviewed pipeline runs every 6 hours."""
+    from app.database import async_session_factory
+    from app.tasks.review_reminder import check_unreviewed_runs
+
+    while True:
+        try:
+            await asyncio.sleep(21600)  # 6 hours
+            async with async_session_factory() as session:
+                await check_unreviewed_runs(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Review reminder error: %s", e)
 
 
 app = FastAPI(

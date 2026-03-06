@@ -44,6 +44,8 @@ from app.models import (  # noqa: F401
     User,
     UserQuota,
     VerificationCode,
+    ControlledVocabulary,
+    PipelineRunReview,
 )
 
 # Alembic Config object

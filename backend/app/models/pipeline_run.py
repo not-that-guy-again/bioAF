@@ -28,6 +28,8 @@ class PipelineRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     work_dir: Mapped[str | None] = mapped_column(String(500), nullable=True)
     slurm_job_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reference_genome: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    alignment_algorithm: Mapped[str | None] = mapped_column(String(200), nullable=True)
     resume_from_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pipeline_runs.id"), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -5,7 +5,9 @@ import { useRouter, useParams } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { ReviewPanel } from "@/components/experiments/ReviewPanel";
 import { isAuthenticated } from "@/lib/auth";
+import { getToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 import type { PipelineRunDetail, PipelineRunStatus, PipelineProcessStatus } from "@/lib/types";
 
@@ -18,7 +20,18 @@ const STATUS_COLORS: Record<PipelineRunStatus | PipelineProcessStatus, string> =
   cached: "bg-purple-100 text-purple-700",
 };
 
-type Tab = "progress" | "parameters" | "provenance" | "report" | "logs";
+type Tab = "progress" | "parameters" | "provenance" | "report" | "logs" | "review";
+
+function getUserRole(): string {
+  try {
+    const token = getToken();
+    if (!token) return "viewer";
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.role || "viewer";
+  } catch {
+    return "viewer";
+  }
+}
 
 export default function PipelineRunDetailPage() {
   const router = useRouter();
@@ -129,6 +142,7 @@ export default function PipelineRunDetailPage() {
     { key: "provenance", label: "Provenance" },
     { key: "report", label: "Report" },
     { key: "logs", label: "Logs" },
+    { key: "review", label: "Review" },
   ];
 
   return (
@@ -164,6 +178,18 @@ export default function PipelineRunDetailPage() {
                 </span>
               </div>
               {run.error_message && <p className="text-sm text-red-600 mt-2">{run.error_message}</p>}
+            </div>
+          )}
+
+          {/* MINSEQE metadata */}
+          {(run.reference_genome || run.alignment_algorithm) && (
+            <div className="bg-white rounded-lg shadow p-4 mb-6 flex gap-6">
+              {run.reference_genome && (
+                <div><span className="text-xs text-gray-500">Reference Genome</span><p className="text-sm font-medium">{run.reference_genome}</p></div>
+              )}
+              {run.alignment_algorithm && (
+                <div><span className="text-xs text-gray-500">Alignment Algorithm</span><p className="text-sm font-medium">{run.alignment_algorithm}</p></div>
+              )}
             </div>
           )}
 
@@ -270,6 +296,11 @@ export default function PipelineRunDetailPage() {
                 </div>
               ) : <p className="text-gray-400">Select a process to view logs</p>}
             </div>
+          )}
+
+          {/* Review tab */}
+          {activeTab === "review" && (
+            <ReviewPanel pipelineRunId={run.id} userRole={getUserRole()} onReviewSubmitted={loadRun} />
           )}
         </main>
       </div>

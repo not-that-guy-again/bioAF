@@ -4,6 +4,8 @@
 PIPELINE_COMPLETED = "pipeline.completed"
 PIPELINE_FAILED = "pipeline.failed"
 PIPELINE_STAGE_ERROR = "pipeline.stage_error"
+PIPELINE_RUN_REVIEWED = "pipeline_run.reviewed"
+PIPELINE_RUN_REVIEW_REMINDER = "pipeline_run.review_reminder"
 
 # QC events
 QC_RESULTS_READY = "qc.results_ready"
@@ -71,6 +73,8 @@ ALL_EVENT_TYPES = [
     STORAGE_THRESHOLD,
     USER_INVITATION_ACCEPTED,
     TERRAFORM_APPLY_FAILURE,
+    PIPELINE_RUN_REVIEWED,
+    PIPELINE_RUN_REVIEW_REMINDER,
 ]
 
 # Severity mapping for event types
@@ -95,4 +99,6 @@ EVENT_SEVERITY = {
     STORAGE_THRESHOLD: "warning",
     USER_INVITATION_ACCEPTED: "info",
     TERRAFORM_APPLY_FAILURE: "critical",
+    PIPELINE_RUN_REVIEWED: "info",
+    PIPELINE_RUN_REVIEW_REMINDER: "warning",
 }

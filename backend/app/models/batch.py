@@ -15,6 +15,9 @@ class Batch(Base):
     prep_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     operator_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     sequencer_run_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    instrument_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    instrument_platform: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    quality_score_encoding: Mapped[str | None] = mapped_column(String(50), server_default="Phred+33", nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

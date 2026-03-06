@@ -264,6 +264,8 @@ function DatasetBrowserTab() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [organismFilter, setOrganismFilter] = useState("");
   const pageSize = 20;
 
   const fetchDatasets = useCallback(async () => {
@@ -274,6 +276,8 @@ function DatasetBrowserTab() {
         page_size: String(pageSize),
       });
       if (query) params.set("query", query);
+      if (statusFilter) params.set("status", statusFilter);
+      if (organismFilter) params.set("organism", organismFilter);
       const data = await api.get<DatasetSearchResult>(
         `/api/datasets?${params}`
       );
@@ -284,7 +288,7 @@ function DatasetBrowserTab() {
     } finally {
       setLoading(false);
     }
-  }, [page, query]);
+  }, [page, query, statusFilter, organismFilter]);
 
   useEffect(() => {
     fetchDatasets();
@@ -292,7 +296,7 @@ function DatasetBrowserTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
         <input
           type="text"
           placeholder="Search datasets..."
@@ -301,8 +305,30 @@ function DatasetBrowserTab() {
             setQuery(e.target.value);
             setPage(1);
           }}
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+          className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-md text-sm"
         />
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
+          <option value="">All Statuses</option>
+          <option value="registered">Registered</option>
+          <option value="processing">Processing</option>
+          <option value="pipeline_complete">Pipeline Complete</option>
+          <option value="reviewed">Reviewed</option>
+          <option value="analysis">Analysis</option>
+          <option value="complete">Complete</option>
+        </select>
+        <select
+          value={organismFilter}
+          onChange={(e) => { setOrganismFilter(e.target.value); setPage(1); }}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
+          <option value="">All Organisms</option>
+          <option value="Human">Human</option>
+          <option value="Mouse">Mouse</option>
+        </select>
       </div>
 
       {loading ? (
@@ -320,6 +346,9 @@ function DatasetBrowserTab() {
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Organism
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Samples
@@ -342,6 +371,9 @@ function DatasetBrowserTab() {
                       <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700">
                         {ds.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {ds.organism || "—"}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {ds.sample_count}

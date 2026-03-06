@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { ExperimentStatusBadge } from "@/components/experiments/ExperimentStatusBadge";
 import { SampleQCBadge } from "@/components/experiments/SampleQCBadge";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { VocabularySelect } from "@/components/shared/VocabularySelect";
 import { isAuthenticated } from "@/lib/auth";
 import { api } from "@/lib/api";
 import type {
@@ -267,7 +268,7 @@ export default function ExperimentDetailPage() {
                       defaultValue=""
                     >
                       <option value="" disabled>Advance status...</option>
-                      {(["registered", "library_prep", "sequencing", "fastq_uploaded", "processing", "analysis", "complete"] as ExperimentStatus[])
+                      {(["registered", "library_prep", "sequencing", "fastq_uploaded", "processing", "pipeline_complete", "reviewed", "analysis", "complete"] as ExperimentStatus[])
                         .filter((s) => s !== experiment.status)
                         .map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
                     </select>
@@ -320,6 +321,9 @@ export default function ExperimentDetailPage() {
                     <input placeholder="Donor/Source" value={sampleForm.donor_source ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, donor_source: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Treatment" value={sampleForm.treatment_condition ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, treatment_condition: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Chemistry Version" value={sampleForm.chemistry_version ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, chemistry_version: e.target.value })} className="border rounded px-3 py-2 text-sm" />
+                    <VocabularySelect fieldName="molecule_type" value={sampleForm.molecule_type} onChange={(v) => setSampleForm({ ...sampleForm, molecule_type: v })} placeholder="Molecule Type..." />
+                    <VocabularySelect fieldName="library_prep_method" value={sampleForm.library_prep_method} onChange={(v) => setSampleForm({ ...sampleForm, library_prep_method: v })} placeholder="Library Prep..." />
+                    <VocabularySelect fieldName="library_layout" value={sampleForm.library_layout} onChange={(v) => setSampleForm({ ...sampleForm, library_layout: v })} placeholder="Library Layout..." />
                   </div>
                   <div className="flex gap-2 mt-3">
                     <button onClick={handleAddSample} className="bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm">Save</button>
@@ -335,6 +339,8 @@ export default function ExperimentDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">External ID</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Organism</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tissue</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Molecule</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Layout</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QC</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -346,6 +352,8 @@ export default function ExperimentDetailPage() {
                         <td className="px-4 py-3 text-sm">{s.sample_id_external || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.organism || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.tissue_type || "—"}</td>
+                        <td className="px-4 py-3 text-sm">{s.molecule_type || "—"}</td>
+                        <td className="px-4 py-3 text-sm">{s.library_layout || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.batch?.name || "—"}</td>
                         <td className="px-4 py-3">
                           <select
@@ -363,7 +371,7 @@ export default function ExperimentDetailPage() {
                       </tr>
                     ))}
                     {samples.length === 0 && (
-                      <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -386,6 +394,8 @@ export default function ExperimentDetailPage() {
                     <input placeholder="Batch Name *" value={batchForm.name} onChange={(e) => setBatchForm({ ...batchForm, name: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input type="date" placeholder="Prep Date" value={batchForm.prep_date ?? ""} onChange={(e) => setBatchForm({ ...batchForm, prep_date: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Sequencer Run ID" value={batchForm.sequencer_run_id ?? ""} onChange={(e) => setBatchForm({ ...batchForm, sequencer_run_id: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
+                    <VocabularySelect fieldName="instrument_model" value={batchForm.instrument_model} onChange={(v) => setBatchForm({ ...batchForm, instrument_model: v })} placeholder="Instrument Model..." />
+                    <VocabularySelect fieldName="quality_score_encoding" value={batchForm.quality_score_encoding} onChange={(v) => setBatchForm({ ...batchForm, quality_score_encoding: v })} placeholder="Quality Encoding..." />
                     <input placeholder="Notes" value={batchForm.notes ?? ""} onChange={(e) => setBatchForm({ ...batchForm, notes: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
                   </div>
                   <div className="flex gap-2 mt-3">
@@ -403,9 +413,11 @@ export default function ExperimentDetailPage() {
                         <h3 className="font-semibold">{b.name}</h3>
                         <p className="text-sm text-gray-500">{b.sample_count} samples</p>
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-gray-500 flex flex-wrap gap-x-4">
                         {b.prep_date && <span>Prep: {b.prep_date}</span>}
-                        {b.sequencer_run_id && <span className="ml-4">Run: {b.sequencer_run_id}</span>}
+                        {b.sequencer_run_id && <span>Run: {b.sequencer_run_id}</span>}
+                        {b.instrument_model && <span>{b.instrument_model}</span>}
+                        {b.instrument_platform && <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">{b.instrument_platform}</span>}
                       </div>
                     </div>
                     {b.notes && <p className="text-sm text-gray-500 mt-2">{b.notes}</p>}

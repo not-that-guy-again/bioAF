@@ -117,7 +117,8 @@ class PipelineMonitorService:
                 )
             )
             if not other_active.first():
-                # No other active runs — advance experiment to "analysis"
+                # No other active runs — advance experiment to "pipeline_complete"
+                # (review step now precedes "analysis" per ADR-019)
                 try:
                     from app.services.experiment_service import ExperimentService
 
@@ -126,7 +127,7 @@ class PipelineMonitorService:
                         run.experiment_id,
                         run.organization_id,
                         run.submitted_by_user_id,
-                        "analysis",
+                        "pipeline_complete",
                     )
                 except Exception as e:
                     logger.warning("Could not advance experiment status: %s", e)
