@@ -17,6 +17,14 @@ from app.api.notebooks import router as notebooks_router
 from app.api.quotas import router as quotas_router
 from app.api.pipelines import router as pipelines_router
 from app.api.pipeline_runs import router as pipeline_runs_router
+from app.api.files import router as files_router
+from app.api.datasets import router as datasets_router
+from app.api.documents import router as documents_router
+from app.api.storage import router as storage_router
+from app.api.cellxgene import router as cellxgene_router
+from app.api.qc_dashboards import router as qc_dashboards_router
+from app.api.plots import router as plots_router
+from app.api.search import router as search_router
 
 api_router = APIRouter()
 
@@ -37,3 +45,11 @@ api_router.include_router(notebooks_router)
 api_router.include_router(quotas_router)
 api_router.include_router(pipelines_router)
 api_router.include_router(pipeline_runs_router)
+api_router.include_router(files_router)
+api_router.include_router(datasets_router)
+api_router.include_router(documents_router)
+api_router.include_router(storage_router)
+api_router.include_router(cellxgene_router)
+api_router.include_router(qc_dashboards_router)
+api_router.include_router(plots_router)
+api_router.include_router(search_router)

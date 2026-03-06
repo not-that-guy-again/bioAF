@@ -1,0 +1,26 @@
+from datetime import datetime
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database import Base
+
+
+class File(Base):
+    __tablename__ = "files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)
+    gcs_uri: Mapped[str] = mapped_column(String(1000), nullable=False)
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    md5_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    upload_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    uploader_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    file_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    tags_json: Mapped[dict] = mapped_column(JSONB, server_default="[]", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization")
+    uploader = relationship("User")

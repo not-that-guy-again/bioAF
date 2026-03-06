@@ -20,6 +20,12 @@ from app.models import (  # noqa: F401
     TerraformRun,
     User,
     VerificationCode,
+    File,
+    Document,
+    CellxgenePublication,
+    QCDashboard,
+    PlotArchiveEntry,
+    StorageStatsCache,
 )
 
 # Alembic Config object

@@ -24,6 +24,11 @@ import type {
   PipelineRun,
   PipelineRunListResponse,
   PipelineRunStatus,
+  QCDashboardSummary,
+  QCDashboardResponse,
+  CellxgenePublicationResponse,
+  PlotArchiveResponse,
+  PlotArchiveListResponse,
 } from "@/lib/types";
 
 type Tab = "overview" | "samples" | "batches" | "analysis" | "pipelines" | "results" | "audit";
@@ -527,10 +532,7 @@ export default function ExperimentDetailPage() {
           )}
 
           {activeTab === "results" && (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              <h2 className="text-lg font-semibold text-gray-400 mb-2">Results</h2>
-              <p className="text-gray-400">Results and visualizations will appear here. Coming in Phase 5.</p>
-            </div>
+            <ExperimentResultsTab experimentId={Number(id)} />
           )}
 
           {activeTab === "audit" && (
@@ -594,6 +596,153 @@ export default function ExperimentDetailPage() {
           )}
         </main>
       </div>
+    </div>
+  );
+}
+
+/* ─── Experiment Results Tab ─── */
+
+function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
+  const [qcDashboards, setQcDashboards] = useState<QCDashboardSummary[]>([]);
+  const [selectedQc, setSelectedQc] = useState<QCDashboardResponse | null>(null);
+  const [cellxgenePubs, setCellxgenePubs] = useState<CellxgenePublicationResponse[]>([]);
+  const [plots, setPlots] = useState<PlotArchiveResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [qc, pubs, plotData] = await Promise.all([
+          api.get<QCDashboardSummary[]>(`/api/qc-dashboards?experiment_id=${experimentId}`),
+          api.get<CellxgenePublicationResponse[]>(`/api/cellxgene?experiment_id=${experimentId}`),
+          api.get<PlotArchiveListResponse>(`/api/plots?experiment_id=${experimentId}&page_size=12`),
+        ]);
+        setQcDashboards(qc);
+        setCellxgenePubs(pubs);
+        setPlots(plotData.plots);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [experimentId]);
+
+  const viewQcDashboard = async (id: number) => {
+    try {
+      const data = await api.get<QCDashboardResponse>(`/api/qc-dashboards/${id}`);
+      setSelectedQc(data);
+    } catch {
+      // ignore
+    }
+  };
+
+  const qualityColor = (rating: string) => {
+    switch (rating) {
+      case "excellent": return "bg-green-100 text-green-700";
+      case "good": return "bg-blue-100 text-blue-700";
+      case "acceptable": return "bg-yellow-100 text-yellow-700";
+      default: return "bg-red-100 text-red-700";
+    }
+  };
+
+  if (loading) return <p className="text-gray-400 text-sm">Loading results...</p>;
+
+  return (
+    <div className="space-y-8">
+      {/* QC Dashboards */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">QC Dashboards</h2>
+        {selectedQc ? (
+          <div className="bg-white rounded-lg shadow p-6">
+            <button onClick={() => setSelectedQc(null)} className="text-blue-600 text-sm hover:underline mb-3">
+              Back to list
+            </button>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold">Run #{selectedQc.pipeline_run_id}</h3>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${qualityColor(selectedQc.metrics.quality_rating)}`}>
+                {selectedQc.metrics.quality_rating}
+              </span>
+            </div>
+            {selectedQc.summary_text && <p className="text-sm text-gray-600 mb-4">{selectedQc.summary_text}</p>}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {selectedQc.metrics.cell_count != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Cell Count</p><p className="font-semibold">{selectedQc.metrics.cell_count.toLocaleString()}</p></div>
+              )}
+              {selectedQc.metrics.median_genes_per_cell != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Median Genes/Cell</p><p className="font-semibold">{selectedQc.metrics.median_genes_per_cell.toLocaleString()}</p></div>
+              )}
+              {selectedQc.metrics.mito_pct_median != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Mito %</p><p className="font-semibold">{selectedQc.metrics.mito_pct_median.toFixed(1)}%</p></div>
+              )}
+              {selectedQc.metrics.saturation != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Saturation</p><p className="font-semibold">{(selectedQc.metrics.saturation * 100).toFixed(1)}%</p></div>
+              )}
+            </div>
+          </div>
+        ) : qcDashboards.length === 0 ? (
+          <p className="text-gray-400 text-sm">No QC dashboards for this experiment.</p>
+        ) : (
+          <div className="bg-white rounded-lg shadow divide-y divide-gray-200">
+            {qcDashboards.map((d) => (
+              <div key={d.id} onClick={() => viewQcDashboard(d.id)} className="p-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer">
+                <div>
+                  <p className="font-medium text-sm">Run #{d.pipeline_run_id}</p>
+                  <p className="text-xs text-gray-400">{d.cell_count != null ? `${d.cell_count.toLocaleString()} cells` : ""}</p>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${qualityColor(d.quality_rating)}`}>{d.quality_rating}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* cellxgene Publications */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">cellxgene Datasets</h2>
+        {cellxgenePubs.length === 0 ? (
+          <p className="text-gray-400 text-sm">No published datasets for this experiment.</p>
+        ) : (
+          <div className="bg-white rounded-lg shadow divide-y divide-gray-200">
+            {cellxgenePubs.map((pub) => (
+              <div key={pub.id} className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">{pub.dataset_name}</p>
+                  <p className="text-xs text-gray-400">Status: {pub.status}</p>
+                </div>
+                {pub.stable_url && pub.status === "running" && (
+                  <a href={pub.stable_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm hover:underline">Open</a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Plot Archive */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Plots</h2>
+        {plots.length === 0 ? (
+          <p className="text-gray-400 text-sm">No plots for this experiment.</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {plots.map((plot) => (
+              <div key={plot.id} className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                  {plot.thumbnail_url ? (
+                    <img src={plot.thumbnail_url ?? undefined} alt={plot.title ?? undefined} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-gray-400 text-xs">No preview</span>
+                  )}
+                </div>
+                <div className="p-2">
+                  <p className="text-xs font-medium truncate">{plot.title}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

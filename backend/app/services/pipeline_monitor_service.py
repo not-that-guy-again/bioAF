@@ -144,6 +144,19 @@ class PipelineMonitorService:
             details={"status": run.status, "progress": run.progress_json},
         )
 
+        # Auto-generate QC dashboard if component is enabled and run succeeded
+        if run.status == "completed":
+            try:
+                from app.services.component_service import ComponentService
+                if await ComponentService.is_enabled(session, "qc_dashboard"):
+                    from app.services.qc_dashboard_service import QCDashboardService
+                    await QCDashboardService.generate_qc_dashboard(
+                        session, run.organization_id, run.id
+                    )
+                    logger.info("QC dashboard generated for run %d", run.id)
+            except Exception as e:
+                logger.warning("Failed to generate QC dashboard for run %d: %s", run.id, e)
+
     @staticmethod
     def parse_trace_tsv(content: str) -> list[dict]:
         """Parse a Nextflow trace.tsv file into a list of dicts."""
