@@ -215,7 +215,95 @@ class PipelineRunService:
             },
         )
 
+        # 13. Best-effort reference linkage from parameter paths
+        try:
+            await PipelineRunService._link_references_from_params(session, run.id, org_id, merged_params)
+        except Exception as e:
+            logger.warning("Reference linkage failed for run %d: %s", run.id, e)
+
         return run
+
+    @staticmethod
+    async def _link_references_from_params(
+        session: AsyncSession,
+        run_id: int,
+        org_id: int,
+        params: dict,
+    ) -> list[int]:
+        """Inspect parameter values for reference data paths and create linkages.
+
+        Best-effort: logs warnings for unresolvable paths, never raises.
+        Returns list of linked reference dataset IDs.
+        """
+        from app.models.reference_dataset import ReferenceDataset, pipeline_run_references
+
+        MOUNT_PREFIX = "/data/references/"
+        candidate_paths: list[str] = []
+
+        def _extract_paths(obj: object, depth: int = 0) -> None:
+            if depth > 10:
+                return
+            if isinstance(obj, str) and MOUNT_PREFIX in obj:
+                candidate_paths.append(obj)
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    _extract_paths(v, depth + 1)
+            elif isinstance(obj, list):
+                for v in obj:
+                    _extract_paths(v, depth + 1)
+
+        _extract_paths(params)
+
+        if not candidate_paths:
+            return []
+
+        # Load all active references for this org
+        result = await session.execute(
+            select(ReferenceDataset).where(
+                ReferenceDataset.organization_id == org_id,
+            )
+        )
+        all_refs = list(result.scalars().all())
+
+        linked_ids: list[int] = []
+        warnings: list[str] = []
+
+        for path in candidate_paths:
+            # Strip mount prefix to get relative path
+            idx = path.find(MOUNT_PREFIX)
+            relative = path[idx + len(MOUNT_PREFIX) :]
+
+            # Match against gcs_prefix using prefix matching
+            matched = None
+            for ref in all_refs:
+                prefix = ref.gcs_prefix.rstrip("/") + "/"
+                if relative.startswith(prefix) or relative.rstrip("/") + "/" == prefix:
+                    matched = ref
+                    break
+
+            if matched:
+                if matched.id not in linked_ids:
+                    linked_ids.append(matched.id)
+                    await session.execute(
+                        pipeline_run_references.insert().values(
+                            pipeline_run_id=run_id,
+                            reference_dataset_id=matched.id,
+                        )
+                    )
+                    if matched.status == "deprecated":
+                        logger.warning(
+                            "Run %d uses deprecated reference: %s %s",
+                            run_id,
+                            matched.name,
+                            matched.version,
+                        )
+            else:
+                warnings.append(f"Unresolvable reference path: {path}")
+
+        for w in warnings:
+            logger.warning("Run %d: %s", run_id, w)
+
+        return linked_ids
 
     @staticmethod
     async def cancel_run(session: AsyncSession, run_id: int, user_id: int) -> PipelineRun:
