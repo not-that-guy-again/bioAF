@@ -51,7 +51,7 @@ async def test_unified_search(client, admin_token, searchable_data):
     data = resp.json()
     assert data["total"] >= 1
     # Should find at least the experiment or document
-    types_found = {hit["entity_type"] for hit in data["hits"]}
+    types_found = {hit["entity_type"] for hit in data["results"]}
     assert len(types_found) >= 1
 
 
