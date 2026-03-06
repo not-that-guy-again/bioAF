@@ -11,6 +11,8 @@ from app.models.pipeline_run import PipelineRun, PipelineRunSample
 from app.models.sample import Sample
 from app.schemas.pipeline_run import PipelineRunLaunchRequest
 from app.services.audit_service import log_action
+from app.services.event_bus import event_bus
+from app.services.event_types import PIPELINE_COMPLETED, PIPELINE_FAILED
 from app.services.pipeline_catalog_service import PipelineCatalogService
 from app.services.quota_service import QuotaService
 from app.services.sample_sheet_service import SampleSheetService
@@ -148,6 +150,20 @@ class PipelineRunService:
             run.status = "failed"
             run.error_message = str(e)
             logger.error("Pipeline launch failed for run %d: %s", run.id, e)
+
+            import asyncio
+            asyncio.create_task(event_bus.emit(PIPELINE_FAILED, {
+                "event_type": PIPELINE_FAILED,
+                "org_id": org_id,
+                "user_id": user_id,
+                "target_user_id": user_id,
+                "entity_type": "pipeline_run",
+                "entity_id": run.id,
+                "title": f"Pipeline '{pipeline.name}' failed to launch",
+                "message": str(e),
+                "severity": "critical",
+                "summary": f"Pipeline run {run.id} failed to launch",
+            }))
 
         await session.flush()
 

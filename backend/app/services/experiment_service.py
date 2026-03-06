@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -10,6 +12,8 @@ from app.models.experiment_custom_field import ExperimentCustomField
 from app.models.sample import Sample
 from app.schemas.experiment import ExperimentCreate, ExperimentUpdate
 from app.services.audit_service import log_action
+from app.services.event_bus import event_bus
+from app.services.event_types import EXPERIMENT_STATUS_CHANGED
 
 
 class ExperimentService:
@@ -123,6 +127,19 @@ class ExperimentService:
             details={"status": new_status},
             previous_value={"status": old_status},
         )
+
+        asyncio.create_task(event_bus.emit(EXPERIMENT_STATUS_CHANGED, {
+            "event_type": EXPERIMENT_STATUS_CHANGED,
+            "org_id": org_id,
+            "user_id": user_id,
+            "entity_type": "experiment",
+            "entity_id": experiment.id,
+            "title": f"Experiment '{experiment.name}' status changed to {new_status}",
+            "message": f"Status changed from {old_status} to {new_status}",
+            "summary": f"Experiment '{experiment.name}' is now {new_status}",
+            "metadata": {"old_status": old_status, "new_status": new_status},
+        }))
+
         return experiment
 
     @staticmethod
