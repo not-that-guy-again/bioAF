@@ -1,0 +1,5 @@
+# bioAF Code Owners
+# Brent is the sole maintainer and required reviewer for all changes.
+# This works with the branch ruleset's "Require review from code owners" setting.
+
+* @not-that-guy-again
