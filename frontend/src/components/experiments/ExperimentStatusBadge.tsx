@@ -8,6 +8,8 @@ const statusConfig: Record<ExperimentStatus, { label: string; className: string 
   sequencing: { label: "Sequencing", className: "bg-indigo-100 text-indigo-800" },
   fastq_uploaded: { label: "FASTQ Uploaded", className: "bg-purple-100 text-purple-800" },
   processing: { label: "Processing", className: "bg-yellow-100 text-yellow-800" },
+  pipeline_complete: { label: "Pipeline Complete", className: "bg-teal-100 text-teal-800" },
+  reviewed: { label: "Reviewed", className: "bg-cyan-100 text-cyan-800" },
   analysis: { label: "Analysis", className: "bg-orange-100 text-orange-800" },
   complete: { label: "Complete", className: "bg-green-100 text-green-800" },
 };
