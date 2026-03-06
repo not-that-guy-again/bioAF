@@ -1,5 +1,6 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.experiment import Experiment
 from app.models.project import Project
@@ -63,6 +64,7 @@ class ProjectService:
         stmt = (
             select(Project, func.count(Experiment.id).label("experiment_count"))
             .outerjoin(Experiment, Experiment.project_id == Project.id)
+            .options(selectinload(Project.created_by))
             .where(Project.organization_id == org_id)
             .group_by(Project.id)
             .order_by(Project.created_at.desc())

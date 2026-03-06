@@ -33,9 +33,7 @@ async def searchable_data(session, admin_user):
         organization_id=admin_user.organization_id,
         file_id=f.id,
         title="Kidney Tissue Protocol",
-        doc_type="protocol",
-        uploaded_by_user_id=admin_user.id,
-        text_content="Protocol for processing kidney tissue samples for single-cell RNA sequencing.",
+        extracted_text="Protocol for processing kidney tissue samples for single-cell RNA sequencing.",
     )
     session.add(doc)
     await session.flush()

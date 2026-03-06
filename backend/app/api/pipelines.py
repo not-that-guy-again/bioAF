@@ -48,7 +48,7 @@ async def list_pipelines(
     )
 
 
-@router.get("/{key}", response_model=PipelineCatalogResponse)
+@router.get("/{key:path}", response_model=PipelineCatalogResponse)
 async def get_pipeline(
     key: str,
     current_user: dict = require_role("admin", "comp_bio"),
@@ -83,7 +83,7 @@ async def add_custom_pipeline(
     return _catalog_response(entry)
 
 
-@router.patch("/{key}/version", response_model=PipelineCatalogResponse)
+@router.patch("/version/{key:path}", response_model=PipelineCatalogResponse)
 async def update_pipeline_version(
     key: str,
     data: PipelineVersionUpdateRequest,

@@ -1,10 +1,11 @@
 import pytest
+import pytest_asyncio
 from sqlalchemy import text
 
 from app.services.auth_service import AuthService
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def bench_user(session, admin_user):
     from app.models.user import User
 
@@ -22,12 +23,12 @@ async def bench_user(session, admin_user):
     return user
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def bench_token(bench_user) -> str:
     return AuthService.create_token(bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def other_org_user(session):
     from app.models.organization import Organization
     from app.models.user import User
@@ -49,7 +50,7 @@ async def other_org_user(session):
     return user
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def other_org_token(other_org_user) -> str:
     return AuthService.create_token(
         other_org_user.id, other_org_user.email, other_org_user.role, other_org_user.organization_id

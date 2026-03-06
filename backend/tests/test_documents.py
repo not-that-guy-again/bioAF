@@ -22,8 +22,6 @@ async def sample_document(session, admin_user):
         organization_id=admin_user.organization_id,
         file_id=f.id,
         title="Test Protocol",
-        doc_type="protocol",
-        uploaded_by_user_id=admin_user.id,
     )
     session.add(doc)
     await session.flush()
