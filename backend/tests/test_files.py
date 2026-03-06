@@ -97,8 +97,8 @@ def test_parse_illumina_filename():
     result = UploadService.parse_illumina_filename("SampleName_S1_L001_R1_001.fastq.gz")
     assert result is not None
     assert result["sample_name"] == "SampleName"
-    assert result["sample_number"] == "S1"
-    assert result["lane"] == "L001"
+    assert result["sample_number"] == 1
+    assert result["lane"] == 1
     assert result["read"] == "R1"
 
     # Non-Illumina filename
