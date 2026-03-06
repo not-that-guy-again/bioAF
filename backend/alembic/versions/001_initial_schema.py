@@ -6,9 +6,10 @@ Create Date: 2026-03-05
 
 Phase 1 tables: organizations, users, verification_codes, audit_log,
                 component_states, terraform_runs, platform_config
-Phase 2+ placeholders: experiments, samples, batches, experiment_templates,
-                       experiment_custom_fields, sample_files, pipeline_runs,
-                       pipeline_run_samples, notebook_session_files
+Phase 2 tables: projects, experiments, samples, batches, experiment_templates,
+                experiment_custom_fields
+Phase 3+ placeholders: sample_files, pipeline_runs, pipeline_run_samples,
+                       notebook_session_files
 """
 
 from alembic import op
@@ -120,33 +121,58 @@ def upgrade() -> None:
     )
 
     # ---------------------------------------------------------------
-    # Phase 2+ placeholder tables (empty schemas for stable data model)
+    # Phase 2 tables (experiment tracking)
     # ---------------------------------------------------------------
 
     op.create_table(
-        "experiments",
+        "experiment_templates",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("hypothesis", sa.Text(), nullable=True),
-        sa.Column("owner_user_id", sa.Integer(), nullable=True),
-        sa.Column("status", sa.String(length=50), server_default=sa.text("'registered'"), nullable=False),
-        sa.Column("start_date", sa.Date(), nullable=True),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("required_fields_json", JSONB(), nullable=True),
+        sa.Column("custom_fields_schema_json", JSONB(), nullable=True),
+        sa.Column("created_by_user_id", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
-        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
     op.create_table(
-        "samples",
+        "projects",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("experiment_id", sa.Integer(), nullable=False),
-        sa.Column("sample_id_external", sa.String(length=255), nullable=True),
-        sa.Column("organism", sa.String(length=100), nullable=True),
-        sa.Column("tissue_type", sa.String(length=100), nullable=True),
-        sa.Column("status", sa.String(length=50), server_default=sa.text("'registered'"), nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("created_by_user_id", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
-        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "experiments",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("project_id", sa.Integer(), nullable=True),
+        sa.Column("template_id", sa.Integer(), nullable=True),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("hypothesis", sa.Text(), nullable=True),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("protocol_doc_id", sa.Integer(), nullable=True),
+        sa.Column("owner_user_id", sa.Integer(), nullable=True),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'registered'"), nullable=False),
+        sa.Column("start_date", sa.Date(), nullable=True),
+        sa.Column("expected_sample_count", sa.Integer(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.ForeignKeyConstraint(["project_id"], ["projects.id"]),
+        sa.ForeignKeyConstraint(["template_id"], ["experiment_templates.id"]),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -157,18 +183,36 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("prep_date", sa.Date(), nullable=True),
         sa.Column("operator_user_id", sa.Integer(), nullable=True),
+        sa.Column("sequencer_run_id", sa.String(length=255), nullable=True),
+        sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
         sa.ForeignKeyConstraint(["operator_user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
     op.create_table(
-        "experiment_templates",
+        "samples",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("required_fields_json", JSONB(), nullable=True),
-        sa.Column("custom_fields_schema_json", JSONB(), nullable=True),
+        sa.Column("experiment_id", sa.Integer(), nullable=False),
+        sa.Column("batch_id", sa.Integer(), nullable=True),
+        sa.Column("sample_id_external", sa.String(length=255), nullable=True),
+        sa.Column("organism", sa.String(length=100), nullable=True),
+        sa.Column("tissue_type", sa.String(length=100), nullable=True),
+        sa.Column("donor_source", sa.String(length=255), nullable=True),
+        sa.Column("treatment_condition", sa.String(length=255), nullable=True),
+        sa.Column("chemistry_version", sa.String(length=50), nullable=True),
+        sa.Column("viability_pct", sa.Numeric(precision=5, scale=2), nullable=True),
+        sa.Column("cell_count", sa.Integer(), nullable=True),
+        sa.Column("prep_notes", sa.Text(), nullable=True),
+        sa.Column("qc_status", sa.String(length=20), nullable=True),
+        sa.Column("qc_notes", sa.Text(), nullable=True),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'registered'"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.ForeignKeyConstraint(["batch_id"], ["batches.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -182,6 +226,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
+
+    # ---------------------------------------------------------------
+    # Phase 3+ placeholder tables
+    # ---------------------------------------------------------------
 
     op.create_table(
         "sample_files",
@@ -224,6 +272,22 @@ def upgrade() -> None:
     )
 
     # ---------------------------------------------------------------
+    # Indexes
+    # ---------------------------------------------------------------
+    op.create_index("idx_experiments_org_id", "experiments", ["organization_id"])
+    op.create_index("idx_experiments_project_id", "experiments", ["project_id"])
+    op.create_index("idx_experiments_status", "experiments", ["status"])
+    op.create_index("idx_experiments_owner", "experiments", ["owner_user_id"])
+    op.create_index("idx_samples_experiment_id", "samples", ["experiment_id"])
+    op.create_index("idx_samples_batch_id", "samples", ["batch_id"])
+    op.create_index("idx_samples_qc_status", "samples", ["qc_status"])
+    op.create_index("idx_batches_experiment_id", "batches", ["experiment_id"])
+    op.create_index("idx_projects_org_id", "projects", ["organization_id"])
+    op.create_index("idx_experiment_custom_fields_exp", "experiment_custom_fields", ["experiment_id"])
+    op.create_index("idx_audit_log_entity", "audit_log", ["entity_type", "entity_id"])
+    op.create_index("idx_audit_log_timestamp", "audit_log", ["timestamp"])
+
+    # ---------------------------------------------------------------
     # Audit log role enforcement (ADR-009)
     # ---------------------------------------------------------------
     # Wrapped in try/except since the bioaf_app role may not exist
@@ -239,16 +303,31 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop indexes
+    op.drop_index("idx_audit_log_timestamp")
+    op.drop_index("idx_audit_log_entity")
+    op.drop_index("idx_experiment_custom_fields_exp")
+    op.drop_index("idx_projects_org_id")
+    op.drop_index("idx_batches_experiment_id")
+    op.drop_index("idx_samples_qc_status")
+    op.drop_index("idx_samples_batch_id")
+    op.drop_index("idx_samples_experiment_id")
+    op.drop_index("idx_experiments_owner")
+    op.drop_index("idx_experiments_status")
+    op.drop_index("idx_experiments_project_id")
+    op.drop_index("idx_experiments_org_id")
+
     # Drop in reverse dependency order
     op.drop_table("notebook_session_files")
     op.drop_table("pipeline_run_samples")
     op.drop_table("pipeline_runs")
     op.drop_table("sample_files")
     op.drop_table("experiment_custom_fields")
-    op.drop_table("experiment_templates")
-    op.drop_table("batches")
     op.drop_table("samples")
+    op.drop_table("batches")
     op.drop_table("experiments")
+    op.drop_table("projects")
+    op.drop_table("experiment_templates")
     op.drop_table("platform_config")
     op.drop_table("component_states")
     op.drop_table("audit_log")
