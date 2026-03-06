@@ -41,6 +41,16 @@ resource "google_compute_instance" "slurm_controller" {
     enable-oslogin = "TRUE"
   }
 
+  metadata_startup_script = templatefile("../scripts/slurm/controller-startup.sh.tpl", {
+    munge_key_secret           = google_secret_manager_secret.slurm_munge_key[0].secret_id
+    project_id                 = var.project_id
+    controller_hostname        = "bioaf-slurm-controller"
+    standard_partition_nodes   = var.slurm_max_nodes_standard
+    interactive_partition_nodes = var.slurm_max_nodes_interactive
+    standard_instance_type     = var.slurm_instance_type_standard
+    interactive_instance_type  = var.slurm_instance_type_interactive
+  })
+
   tags = ["bioaf-slurm-controller"]
 
   labels = {
@@ -76,6 +86,16 @@ resource "google_compute_instance" "slurm_login" {
   metadata = {
     enable-oslogin = "TRUE"
   }
+
+  metadata_startup_script = templatefile("../scripts/slurm/login-startup.sh.tpl", {
+    munge_key_secret    = google_secret_manager_secret.slurm_munge_key[0].secret_id
+    project_id          = var.project_id
+    controller_hostname = "bioaf-slurm-controller"
+    filestore_ip        = var.enable_filestore ? google_filestore_instance.bioaf_nfs[0].networks[0].ip_addresses[0] : ""
+    raw_bucket          = google_storage_bucket.raw_data.name
+    working_bucket      = google_storage_bucket.working_data.name
+    results_bucket      = google_storage_bucket.results.name
+  })
 
   tags = ["bioaf-slurm-login"]
 
@@ -113,8 +133,17 @@ resource "google_compute_instance_template" "slurm_standard" {
   }
 
   metadata = {
-    enable-oslogin       = "TRUE"
-    slurm-idle-timeout   = var.slurm_idle_timeout_minutes
+    enable-oslogin     = "TRUE"
+    slurm-idle-timeout = var.slurm_idle_timeout_minutes
+    startup-script     = templatefile("../scripts/slurm/compute-startup.sh.tpl", {
+      munge_key_secret    = google_secret_manager_secret.slurm_munge_key[0].secret_id
+      project_id          = var.project_id
+      controller_hostname = "bioaf-slurm-controller"
+      filestore_ip        = var.enable_filestore ? google_filestore_instance.bioaf_nfs[0].networks[0].ip_addresses[0] : ""
+      raw_bucket          = google_storage_bucket.raw_data.name
+      working_bucket      = google_storage_bucket.working_data.name
+      results_bucket      = google_storage_bucket.results.name
+    })
   }
 
   labels = {
@@ -169,6 +198,15 @@ resource "google_compute_instance_template" "slurm_interactive" {
 
   metadata = {
     enable-oslogin = "TRUE"
+    startup-script = templatefile("../scripts/slurm/compute-startup.sh.tpl", {
+      munge_key_secret    = google_secret_manager_secret.slurm_munge_key[0].secret_id
+      project_id          = var.project_id
+      controller_hostname = "bioaf-slurm-controller"
+      filestore_ip        = var.enable_filestore ? google_filestore_instance.bioaf_nfs[0].networks[0].ip_addresses[0] : ""
+      raw_bucket          = google_storage_bucket.raw_data.name
+      working_bucket      = google_storage_bucket.working_data.name
+      results_bucket      = google_storage_bucket.results.name
+    })
   }
 
   labels = {
@@ -208,4 +246,62 @@ resource "google_compute_firewall" "slurm_internal" {
 
   source_tags = ["bioaf-slurm-controller", "bioaf-slurm-login", "bioaf-slurm-compute"]
   target_tags = ["bioaf-slurm-controller", "bioaf-slurm-login", "bioaf-slurm-compute"]
+}
+
+# Munge authentication key (shared secret for SLURM cluster)
+resource "google_secret_manager_secret" "slurm_munge_key" {
+  count     = var.enable_slurm ? 1 : 0
+  secret_id = "bioaf-slurm-munge-key"
+
+  replication {
+    auto {}
+  }
+
+  labels = {
+    component   = "slurm"
+    environment = var.environment
+  }
+}
+
+# IAP SSH firewall rule for login node access
+resource "google_compute_firewall" "slurm_ssh_iap" {
+  count   = var.enable_slurm ? 1 : 0
+  name    = "bioaf-slurm-ssh-iap"
+  network = google_compute_network.bioaf_vpc.id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["bioaf-slurm-login"]
+}
+
+# Autoscaler for standard partition MIG
+resource "google_compute_autoscaler" "slurm_standard" {
+  count  = var.enable_slurm ? 1 : 0
+  name   = "bioaf-slurm-standard-autoscaler"
+  zone   = var.zone
+  target = google_compute_instance_group_manager.slurm_standard[0].id
+
+  autoscaling_policy {
+    max_replicas    = var.slurm_max_nodes_standard
+    min_replicas    = 0
+    cooldown_period = 120
+  }
+}
+
+# Autoscaler for interactive partition MIG
+resource "google_compute_autoscaler" "slurm_interactive" {
+  count  = var.enable_slurm ? 1 : 0
+  name   = "bioaf-slurm-interactive-autoscaler"
+  zone   = var.zone
+  target = google_compute_instance_group_manager.slurm_interactive[0].id
+
+  autoscaling_policy {
+    max_replicas    = var.slurm_max_nodes_interactive
+    min_replicas    = 0
+    cooldown_period = 120
+  }
 }

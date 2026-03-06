@@ -177,6 +177,50 @@ variable "slurm_idle_timeout_minutes" {
 }
 
 # =============================================================================
+# Filestore configuration (used when enable_filestore = true)
+# =============================================================================
+
+variable "filestore_capacity_gb" {
+  description = "Filestore NFS capacity in GB"
+  type        = number
+  default     = 1024
+}
+
+# =============================================================================
+# Notebook configuration (used when enable_jupyter / enable_rstudio = true)
+# =============================================================================
+
+variable "jupyter_cpu_limit" {
+  description = "Max CPU per Jupyter session"
+  type        = string
+  default     = "4"
+}
+
+variable "jupyter_memory_limit" {
+  description = "Max memory per Jupyter session"
+  type        = string
+  default     = "8Gi"
+}
+
+variable "rstudio_cpu_limit" {
+  description = "Max CPU per RStudio session"
+  type        = string
+  default     = "4"
+}
+
+variable "rstudio_memory_limit" {
+  description = "Max memory per RStudio session"
+  type        = string
+  default     = "8Gi"
+}
+
+variable "session_idle_timeout_hours" {
+  description = "Hours of idle time before notebook sessions are auto-stopped"
+  type        = number
+  default     = 4
+}
+
+# =============================================================================
 # GKE configuration
 # =============================================================================
 

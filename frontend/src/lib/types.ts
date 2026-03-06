@@ -274,3 +274,114 @@ export interface TemplateCreateRequest {
   required_fields_json?: Record<string, unknown> | null;
   custom_fields_schema_json?: Record<string, unknown> | null;
 }
+
+// Phase 3 — Compute + Notebooks
+
+export type SlurmJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "timeout";
+export type SessionStatus = "pending" | "starting" | "running" | "idle" | "stopping" | "stopped" | "failed";
+export type SessionType = "jupyter" | "rstudio";
+export type ResourceProfile = "small" | "medium" | "large";
+
+export interface ExperimentSummary {
+  id: number;
+  name: string;
+}
+
+export const RESOURCE_PROFILES: Record<ResourceProfile, { cpu: number; memory: number }> = {
+  small: { cpu: 2, memory: 4 },
+  medium: { cpu: 4, memory: 8 },
+  large: { cpu: 8, memory: 16 },
+};
+
+export interface PartitionStatus {
+  name: string;
+  max_nodes: number;
+  active_nodes: number;
+  idle_nodes: number;
+  queue_depth: number;
+  instance_type: string;
+  use_spot: boolean;
+}
+
+export interface ClusterStatus {
+  controller_status: string;
+  partitions: PartitionStatus[];
+  total_nodes: number;
+  active_nodes: number;
+  queue_depth: number;
+  cost_burn_rate_hourly: number | null;
+}
+
+export interface SlurmJob {
+  id: number;
+  slurm_job_id: string;
+  job_name: string | null;
+  partition: string;
+  status: SlurmJobStatus;
+  user: UserSummary | null;
+  experiment: ExperimentSummary | null;
+  cpu_requested: number | null;
+  memory_gb_requested: number | null;
+  cpu_used: number | null;
+  memory_gb_used: number | null;
+  exit_code: number | null;
+  cost_estimate: number | null;
+  submitted_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface SlurmJobListResponse {
+  jobs: SlurmJob[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface NotebookSession {
+  id: number;
+  session_type: SessionType;
+  user: UserSummary | null;
+  experiment: ExperimentSummary | null;
+  resource_profile: ResourceProfile;
+  cpu_cores: number;
+  memory_gb: number;
+  status: SessionStatus;
+  idle_since: string | null;
+  proxy_url: string | null;
+  started_at: string | null;
+  stopped_at: string | null;
+  created_at: string;
+}
+
+export interface SessionListResponse {
+  sessions: NotebookSession[];
+  total: number;
+}
+
+export interface SessionLaunchRequest {
+  session_type: SessionType;
+  resource_profile: ResourceProfile;
+  experiment_id?: number | null;
+}
+
+export interface UserQuota {
+  user_id: number;
+  user_name: string | null;
+  user_email: string | null;
+  user_role: string | null;
+  cpu_hours_limit: number | null;
+  cpu_hours_used: number;
+  quota_reset_at: string;
+}
+
+export interface QuotaUpdateRequest {
+  cpu_hours_monthly_limit: number | null;
+}
+
+export interface BudgetInfo {
+  monthly_budget: number | null;
+  current_spend: number;
+  projected_spend: number;
+  threshold_alerts: string[];
+}

@@ -50,7 +50,11 @@ COMPONENT_CATALOG: dict[str, dict] = {
         "dependencies": ["slurm", "filestore"],
         "estimated_monthly_cost": "$50-$200",
         "provisioning_time_estimate": "~10 minutes",
-        "config_schema": [],
+        "config_schema": [
+            {"key": "jupyter_cpu_limit", "label": "Max CPU per session", "type": "number", "default": 4},
+            {"key": "jupyter_memory_limit", "label": "Max Memory per session (GB)", "type": "number", "default": 8},
+            {"key": "session_idle_timeout_hours", "label": "Idle Timeout (hours)", "type": "number", "default": 4},
+        ],
     },
     "rstudio": {
         "name": "RStudio Server",
@@ -59,7 +63,10 @@ COMPONENT_CATALOG: dict[str, dict] = {
         "dependencies": ["slurm", "filestore"],
         "estimated_monthly_cost": "$50-$200",
         "provisioning_time_estimate": "~10 minutes",
-        "config_schema": [],
+        "config_schema": [
+            {"key": "rstudio_cpu_limit", "label": "Max CPU per session", "type": "number", "default": 4},
+            {"key": "rstudio_memory_limit", "label": "Max Memory per session (GB)", "type": "number", "default": 8},
+        ],
     },
     "nextflow": {
         "name": "Nextflow",

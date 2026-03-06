@@ -10,6 +10,7 @@ Phase 2 tables: projects, experiments, samples, batches, experiment_templates,
                 experiment_custom_fields
 Phase 3+ placeholders: sample_files, pipeline_runs, pipeline_run_samples,
                        notebook_session_files
+Phase 3 tables: notebook_sessions, slurm_jobs, user_quotas
 """
 
 from alembic import op
@@ -262,12 +263,85 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
+    # ---------------------------------------------------------------
+    # Phase 3 tables (compute + notebooks)
+    # ---------------------------------------------------------------
+
+    op.create_table(
+        "notebook_sessions",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("session_type", sa.String(length=20), nullable=False),
+        sa.Column("experiment_id", sa.Integer(), nullable=True),
+        sa.Column("slurm_job_id", sa.String(length=50), nullable=True),
+        sa.Column("resource_profile", sa.String(length=50), nullable=False),
+        sa.Column("cpu_cores", sa.Integer(), nullable=False),
+        sa.Column("memory_gb", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=30), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("idle_since", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("proxy_url", sa.String(length=500), nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("stopped_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "slurm_jobs",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("slurm_job_id", sa.String(length=50), nullable=False),
+        sa.Column("job_name", sa.String(length=255), nullable=True),
+        sa.Column("partition", sa.String(length=50), nullable=False),
+        sa.Column("status", sa.String(length=30), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("experiment_id", sa.Integer(), nullable=True),
+        sa.Column("notebook_session_id", sa.Integer(), nullable=True),
+        sa.Column("cpu_requested", sa.Integer(), nullable=True),
+        sa.Column("memory_gb_requested", sa.Integer(), nullable=True),
+        sa.Column("cpu_used", sa.Integer(), nullable=True),
+        sa.Column("memory_gb_used", sa.Integer(), nullable=True),
+        sa.Column("exit_code", sa.Integer(), nullable=True),
+        sa.Column("stdout_path", sa.String(length=500), nullable=True),
+        sa.Column("stderr_path", sa.String(length=500), nullable=True),
+        sa.Column("cost_estimate", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("submitted_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.ForeignKeyConstraint(["notebook_session_id"], ["notebook_sessions.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "user_quotas",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("cpu_hours_monthly_limit", sa.Integer(), nullable=True),
+        sa.Column("cpu_hours_used_current_month", sa.Numeric(precision=10, scale=2), server_default=sa.text("0"), nullable=False),
+        sa.Column("quota_reset_at", sa.DateTime(timezone=True), server_default=sa.text("date_trunc('month', NOW()) + INTERVAL '1 month'"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("user_id"),
+    )
+
     op.create_table(
         "notebook_session_files",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("session_id", sa.Integer(), nullable=True),
         sa.Column("file_id", sa.Integer(), nullable=True),
         sa.Column("access_type", sa.String(length=50), nullable=True),
+        sa.ForeignKeyConstraint(["session_id"], ["notebook_sessions.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -287,6 +361,17 @@ def upgrade() -> None:
     op.create_index("idx_audit_log_entity", "audit_log", ["entity_type", "entity_id"])
     op.create_index("idx_audit_log_timestamp", "audit_log", ["timestamp"])
 
+    # Phase 3 indexes
+    op.create_index("idx_notebook_sessions_user", "notebook_sessions", ["user_id"])
+    op.create_index("idx_notebook_sessions_status", "notebook_sessions", ["status"])
+    op.create_index("idx_notebook_sessions_org", "notebook_sessions", ["organization_id"])
+    op.create_index("idx_slurm_jobs_user", "slurm_jobs", ["user_id"])
+    op.create_index("idx_slurm_jobs_status", "slurm_jobs", ["status"])
+    op.create_index("idx_slurm_jobs_org", "slurm_jobs", ["organization_id"])
+    op.create_index("idx_slurm_jobs_experiment", "slurm_jobs", ["experiment_id"])
+    op.create_index("idx_slurm_jobs_slurm_id", "slurm_jobs", ["slurm_job_id"])
+    op.create_index("idx_user_quotas_user", "user_quotas", ["user_id"])
+
     # ---------------------------------------------------------------
     # Audit log role enforcement (ADR-009)
     # ---------------------------------------------------------------
@@ -303,6 +388,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop Phase 3 indexes
+    op.drop_index("idx_user_quotas_user")
+    op.drop_index("idx_slurm_jobs_slurm_id")
+    op.drop_index("idx_slurm_jobs_experiment")
+    op.drop_index("idx_slurm_jobs_org")
+    op.drop_index("idx_slurm_jobs_status")
+    op.drop_index("idx_slurm_jobs_user")
+    op.drop_index("idx_notebook_sessions_org")
+    op.drop_index("idx_notebook_sessions_status")
+    op.drop_index("idx_notebook_sessions_user")
+
     # Drop indexes
     op.drop_index("idx_audit_log_timestamp")
     op.drop_index("idx_audit_log_entity")
@@ -319,6 +415,9 @@ def downgrade() -> None:
 
     # Drop in reverse dependency order
     op.drop_table("notebook_session_files")
+    op.drop_table("user_quotas")
+    op.drop_table("slurm_jobs")
+    op.drop_table("notebook_sessions")
     op.drop_table("pipeline_run_samples")
     op.drop_table("pipeline_runs")
     op.drop_table("sample_files")

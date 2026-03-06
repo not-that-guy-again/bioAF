@@ -1,0 +1,32 @@
+name: bioaf-scrna
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - scanpy>=1.10
+  - anndata>=0.10
+  - scvi-tools>=1.1
+  - leidenalg
+  - scvelo
+  - cellrank
+  - scrublet
+  - celltypist
+  - doubletdetection
+  - scanorama
+  - bbknn
+  - harmonypy
+  - matplotlib
+  - seaborn
+  - plotly
+  - jupyterlab
+  - ipykernel
+  - pandas
+  - numpy
+  - scipy
+  - scikit-learn
+  - umap-learn
+  - h5py
+  - zarr
+  - loompy

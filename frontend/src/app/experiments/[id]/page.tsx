@@ -19,9 +19,11 @@ import type {
   BatchCreateRequest,
   ExperimentStatus,
   QCStatus,
+  NotebookSession,
+  SessionListResponse,
 } from "@/lib/types";
 
-type Tab = "overview" | "samples" | "batches" | "data" | "pipelines" | "results" | "audit";
+type Tab = "overview" | "samples" | "batches" | "analysis" | "pipelines" | "results" | "audit";
 
 export default function ExperimentDetailPage() {
   const router = useRouter();
@@ -35,6 +37,8 @@ export default function ExperimentDetailPage() {
   const [auditTotal, setAuditTotal] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
+
+  const [notebookSessions, setNotebookSessions] = useState<NotebookSession[]>([]);
 
   const [showSampleForm, setShowSampleForm] = useState(false);
   const [showBatchForm, setShowBatchForm] = useState(false);
@@ -52,6 +56,7 @@ export default function ExperimentDetailPage() {
   useEffect(() => {
     if (activeTab === "samples") loadSamples();
     if (activeTab === "batches") loadBatches();
+    if (activeTab === "analysis") loadNotebookSessions();
     if (activeTab === "audit") loadAudit();
   }, [activeTab, id]);
 
@@ -86,6 +91,26 @@ export default function ExperimentDetailPage() {
       setAuditEntries(data.entries);
       setAuditTotal(data.total);
     } catch {}
+  }
+
+  async function loadNotebookSessions() {
+    try {
+      const data = await api.get<SessionListResponse>("/api/notebooks/sessions");
+      setNotebookSessions(data.sessions.filter(s => s.experiment?.id === Number(id)));
+    } catch {}
+  }
+
+  async function handleLaunchNotebook(sessionType: "jupyter" | "rstudio") {
+    try {
+      await api.post("/api/notebooks/sessions", {
+        session_type: sessionType,
+        resource_profile: "small",
+        experiment_id: Number(id),
+      });
+      loadNotebookSessions();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to launch session");
+    }
   }
 
   async function handleAddSample() {
@@ -158,7 +183,7 @@ export default function ExperimentDetailPage() {
     { key: "overview", label: "Overview" },
     { key: "samples", label: `Samples (${experiment.sample_count})` },
     { key: "batches", label: `Batches (${experiment.batch_count})` },
-    { key: "data", label: "Data" },
+    { key: "analysis", label: "Analysis" },
     { key: "pipelines", label: "Pipeline Runs" },
     { key: "results", label: "Results" },
     { key: "audit", label: "Audit Trail" },
@@ -374,10 +399,56 @@ export default function ExperimentDetailPage() {
             </div>
           )}
 
-          {activeTab === "data" && (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              <h2 className="text-lg font-semibold text-gray-400 mb-2">Data</h2>
-              <p className="text-gray-400">Linked files will appear here when data is uploaded. Coming in Phase 5.</p>
+          {activeTab === "analysis" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <h2 className="text-lg font-semibold mb-4">Launch Notebook</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Start a Jupyter or RStudio session pre-linked to this experiment.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleLaunchNotebook("jupyter")}
+                    className="bg-bioaf-600 text-white px-6 py-2 rounded-md text-sm hover:bg-bioaf-700"
+                  >
+                    Launch Jupyter
+                  </button>
+                  <button
+                    onClick={() => handleLaunchNotebook("rstudio")}
+                    className="bg-blue-600 text-white px-6 py-2 rounded-md text-sm hover:bg-blue-700"
+                  >
+                    Launch RStudio
+                  </button>
+                </div>
+              </div>
+
+              {notebookSessions.length > 0 && (
+                <div className="bg-white rounded-lg shadow">
+                  <div className="p-6 border-b">
+                    <h2 className="text-lg font-semibold">Linked Sessions</h2>
+                  </div>
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profile</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {notebookSessions.map((s) => (
+                        <tr key={s.id}>
+                          <td className="px-4 py-3 text-sm capitalize">{s.session_type}</td>
+                          <td className="px-4 py-3 text-sm">{s.status}</td>
+                          <td className="px-4 py-3 text-sm capitalize">{s.resource_profile}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{new Date(s.created_at).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

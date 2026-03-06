@@ -1,0 +1,278 @@
+import pytest
+import pytest_asyncio
+from unittest.mock import AsyncMock, patch
+
+from app.services.auth_service import AuthService
+
+
+@pytest_asyncio.fixture
+async def comp_bio_user(session, admin_user):
+    from app.models.user import User
+
+    password_hash = AuthService.hash_password("compbiopass123")
+    user = User(
+        email="compbio@test.com",
+        password_hash=password_hash,
+        role="comp_bio",
+        organization_id=admin_user.organization_id,
+        status="active",
+    )
+    session.add(user)
+    await session.flush()
+    await session.commit()
+    return user
+
+
+@pytest_asyncio.fixture
+async def comp_bio_token(comp_bio_user) -> str:
+    return AuthService.create_token(
+        comp_bio_user.id, comp_bio_user.email, comp_bio_user.role, comp_bio_user.organization_id
+    )
+
+
+@pytest_asyncio.fixture
+async def bench_user(session, admin_user):
+    from app.models.user import User
+
+    password_hash = AuthService.hash_password("benchpass123")
+    user = User(
+        email="bench@test.com",
+        password_hash=password_hash,
+        role="bench",
+        organization_id=admin_user.organization_id,
+        status="active",
+    )
+    session.add(user)
+    await session.flush()
+    await session.commit()
+    return user
+
+
+@pytest_asyncio.fixture
+async def bench_token(bench_user) -> str:
+    return AuthService.create_token(
+        bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_launch(client, comp_bio_token):
+    """Session launch creates session and job records."""
+    with patch(
+        "app.services.slurm_service.SlurmService._run_ssh_command",
+        new_callable=AsyncMock,
+        return_value="55555",
+    ):
+        response = await client.post(
+            "/api/notebooks/sessions",
+            json={
+                "session_type": "jupyter",
+                "resource_profile": "small",
+            },
+            headers={"Authorization": f"Bearer {comp_bio_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["session_type"] == "jupyter"
+        assert data["resource_profile"] == "small"
+        assert data["cpu_cores"] == 2
+        assert data["memory_gb"] == 4
+        assert data["status"] in ("starting", "pending")
+
+
+@pytest.mark.asyncio
+async def test_session_launch_medium_profile(client, comp_bio_token):
+    """Medium profile sets correct resources."""
+    with patch(
+        "app.services.slurm_service.SlurmService._run_ssh_command",
+        new_callable=AsyncMock,
+        return_value="55556",
+    ):
+        response = await client.post(
+            "/api/notebooks/sessions",
+            json={
+                "session_type": "rstudio",
+                "resource_profile": "medium",
+            },
+            headers={"Authorization": f"Bearer {comp_bio_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["cpu_cores"] == 4
+        assert data["memory_gb"] == 8
+
+
+@pytest.mark.asyncio
+async def test_session_launch_checks_quota(client, session, comp_bio_user, comp_bio_token):
+    """Session launch rejects when quota exceeded."""
+    from app.models.user_quota import UserQuota
+    from decimal import Decimal
+    from datetime import datetime, timezone
+
+    quota = UserQuota(
+        user_id=comp_bio_user.id,
+        organization_id=comp_bio_user.organization_id,
+        cpu_hours_monthly_limit=10,
+        cpu_hours_used_current_month=Decimal("10.0"),
+        quota_reset_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+    )
+    session.add(quota)
+    await session.flush()
+    await session.commit()
+
+    response = await client.post(
+        "/api/notebooks/sessions",
+        json={
+            "session_type": "jupyter",
+            "resource_profile": "small",
+        },
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 400
+    assert "Quota exceeded" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_session_stop(client, session, comp_bio_user, comp_bio_token):
+    """Session stop updates status."""
+    from app.models.notebook_session import NotebookSession
+
+    ns = NotebookSession(
+        user_id=comp_bio_user.id,
+        organization_id=comp_bio_user.organization_id,
+        session_type="jupyter",
+        resource_profile="small",
+        cpu_cores=2,
+        memory_gb=4,
+        status="running",
+        slurm_job_id="77777",
+    )
+    session.add(ns)
+    await session.flush()
+    await session.commit()
+
+    with patch(
+        "app.services.slurm_service.SlurmService._run_ssh_command",
+        new_callable=AsyncMock,
+        return_value="",
+    ):
+        response = await client.post(
+            f"/api/notebooks/sessions/{ns.id}/stop",
+            headers={"Authorization": f"Bearer {comp_bio_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_session_list_admin_sees_all(client, session, admin_user, admin_token, comp_bio_user):
+    """Admin sees all sessions."""
+    from app.models.notebook_session import NotebookSession
+
+    for uid in [admin_user.id, comp_bio_user.id]:
+        ns = NotebookSession(
+            user_id=uid,
+            organization_id=admin_user.organization_id,
+            session_type="jupyter",
+            resource_profile="small",
+            cpu_cores=2,
+            memory_gb=4,
+            status="running",
+        )
+        session.add(ns)
+    await session.flush()
+    await session.commit()
+
+    response = await client.get(
+        "/api/notebooks/sessions",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_session_list_comp_bio_sees_own(client, session, comp_bio_user, comp_bio_token, admin_user):
+    """Comp Bio sees only own sessions."""
+    from app.models.notebook_session import NotebookSession
+
+    # Create session for admin
+    ns1 = NotebookSession(
+        user_id=admin_user.id,
+        organization_id=admin_user.organization_id,
+        session_type="jupyter",
+        resource_profile="small",
+        cpu_cores=2,
+        memory_gb=4,
+        status="running",
+    )
+    # Create session for comp_bio
+    ns2 = NotebookSession(
+        user_id=comp_bio_user.id,
+        organization_id=comp_bio_user.organization_id,
+        session_type="rstudio",
+        resource_profile="medium",
+        cpu_cores=4,
+        memory_gb=8,
+        status="running",
+    )
+    session.add_all([ns1, ns2])
+    await session.flush()
+    await session.commit()
+
+    response = await client.get(
+        "/api/notebooks/sessions",
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    # Comp bio should only see their own sessions
+    for s in data["sessions"]:
+        assert s["user"]["id"] == comp_bio_user.id
+
+
+@pytest.mark.asyncio
+async def test_bench_cannot_launch_session(client, bench_token):
+    """Bench user cannot launch sessions."""
+    response = await client.post(
+        "/api/notebooks/sessions",
+        json={
+            "session_type": "jupyter",
+            "resource_profile": "small",
+        },
+        headers={"Authorization": f"Bearer {bench_token}"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_session_launch_creates_audit_entry(client, session, comp_bio_token):
+    """Session launch writes an audit log entry."""
+    with patch(
+        "app.services.slurm_service.SlurmService._run_ssh_command",
+        new_callable=AsyncMock,
+        return_value="88888",
+    ):
+        response = await client.post(
+            "/api/notebooks/sessions",
+            json={
+                "session_type": "jupyter",
+                "resource_profile": "small",
+            },
+            headers={"Authorization": f"Bearer {comp_bio_token}"},
+        )
+        assert response.status_code == 200
+
+    from sqlalchemy import select
+    from app.models.audit_log import AuditLog
+
+    result = await session.execute(
+        select(AuditLog).where(
+            AuditLog.entity_type == "notebook_session",
+            AuditLog.action == "launch",
+        )
+    )
+    entries = list(result.scalars().all())
+    assert len(entries) >= 1
