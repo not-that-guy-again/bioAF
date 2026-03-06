@@ -1,0 +1,70 @@
+name: Feature Request
+description: Suggest a feature or improvement for bioAF
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please describe what you'd like and why.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Related Component
+      options:
+        - Control Plane (UI / API)
+        - Experiment Tracking
+        - Data Management
+        - SLURM / Compute
+        - Pipelines (Nextflow / Snakemake)
+        - Notebooks (Jupyter / RStudio)
+        - Visualization (cellxgene / QC Dashboard)
+        - Package Management / GitOps
+        - Auth / Users
+        - Backup / Recovery
+        - Terraform / Infrastructure
+        - CLI
+        - New Component
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: persona
+    attributes:
+      label: Which persona benefits most?
+      description: "See product spec for persona details"
+      options:
+        - Computational Biologist (Sarah)
+        - Bioinformatician (Jake)
+        - Bench Scientist (Priya)
+        - CSO / Leadership (Maria)
+        - Admin / DevOps
+        - All users
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the pain point or gap this addresses.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How do you think this should work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought about?
+    validations:
+      required: false
