@@ -37,8 +37,8 @@ async def test_list_documents(client, admin_token, sample_document):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) >= 1
-    assert any(d["title"] == "Test Protocol" for d in data)
+    assert data["total"] >= 1
+    assert any(d["title"] == "Test Protocol" for d in data["documents"])
 
 
 @pytest.mark.asyncio
