@@ -139,6 +139,26 @@ class TerraformService:
 
         await session.flush()
 
+        # Commit tfvars to GitOps repo after successful apply
+        if run.status == "completed" and TFVARS_FILE.exists():
+            try:
+                from app.services.gitops_service import GitOpsService
+
+                repo = await GitOpsService.get_repo(session, run.triggered_by_user_id)
+                if repo is None:
+                    # Try with org_id from component state
+                    pass
+                else:
+                    tfvars_content = TFVARS_FILE.read_text()
+                    component_desc = run.component_key or "infrastructure"
+                    await GitOpsService.commit_and_push(
+                        session, repo.organization_id, user_id,
+                        files={"terraform/terraform.tfvars": tfvars_content},
+                        message=f"terraform: apply {component_desc}",
+                    )
+            except Exception as e:
+                logger.warning("Failed to commit tfvars to GitOps: %s", e)
+
         await log_action(
             session,
             user_id=user_id,

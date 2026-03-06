@@ -25,6 +25,10 @@ from app.api.cellxgene import router as cellxgene_router
 from app.api.qc_dashboards import router as qc_dashboards_router
 from app.api.plots import router as plots_router
 from app.api.search import router as search_router
+from app.api.gitops import router as gitops_router
+from app.api.packages import router as packages_router
+from app.api.environments import router as environments_router
+from app.api.template_notebooks import router as template_notebooks_router
 
 api_router = APIRouter()
 
@@ -53,3 +57,7 @@ api_router.include_router(cellxgene_router)
 api_router.include_router(qc_dashboards_router)
 api_router.include_router(plots_router)
 api_router.include_router(search_router)
+api_router.include_router(gitops_router)
+api_router.include_router(packages_router)
+api_router.include_router(environments_router)
+api_router.include_router(template_notebooks_router)
