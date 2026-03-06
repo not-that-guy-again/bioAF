@@ -49,6 +49,9 @@ STORAGE_THRESHOLD = "storage.threshold"
 # User events
 USER_INVITATION_ACCEPTED = "user.invitation_accepted"
 
+# Reference data events
+REFERENCE_DEPRECATED = "reference.deprecated"
+
 # Terraform events
 TERRAFORM_APPLY_FAILURE = "terraform.apply_failure"
 
@@ -75,6 +78,7 @@ ALL_EVENT_TYPES = [
     TERRAFORM_APPLY_FAILURE,
     PIPELINE_RUN_REVIEWED,
     PIPELINE_RUN_REVIEW_REMINDER,
+    REFERENCE_DEPRECATED,
 ]
 
 # Severity mapping for event types
@@ -101,4 +105,5 @@ EVENT_SEVERITY = {
     TERRAFORM_APPLY_FAILURE: "critical",
     PIPELINE_RUN_REVIEWED: "info",
     PIPELINE_RUN_REVIEW_REMINDER: "warning",
+    REFERENCE_DEPRECATED: "warning",
 }
