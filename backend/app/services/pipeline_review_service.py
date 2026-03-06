@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.experiment import Experiment
 from app.models.pipeline_run import PipelineRun
 from app.models.pipeline_run_review import PipelineRunReview
 from app.models.sample import Sample
@@ -199,9 +198,7 @@ class PipelineReviewService:
 
         # Subquery for runs that have active reviews
         reviewed_run_ids = (
-            select(PipelineRunReview.pipeline_run_id)
-            .where(PipelineRunReview.superseded_by_id.is_(None))
-            .distinct()
+            select(PipelineRunReview.pipeline_run_id).where(PipelineRunReview.superseded_by_id.is_(None)).distinct()
         )
 
         result = await session.execute(

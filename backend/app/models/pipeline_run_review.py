@@ -21,9 +21,7 @@ class PipelineRunReview(Base):
     sample_verdicts_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     recommended_exclusions: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    superseded_by_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("pipeline_run_reviews.id"), nullable=True
-    )
+    superseded_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pipeline_run_reviews.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     pipeline_run = relationship("PipelineRun", backref="reviews")

@@ -57,8 +57,6 @@ async def bench_token(bench_user) -> str:
 async def experiment_and_run(client, admin_token, session):
     """Create an experiment and a completed pipeline run."""
     from app.models.pipeline_run import PipelineRun
-    from app.models.sample import Sample
-    from app.models.experiment import Experiment
 
     # Get org_id from the experiment creation
     resp = await client.post(
@@ -73,9 +71,7 @@ async def experiment_and_run(client, admin_token, session):
     org_id = result.scalar()
 
     # Update experiment to pipeline_complete
-    await session.execute(
-        text(f"UPDATE experiments SET status = 'pipeline_complete' WHERE id = {experiment_id}")
-    )
+    await session.execute(text(f"UPDATE experiments SET status = 'pipeline_complete' WHERE id = {experiment_id}"))
 
     # Create sample
     resp = await client.post(
@@ -109,9 +105,7 @@ async def test_create_review_as_comp_bio(client, comp_bio_token, experiment_and_
         json={
             "verdict": "approved",
             "notes": "All samples look good.",
-            "sample_verdicts": {
-                str(sample_id): {"verdict": "pass", "notes": "Good quality"}
-            },
+            "sample_verdicts": {str(sample_id): {"verdict": "pass", "notes": "Good quality"}},
             "recommended_exclusions": [],
         },
         headers={"Authorization": f"Bearer {comp_bio_token}"},
@@ -138,9 +132,7 @@ async def test_create_review_updates_sample_qc(client, comp_bio_token, experimen
         json={
             "verdict": "approved_with_caveats",
             "notes": "One sample borderline.",
-            "sample_verdicts": {
-                str(sample_id): {"verdict": "warning", "notes": "Low viability"}
-            },
+            "sample_verdicts": {str(sample_id): {"verdict": "warning", "notes": "Low viability"}},
         },
         headers={"Authorization": f"Bearer {comp_bio_token}"},
     )
@@ -152,9 +144,7 @@ async def test_create_review_updates_sample_qc(client, comp_bio_token, experimen
 
 
 @pytest.mark.asyncio
-async def test_create_review_transitions_experiment_status(
-    client, comp_bio_token, experiment_and_run, session
-):
+async def test_create_review_transitions_experiment_status(client, comp_bio_token, experiment_and_run, session):
     run_id = experiment_and_run["run_id"]
     experiment_id = experiment_and_run["experiment_id"]
 
@@ -165,9 +155,7 @@ async def test_create_review_transitions_experiment_status(
     )
 
     # Check experiment status changed to "reviewed"
-    result = await session.execute(
-        text(f"SELECT status FROM experiments WHERE id = {experiment_id}")
-    )
+    result = await session.execute(text(f"SELECT status FROM experiments WHERE id = {experiment_id}"))
     status = result.scalar()
     assert status == "reviewed"
 
@@ -186,9 +174,7 @@ async def test_review_superseding(client, comp_bio_token, experiment_and_run, se
 
     # Reset experiment status for second review test
     experiment_id = experiment_and_run["experiment_id"]
-    await session.execute(
-        text(f"UPDATE experiments SET status = 'pipeline_complete' WHERE id = {experiment_id}")
-    )
+    await session.execute(text(f"UPDATE experiments SET status = 'pipeline_complete' WHERE id = {experiment_id}"))
     await session.commit()
 
     # Second review (supersedes first)

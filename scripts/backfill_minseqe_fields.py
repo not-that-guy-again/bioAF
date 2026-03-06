@@ -115,11 +115,14 @@ def _extract_instrument_from_run_id(run_id: str) -> str | None:
     return None
 
 
-async def backfill_pipeline_runs(session: AsyncSession, dry_run: bool) -> tuple[int, int]:
+async def backfill_pipeline_runs(
+    session: AsyncSession, dry_run: bool
+) -> tuple[int, int]:
     """Backfill reference_genome and alignment_algorithm from parameters_json."""
     result = await session.execute(
         select(PipelineRun).where(
-            (PipelineRun.reference_genome.is_(None)) | (PipelineRun.alignment_algorithm.is_(None))
+            (PipelineRun.reference_genome.is_(None))
+            | (PipelineRun.alignment_algorithm.is_(None))
         )
     )
     runs = list(result.scalars().all())
@@ -144,7 +147,9 @@ async def backfill_pipeline_runs(session: AsyncSession, dry_run: bool) -> tuple[
         if changes:
             if not dry_run:
                 await session.execute(
-                    update(PipelineRun).where(PipelineRun.id == run.id).values(**changes)
+                    update(PipelineRun)
+                    .where(PipelineRun.id == run.id)
+                    .values(**changes)
                 )
             logger.info("Run %d: %s", run.id, changes)
             updated += 1
@@ -173,12 +178,23 @@ async def backfill_batches(session: AsyncSession, dry_run: bool) -> tuple[int, i
         if instrument:
             if not dry_run:
                 await session.execute(
-                    update(Batch).where(Batch.id == batch.id).values(instrument_model=instrument)
+                    update(Batch)
+                    .where(Batch.id == batch.id)
+                    .values(instrument_model=instrument)
                 )
-            logger.info("Batch %d: instrument_model = %s (from %s)", batch.id, instrument, batch.sequencer_run_id)
+            logger.info(
+                "Batch %d: instrument_model = %s (from %s)",
+                batch.id,
+                instrument,
+                batch.sequencer_run_id,
+            )
             updated += 1
         else:
-            logger.debug("Batch %d: could not infer instrument from '%s'", batch.id, batch.sequencer_run_id)
+            logger.debug(
+                "Batch %d: could not infer instrument from '%s'",
+                batch.id,
+                batch.sequencer_run_id,
+            )
             skipped += 1
 
     return updated, skipped

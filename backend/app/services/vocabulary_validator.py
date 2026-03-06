@@ -74,8 +74,7 @@ class VocabularyValidator:
             sorted_values = sorted(allowed)
             raise HTTPException(
                 422,
-                f"Invalid value '{value}' for field '{field_name}'. "
-                f"Allowed values: {', '.join(sorted_values)}",
+                f"Invalid value '{value}' for field '{field_name}'. Allowed values: {', '.join(sorted_values)}",
             )
 
     @staticmethod
@@ -105,9 +104,7 @@ class VocabularyValidator:
     @staticmethod
     async def get_allowed_values(session: AsyncSession, field_name: str, active_only: bool = True) -> list[str]:
         """Return all allowed values for a field."""
-        query = select(ControlledVocabulary.allowed_value).where(
-            ControlledVocabulary.field_name == field_name
-        )
+        query = select(ControlledVocabulary.allowed_value).where(ControlledVocabulary.field_name == field_name)
         if active_only:
             query = query.where(ControlledVocabulary.is_active == True)  # noqa: E712
         query = query.order_by(ControlledVocabulary.display_order)

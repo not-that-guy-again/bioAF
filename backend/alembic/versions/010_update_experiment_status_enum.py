@@ -9,8 +9,6 @@ validation, so no DDL changes are needed. This migration exists
 as a marker for the logical schema change (ADR-019).
 """
 
-from alembic import op
-
 # revision identifiers, used by Alembic.
 revision = "010"
 down_revision = "009"

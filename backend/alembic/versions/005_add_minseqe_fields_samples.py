@@ -19,7 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("samples", sa.Column("molecule_type", sa.String(100), server_default=sa.text("'total RNA'"), nullable=True))
+    op.add_column(
+        "samples", sa.Column("molecule_type", sa.String(100), server_default=sa.text("'total RNA'"), nullable=True)
+    )
     op.add_column("samples", sa.Column("library_prep_method", sa.String(200), nullable=True))
     op.add_column("samples", sa.Column("library_layout", sa.String(50), nullable=True))
 
