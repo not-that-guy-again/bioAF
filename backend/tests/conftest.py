@@ -1,10 +1,9 @@
-import asyncio
 import os
-from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.services.auth_service import AuthService
 
@@ -13,64 +12,55 @@ TEST_DATABASE_URL = os.environ.get(
     "postgresql+asyncpg://bioaf_app:devpassword@localhost:5432/bioaf_test",
 )
 
-# These are lazily initialized — only when fixtures needing DB are requested
-_engine = None
-_test_session_factory = None
-
-
-def _get_engine():
-    global _engine
-    if _engine is None:
-        from sqlalchemy.ext.asyncio import create_async_engine
-        _engine = create_async_engine(TEST_DATABASE_URL, echo=False)
-    return _engine
-
-
-def _get_session_factory():
-    global _test_session_factory
-    if _test_session_factory is None:
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-        _test_session_factory = async_sessionmaker(_get_engine(), class_=AsyncSession, expire_on_commit=False)
-    return _test_session_factory
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
 
 @pytest_asyncio.fixture
-async def setup_database():
+async def db_engine():
+    """Create engine, set up tables, yield, tear down."""
     from app.database import Base
-    engine = _get_engine()
+
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
+    yield engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def session(setup_database):
-    from sqlalchemy.ext.asyncio import AsyncSession
-    async with _get_session_factory()() as session:
+async def session(db_engine):
+    factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
         yield session
 
 
+@asynccontextmanager
+async def _test_lifespan(app):
+    """No-op lifespan for tests — skips DB verification and background tasks."""
+    yield
+
+
 @pytest_asyncio.fixture
-async def client(session):
+async def client(db_engine):
     from app.database import get_session
-    from app.main import app
+    from app.middleware.rate_limit import rate_limit_requests
+    import app.main as main_module
+
+    factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+
+    original_lifespan = main_module.app.router.lifespan_context
+    main_module.app.router.lifespan_context = _test_lifespan
+    rate_limit_requests.clear()
 
     async def override_get_session():
-        yield session
+        async with factory() as session:
+            yield session
 
-    app.dependency_overrides[get_session] = override_get_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        yield client
-    app.dependency_overrides.clear()
+    main_module.app.dependency_overrides[get_session] = override_get_session
+    async with AsyncClient(transport=ASGITransport(app=main_module.app), base_url="http://test") as c:
+        yield c
+    main_module.app.dependency_overrides.clear()
+    main_module.app.router.lifespan_context = original_lifespan
 
 
 @pytest_asyncio.fixture

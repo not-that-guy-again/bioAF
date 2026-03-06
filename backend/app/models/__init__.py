@@ -14,6 +14,12 @@ from app.models.user_quota import UserQuota
 from app.models.pipeline_run import PipelineRun, PipelineRunSample
 from app.models.pipeline_catalog_entry import PipelineCatalogEntry
 from app.models.pipeline_process import PipelineProcess
+from app.models.file import File
+from app.models.document import Document
+from app.models.cellxgene_publication import CellxgenePublication
+from app.models.qc_dashboard import QCDashboard
+from app.models.plot_archive_entry import PlotArchiveEntry
+from app.models.storage_stats import StorageStatsCache
 
 __all__ = [
     "User",
@@ -36,4 +42,10 @@ __all__ = [
     "PipelineRunSample",
     "PipelineCatalogEntry",
     "PipelineProcess",
+    "File",
+    "Document",
+    "CellxgenePublication",
+    "QCDashboard",
+    "PlotArchiveEntry",
+    "StorageStatsCache",
 ]

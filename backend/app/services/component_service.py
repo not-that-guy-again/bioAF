@@ -138,6 +138,11 @@ class ComponentService:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def is_enabled(session: AsyncSession, component_key: str) -> bool:
+        state = await ComponentService.get_state(session, component_key)
+        return bool(state and state.enabled)
+
+    @staticmethod
     async def initialize_states(session: AsyncSession) -> None:
         """Initialize component_states rows for all catalog entries if missing."""
         for key in COMPONENT_CATALOG:

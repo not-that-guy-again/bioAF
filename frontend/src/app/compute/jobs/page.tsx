@@ -35,6 +35,7 @@ export default function JobBrowserPage() {
       return;
     }
     loadJobs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, statusFilter, partitionFilter, router]);
 
   async function loadJobs() {
