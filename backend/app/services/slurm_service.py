@@ -265,7 +265,8 @@ class SlurmService:
             action="resubmit",
             details={"original_job_id": original.id, "slurm_job_id": new_job.slurm_job_id},
         )
-        return new_job
+        # Re-fetch with eager-loaded relationships for serialization
+        return await SlurmService.get_job(session, new_job.id)
 
     @staticmethod
     async def sync_job_statuses(session: AsyncSession) -> None:

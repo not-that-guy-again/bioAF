@@ -104,6 +104,7 @@ async def update_user(user_id: int, body: UserUpdate, request: Request, session:
         await session.flush()
 
     await session.commit()
+    await session.refresh(user)
     return UserResponse.model_validate(user)
 
 
@@ -121,6 +122,7 @@ async def deactivate_user(user_id: int, request: Request, session: AsyncSession 
 
     user = await UserService.deactivate(session, user, actor_id)
     await session.commit()
+    await session.refresh(user)
     return UserResponse.model_validate(user)
 
 

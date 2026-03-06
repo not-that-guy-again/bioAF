@@ -92,7 +92,7 @@ jobs:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: postgresql://bioaf_test:test@localhost:5432/bioaf_test
+      BIOAF_TEST_DATABASE_URL: postgresql+asyncpg://bioaf_test:test@localhost:5432/bioaf_test
     steps:
       - uses: actions/checkout@v4
 

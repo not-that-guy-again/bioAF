@@ -1,8 +1,9 @@
 import pytest
+import pytest_asyncio
 from sqlalchemy import text
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def experiment_id(client, admin_token):
     resp = await client.post(
         "/api/experiments",

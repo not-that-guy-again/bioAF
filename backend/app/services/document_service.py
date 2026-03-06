@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.document import Document
+from app.models.file import File
 from app.services.audit_service import log_action
 
 logger = logging.getLogger("bioaf.document_service")
@@ -92,7 +93,7 @@ class DocumentService:
         """Search documents with PostgreSQL full-text search."""
         base = (
             select(Document)
-            .options(selectinload(Document.file).selectinload("uploader"))
+            .options(selectinload(Document.file).selectinload(File.uploader))
             .where(Document.organization_id == org_id)
         )
         count_base = select(func.count(Document.id)).where(Document.organization_id == org_id)
@@ -129,7 +130,7 @@ class DocumentService:
     async def get_document(session: AsyncSession, document_id: int, org_id: int) -> Document | None:
         result = await session.execute(
             select(Document)
-            .options(selectinload(Document.file).selectinload("uploader"))
+            .options(selectinload(Document.file).selectinload(File.uploader))
             .where(Document.id == document_id, Document.organization_id == org_id)
         )
         return result.scalar_one_or_none()

@@ -64,7 +64,7 @@ async def test_get_pipeline_detail(client, admin_token):
     await client.get("/api/pipelines", headers={"Authorization": f"Bearer {admin_token}"})
 
     response = await client.get(
-        "/api/pipelines/nf-core%2Fscrnaseq",
+        "/api/pipelines/nf-core/scrnaseq",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 200
@@ -139,7 +139,7 @@ async def test_update_pipeline_version(client, admin_token):
         return_value={"definitions": {"new": {}}},
     ):
         response = await client.patch(
-            "/api/pipelines/nf-core%2Fscrnaseq/version",
+            "/api/pipelines/version/nf-core/scrnaseq",
             json={"version": "3.0.0"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
