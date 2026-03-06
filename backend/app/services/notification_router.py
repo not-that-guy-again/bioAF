@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import (
-    Notification,
     NotificationDeliveryLog,
     NotificationPreference,
     NotificationRule,

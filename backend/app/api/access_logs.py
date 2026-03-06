@@ -30,7 +30,7 @@ async def list_access_logs(
         start_date=start_date, end_date=end_date,
     )
     return AccessLogListResponse(
-        logs=[AccessLogEntry.model_validate(l) for l in logs],
+        logs=[AccessLogEntry.model_validate(entry) for entry in logs],
         total=total,
         page=page,
         page_size=page_size,

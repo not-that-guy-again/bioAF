@@ -13,8 +13,6 @@ from app.models.notification import (
     NotificationRule,
     SlackWebhook,
 )
-from app.services.event_types import ALL_EVENT_TYPES, EVENT_SEVERITY
-from app.services.notification_channels.in_app import InAppChannel
 from app.services.notification_channels.email_adapter import EmailChannel
 from app.services.notification_channels.slack_adapter import SlackChannel
 

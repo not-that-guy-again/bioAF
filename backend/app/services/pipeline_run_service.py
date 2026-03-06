@@ -12,7 +12,7 @@ from app.models.sample import Sample
 from app.schemas.pipeline_run import PipelineRunLaunchRequest
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
-from app.services.event_types import PIPELINE_COMPLETED, PIPELINE_FAILED
+from app.services.event_types import PIPELINE_FAILED
 from app.services.pipeline_catalog_service import PipelineCatalogService
 from app.services.quota_service import QuotaService
 from app.services.sample_sheet_service import SampleSheetService
