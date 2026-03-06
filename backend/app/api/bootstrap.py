@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.component import VerificationCode
 from app.models.organization import Organization
-from app.schemas.auth import LoginResponse
 from app.schemas.bootstrap import BootstrapStatus, ConfigureOrgRequest, ConfigureSmtpRequest, CreateAdminRequest
 from app.services.audit_service import log_action
 from app.services.auth_service import AuthService

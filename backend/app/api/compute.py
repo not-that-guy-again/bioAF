@@ -74,8 +74,13 @@ async def list_jobs(
 ):
     org_id = int(current_user["org_id"])
     jobs, total = await SlurmService.list_jobs(
-        session, org_id, page=page, page_size=page_size,
-        user_id=user_id, status=status, partition=partition,
+        session,
+        org_id,
+        page=page,
+        page_size=page_size,
+        user_id=user_id,
+        status=status,
+        partition=partition,
         experiment_id=experiment_id,
     )
     return JobListResponse(

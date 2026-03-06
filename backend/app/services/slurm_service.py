@@ -69,15 +69,17 @@ class SlurmService:
                 allocated = nodes.get("allocated", 0)
                 idle = nodes.get("idle", 0)
 
-                partitions.append({
-                    "name": name,
-                    "max_nodes": total,
-                    "active_nodes": allocated,
-                    "idle_nodes": idle,
-                    "queue_depth": 0,
-                    "instance_type": "n2-highmem-8" if name == "standard" else "n2-standard-4",
-                    "use_spot": name == "standard",
-                })
+                partitions.append(
+                    {
+                        "name": name,
+                        "max_nodes": total,
+                        "active_nodes": allocated,
+                        "idle_nodes": idle,
+                        "queue_depth": 0,
+                        "instance_type": "n2-highmem-8" if name == "standard" else "n2-standard-4",
+                        "use_spot": name == "standard",
+                    }
+                )
                 total_nodes += total
                 active_nodes += allocated
 
@@ -182,7 +184,7 @@ class SlurmService:
     ) -> SlurmJob:
         """Submit a job to SLURM via SSH."""
         output = await SlurmService._run_ssh_command(
-            f'sbatch --parsable --partition={partition} --cpus-per-task={cpu} '
+            f"sbatch --parsable --partition={partition} --cpus-per-task={cpu} "
             f'--mem={memory_gb}G --job-name="{job_name or "bioaf-job"}" '
             f'--wrap="{job_script}"'
         )
@@ -214,9 +216,7 @@ class SlurmService:
         return job
 
     @staticmethod
-    async def cancel_job(
-        session: AsyncSession, job_id: int, user_id: int
-    ) -> SlurmJob:
+    async def cancel_job(session: AsyncSession, job_id: int, user_id: int) -> SlurmJob:
         job = await SlurmService.get_job(session, job_id)
         if not job:
             raise ValueError("Job not found")
@@ -240,9 +240,7 @@ class SlurmService:
         return job
 
     @staticmethod
-    async def resubmit_job(
-        session: AsyncSession, job_id: int, user_id: int, org_id: int
-    ) -> SlurmJob:
+    async def resubmit_job(session: AsyncSession, job_id: int, user_id: int, org_id: int) -> SlurmJob:
         original = await SlurmService.get_job(session, job_id)
         if not original:
             raise ValueError("Job not found")
@@ -292,18 +290,14 @@ class SlurmService:
                 state = job_info.get("state", {}).get("current", [""])[0]
                 mapped_status = slurm_status_map.get(state, state.lower())
 
-                result = await session.execute(
-                    select(SlurmJob).where(SlurmJob.slurm_job_id == slurm_id)
-                )
+                result = await session.execute(select(SlurmJob).where(SlurmJob.slurm_job_id == slurm_id))
                 job = result.scalar_one_or_none()
                 if job and job.status != mapped_status:
                     job.status = mapped_status
                     if mapped_status in ("completed", "failed", "cancelled", "timeout"):
                         job.completed_at = datetime.now(timezone.utc)
                         if job.started_at:
-                            duration_hours = (
-                                (job.completed_at - job.started_at).total_seconds() / 3600
-                            )
+                            duration_hours = (job.completed_at - job.started_at).total_seconds() / 3600
                             job.cost_estimate = ComputeCostService.estimate_job_cost(
                                 "n2-highmem-8" if job.partition == "standard" else "n2-standard-4",
                                 duration_hours,

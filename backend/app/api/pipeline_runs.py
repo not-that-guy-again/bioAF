@@ -15,7 +15,6 @@ from app.schemas.pipeline_run import (
     PipelineRunLaunchRequest,
     PipelineRunListResponse,
     PipelineRunResponse,
-    ProvenanceExportRequest,
     SampleSummary,
     UserSummary,
 )
@@ -36,7 +35,9 @@ def _run_response(run) -> PipelineRunResponse:
         pipeline_name=run.pipeline_name,
         pipeline_version=run.pipeline_version,
         experiment=ExperimentSummary(id=run.experiment.id, name=run.experiment.name) if run.experiment else None,
-        submitted_by=UserSummary(id=run.submitted_by.id, name=run.submitted_by.name, email=run.submitted_by.email) if run.submitted_by else None,
+        submitted_by=UserSummary(id=run.submitted_by.id, name=run.submitted_by.name, email=run.submitted_by.email)
+        if run.submitted_by
+        else None,
         status=run.status,
         parameters=run.parameters_json,
         input_files=run.input_files_json,
@@ -94,9 +95,14 @@ async def list_runs(
 ):
     org_id = int(current_user["org_id"])
     runs, total = await PipelineRunService.list_runs(
-        session, org_id, page=page, page_size=page_size,
-        experiment_id=experiment_id, pipeline_key=pipeline_key,
-        status=status, submitted_by_user_id=submitted_by_user_id,
+        session,
+        org_id,
+        page=page,
+        page_size=page_size,
+        experiment_id=experiment_id,
+        pipeline_key=pipeline_key,
+        status=status,
+        submitted_by_user_id=submitted_by_user_id,
     )
     return PipelineRunListResponse(
         runs=[_run_response(r) for r in runs],

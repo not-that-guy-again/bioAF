@@ -15,9 +15,7 @@ logger = logging.getLogger("bioaf.qc_dashboard_service")
 
 class QCDashboardService:
     @staticmethod
-    async def generate_qc_dashboard(
-        session: AsyncSession, org_id: int, pipeline_run_id: int
-    ) -> QCDashboard:
+    async def generate_qc_dashboard(session: AsyncSession, org_id: int, pipeline_run_id: int) -> QCDashboard:
         """Generate a QC dashboard from pipeline run output files."""
         # Get pipeline run
         result = await session.execute(
@@ -87,9 +85,7 @@ class QCDashboardService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_dashboard_by_run(
-        session: AsyncSession, org_id: int, pipeline_run_id: int
-    ) -> QCDashboard | None:
+    async def get_dashboard_by_run(session: AsyncSession, org_id: int, pipeline_run_id: int) -> QCDashboard | None:
         result = await session.execute(
             select(QCDashboard).where(
                 QCDashboard.pipeline_run_id == pipeline_run_id,
@@ -217,15 +213,14 @@ class QCDashboardService:
         return summary
 
     @staticmethod
-    async def _generate_plots(
-        session: AsyncSession, org_id: int, dashboard_id: int, metrics: dict
-    ) -> list[dict]:
+    async def _generate_plots(session: AsyncSession, org_id: int, dashboard_id: int, metrics: dict) -> list[dict]:
         """Generate QC plot images and upload to GCS."""
         plots_meta = []
 
         try:
             # Lazy import matplotlib
             import matplotlib
+
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
             import numpy as np
@@ -287,11 +282,13 @@ class QCDashboardService:
                         tags=["qc_plot", plot_type],
                     )
 
-                    plots_meta.append({
-                        "plot_type": plot_type,
-                        "title": title,
-                        "file_id": file.id,
-                    })
+                    plots_meta.append(
+                        {
+                            "plot_type": plot_type,
+                            "title": title,
+                            "file_id": file.id,
+                        }
+                    )
 
                 except Exception as e:
                     logger.warning("Failed to generate plot %s: %s", plot_type, e)

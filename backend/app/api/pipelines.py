@@ -71,7 +71,9 @@ async def add_custom_pipeline(
     user_id = int(current_user["sub"])
 
     entry = await PipelineCatalogService.add_custom_pipeline(
-        session, org_id, user_id,
+        session,
+        org_id,
+        user_id,
         name=data.name,
         source_url=data.source_url,
         version=data.version,
@@ -96,7 +98,10 @@ async def update_pipeline_version(
         raise HTTPException(404, "Pipeline not found")
 
     updated = await PipelineCatalogService.update_pipeline_version(
-        session, pipeline.id, user_id, data.version,
+        session,
+        pipeline.id,
+        user_id,
+        data.version,
     )
     await session.commit()
     return _catalog_response(updated)

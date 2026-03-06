@@ -43,7 +43,9 @@ async def initiate_upload(
     user_id = int(current_user["sub"])
 
     result = await UploadService.initiate_upload(
-        session, org_id, user_id,
+        session,
+        org_id,
+        user_id,
         filename=body.filename,
         expected_size=body.expected_size_bytes,
         expected_md5=body.expected_md5,
@@ -79,9 +81,7 @@ async def simple_upload(
     user_id = int(current_user["sub"])
 
     content = await file.read()
-    result = await UploadService.simple_upload(
-        session, org_id, user_id, file.filename or "unknown", content
-    )
+    result = await UploadService.simple_upload(session, org_id, user_id, file.filename or "unknown", content)
     await session.commit()
     result = await FileService.get_file(session, result.id, org_id)
     return _file_response(result)
@@ -139,6 +139,7 @@ async def download_file(
     # Generate signed download URL
     try:
         from google.cloud import storage as gcs_storage
+
         client = gcs_storage.Client()
         parts = file.gcs_uri.replace("gs://", "").split("/", 1)
         bucket = client.bucket(parts[0])
