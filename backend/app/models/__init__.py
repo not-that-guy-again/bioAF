@@ -36,6 +36,8 @@ from app.models.access_log import AccessLog
 from app.models.activity_feed import ActivityFeedEntry
 from app.models.budget_config import BudgetConfig
 from app.models.cost_record import CostRecord
+from app.models.controlled_vocabulary import ControlledVocabulary
+from app.models.pipeline_run_review import PipelineRunReview
 
 __all__ = [
     "User",
@@ -79,4 +81,6 @@ __all__ = [
     "ActivityFeedEntry",
     "BudgetConfig",
     "CostRecord",
+    "ControlledVocabulary",
+    "PipelineRunReview",
 ]
