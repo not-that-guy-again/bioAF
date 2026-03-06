@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -7,6 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from app.models.notebook_session import NotebookSession
 from app.services.audit_service import log_action
+from app.services.event_bus import event_bus
+from app.services.event_types import SESSION_IDLE
 from app.services.quota_service import QuotaService
 from app.services.slurm_service import SlurmService
 
@@ -191,6 +194,22 @@ class NotebookService:
                     idle_duration = (now - ns.idle_since).total_seconds() / 3600
                     if idle_duration >= idle_timeout_hours:
                         logger.info("Auto-stopping idle session %d (idle %.1fh)", ns.id, idle_duration)
+                        asyncio.create_task(
+                            event_bus.emit(
+                                SESSION_IDLE,
+                                {
+                                    "event_type": SESSION_IDLE,
+                                    "org_id": ns.organization_id,
+                                    "user_id": ns.user_id,
+                                    "target_user_id": ns.user_id,
+                                    "entity_type": "notebook_session",
+                                    "entity_id": ns.id,
+                                    "title": f"Idle session auto-stopped after {idle_duration:.1f}h",
+                                    "message": f"Your {ns.session_type} session was stopped due to inactivity",
+                                    "summary": f"Notebook session {ns.id} auto-stopped (idle {idle_duration:.1f}h)",
+                                },
+                            )
+                        )
                         ns.status = "stopped"
                         ns.stopped_at = now
                         if ns.slurm_job_id:

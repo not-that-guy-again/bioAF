@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { getCurrentUser, removeToken } from "@/lib/auth";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 export function Header() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export function Header() {
       <div className="flex items-center gap-4">
         {user && (
           <>
+            <NotificationBell />
             <span className="text-sm text-gray-600">
               {(user.email as string) || "User"}
             </span>

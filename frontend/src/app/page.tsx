@@ -6,8 +6,12 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { SystemHealth } from "@/components/dashboard/SystemHealth";
 import { ComponentInventory } from "@/components/dashboard/ComponentInventory";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
+import { BenchDashboard } from "@/components/dashboard/BenchDashboard";
+import { CompBioDashboard } from "@/components/dashboard/CompBioDashboard";
+import { ActivityFeedWidget } from "@/components/dashboard/ActivityFeedWidget";
 import type { HealthStatus, ComponentState, Experiment, ExperimentListResponse, PipelineRun, PipelineRunListResponse, QCDashboardSummary } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ExperimentStatusBadge } from "@/components/experiments/ExperimentStatusBadge";
@@ -21,6 +25,8 @@ export default function HomePage() {
   const [activeRuns, setActiveRuns] = useState<PipelineRun[]>([]);
   const [recentQC, setRecentQC] = useState<QCDashboardSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const user = getCurrentUser();
+  const role = (user?.role as string) || "viewer";
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -179,6 +185,17 @@ export default function HomePage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Role-Aware Dashboard */}
+          <div className="mt-6">
+            <h2 className="text-lg font-semibold mb-4">
+              {role === "admin" ? "Admin Overview" : role === "comp_bio" ? "Computational Biology" : role === "bench" ? "My Lab" : "Overview"}
+            </h2>
+            {role === "admin" && <AdminDashboard />}
+            {role === "bench" && <BenchDashboard />}
+            {role === "comp_bio" && <CompBioDashboard />}
+            {role === "viewer" && <ActivityFeedWidget />}
           </div>
         </main>
       </div>

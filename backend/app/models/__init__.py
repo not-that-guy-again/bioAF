@@ -24,6 +24,18 @@ from app.models.gitops_repo import GitOpsRepo
 from app.models.environment import Environment, EnvironmentPackage
 from app.models.environment_change import EnvironmentChange
 from app.models.template_notebook import TemplateNotebook
+from app.models.notification import (
+    Notification,
+    NotificationRule,
+    NotificationPreference,
+    SlackWebhook,
+    NotificationDeliveryLog,
+)
+from app.models.upgrade_history import UpgradeHistory
+from app.models.access_log import AccessLog
+from app.models.activity_feed import ActivityFeedEntry
+from app.models.budget_config import BudgetConfig
+from app.models.cost_record import CostRecord
 
 __all__ = [
     "User",
@@ -57,4 +69,14 @@ __all__ = [
     "EnvironmentPackage",
     "EnvironmentChange",
     "TemplateNotebook",
+    "Notification",
+    "NotificationRule",
+    "NotificationPreference",
+    "SlackWebhook",
+    "NotificationDeliveryLog",
+    "UpgradeHistory",
+    "AccessLog",
+    "ActivityFeedEntry",
+    "BudgetConfig",
+    "CostRecord",
 ]
