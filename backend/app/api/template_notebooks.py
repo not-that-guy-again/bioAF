@@ -97,7 +97,10 @@ async def clone_template(
 
     try:
         output_path = await TemplateNotebookService.clone_template(
-            session, org_id, user_id, template_id,
+            session,
+            org_id,
+            user_id,
+            template_id,
             new_name=data.new_name,
             experiment_id=data.experiment_id,
             parameter_overrides=data.parameters,

@@ -22,7 +22,10 @@ logger = logging.getLogger("bioaf.pipeline_runs")
 class PipelineRunService:
     @staticmethod
     async def launch_run(
-        session: AsyncSession, org_id: int, user_id: int, data: PipelineRunLaunchRequest,
+        session: AsyncSession,
+        org_id: int,
+        user_id: int,
+        data: PipelineRunLaunchRequest,
     ) -> PipelineRun:
         """Launch a pipeline run — the core orchestration method."""
         # 1. Load pipeline from catalog
@@ -53,9 +56,7 @@ class PipelineRunService:
             if len(samples) != len(data.sample_ids):
                 raise ValueError("Some sample IDs do not belong to this experiment")
         else:
-            sample_result = await session.execute(
-                select(Sample).where(Sample.experiment_id == data.experiment_id)
-            )
+            sample_result = await session.execute(select(Sample).where(Sample.experiment_id == data.experiment_id))
             samples = list(sample_result.scalars().all())
 
         # 4. Check quota
@@ -94,7 +95,9 @@ class PipelineRunService:
 
         # 8. Generate sample sheet
         sample_sheet_csv = SampleSheetService.generate_sheet(
-            pipeline.pipeline_key, samples, merged_params,
+            pipeline.pipeline_key,
+            samples,
+            merged_params,
         )
 
         # 9. Build the Nextflow command
@@ -151,8 +154,13 @@ class PipelineRunService:
         # 11. Update experiment status to "processing"
         try:
             from app.services.experiment_service import ExperimentService
+
             await ExperimentService.update_status(
-                session, data.experiment_id, org_id, user_id, "processing",
+                session,
+                data.experiment_id,
+                org_id,
+                user_id,
+                "processing",
             )
         except Exception as e:
             # Status transition may not be valid from current state — that's OK
@@ -186,7 +194,9 @@ class PipelineRunService:
         # Cancel via SSH
         if run.slurm_job_id:
             try:
-                await SlurmService._run_ssh_command(f"kill {run.slurm_job_id} 2>/dev/null; scancel --name=bioaf-run-{run.id} 2>/dev/null || true")
+                await SlurmService._run_ssh_command(
+                    f"kill {run.slurm_job_id} 2>/dev/null; scancel --name=bioaf-run-{run.id} 2>/dev/null || true"
+                )
             except Exception as e:
                 logger.warning("Failed to cancel run %d: %s", run_id, e)
 
@@ -235,9 +245,14 @@ class PipelineRunService:
 
     @staticmethod
     async def list_runs(
-        session: AsyncSession, org_id: int, page: int = 1, page_size: int = 25,
-        experiment_id: int | None = None, pipeline_key: str | None = None,
-        status: str | None = None, submitted_by_user_id: int | None = None,
+        session: AsyncSession,
+        org_id: int,
+        page: int = 1,
+        page_size: int = 25,
+        experiment_id: int | None = None,
+        pipeline_key: str | None = None,
+        status: str | None = None,
+        submitted_by_user_id: int | None = None,
     ) -> tuple[list[PipelineRun], int]:
         query = (
             select(PipelineRun)
@@ -319,7 +334,10 @@ class PipelineRunService:
         )
 
         new_run = await PipelineRunService.launch_run(
-            session, original.organization_id, user_id, data,
+            session,
+            original.organization_id,
+            user_id,
+            data,
         )
 
         await log_action(
@@ -351,7 +369,9 @@ class PipelineRunService:
             "experiment": {
                 "id": run.experiment.id,
                 "name": run.experiment.name,
-            } if run.experiment else None,
+            }
+            if run.experiment
+            else None,
             "samples": [
                 {"id": s.id, "sample_id_external": s.sample_id_external, "organism": s.organism}
                 for s in (run.samples or [])
@@ -360,7 +380,9 @@ class PipelineRunService:
                 "id": run.submitted_by.id,
                 "name": run.submitted_by.name,
                 "email": run.submitted_by.email,
-            } if run.submitted_by else None,
+            }
+            if run.submitted_by
+            else None,
             "status": run.status,
             "work_dir": run.work_dir,
             "started_at": run.started_at.isoformat() if run.started_at else None,

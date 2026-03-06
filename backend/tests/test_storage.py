@@ -7,8 +7,13 @@ async def test_get_storage_stats(client, admin_token):
     """Storage stats endpoint returns cached or refreshed data."""
     mock_stats = {
         "buckets": [
-            {"bucket_name": "bioaf-raw", "total_bytes": 10737418240, "object_count": 100,
-             "by_storage_class": {"STANDARD": 10737418240}, "cost_estimate_monthly": 0.2},
+            {
+                "bucket_name": "bioaf-raw",
+                "total_bytes": 10737418240,
+                "object_count": 100,
+                "by_storage_class": {"STANDARD": 10737418240},
+                "cost_estimate_monthly": 0.2,
+            },
         ],
         "total_bytes": 10737418240,
         "total_cost_estimate_monthly": 0.2,
@@ -59,6 +64,7 @@ async def test_get_lifecycle_policies(client, admin_token):
 
 
 # --- Cost calculation unit test ---
+
 
 def test_storage_cost_rates():
     """Verify cost rates are reasonable."""

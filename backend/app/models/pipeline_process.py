@@ -11,7 +11,9 @@ class PipelineProcess(Base):
     __tablename__ = "pipeline_processes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    pipeline_run_id: Mapped[int] = mapped_column(Integer, ForeignKey("pipeline_runs.id", ondelete="CASCADE"), nullable=False)
+    pipeline_run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("pipeline_runs.id", ondelete="CASCADE"), nullable=False
+    )
     process_name: Mapped[str] = mapped_column(String(255), nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending")

@@ -2,7 +2,6 @@ import pytest
 from sqlalchemy import text
 
 
-
 @pytest.mark.asyncio
 async def test_create_project(client, admin_token, session):
     response = await client.post(

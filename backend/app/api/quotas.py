@@ -58,9 +58,7 @@ async def set_user_quota(
     admin_user_id = int(current_user["sub"])
     org_id = int(current_user["org_id"])
 
-    quota = await QuotaService.set_quota(
-        session, target_user_id, admin_user_id, org_id, body.cpu_hours_monthly_limit
-    )
+    quota = await QuotaService.set_quota(session, target_user_id, admin_user_id, org_id, body.cpu_hours_monthly_limit)
     await session.commit()
 
     # Reload with user relationship

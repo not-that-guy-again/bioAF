@@ -33,7 +33,9 @@ def _pub_response(pub) -> CellxgenePublicationResponse:
         status=pub.status,
         file=file_resp,
         experiment_id=pub.experiment_id,
-        published_by=UserSummary(id=pub.published_by.id, name=pub.published_by.name, email=pub.published_by.email) if pub.published_by else None,
+        published_by=UserSummary(id=pub.published_by.id, name=pub.published_by.name, email=pub.published_by.email)
+        if pub.published_by
+        else None,
         published_at=pub.published_at,
         created_at=pub.created_at,
     )
@@ -50,12 +52,15 @@ async def publish_dataset(
 
     # Check component enabled
     from app.services.component_service import ComponentService
+
     if not await ComponentService.is_enabled(session, "cellxgene"):
         raise HTTPException(400, "cellxgene component is not enabled")
 
     try:
         pub = await CellxgeneService.publish_dataset(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             file_id=body.file_id,
             experiment_id=body.experiment_id,
             dataset_name=body.dataset_name,

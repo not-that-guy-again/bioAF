@@ -89,9 +89,7 @@ async def get_user(user_id: int, request: Request, session: AsyncSession = Depen
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
-async def update_user(
-    user_id: int, body: UserUpdate, request: Request, session: AsyncSession = Depends(get_session)
-):
+async def update_user(user_id: int, body: UserUpdate, request: Request, session: AsyncSession = Depends(get_session)):
     current_user = _require_admin(request)
     actor_id = int(current_user["sub"])
 

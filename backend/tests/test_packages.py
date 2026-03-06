@@ -47,7 +47,14 @@ async def test_search_packages_comp_bio(client, comp_bio_token):
         "app.services.package_search_service.PackageSearchService.search_packages",
         new_callable=AsyncMock,
         return_value=[
-            {"name": "scanpy", "version": "1.10.0", "description": "Single-cell analysis", "source": "conda", "channel": "conda-forge", "homepage": None},
+            {
+                "name": "scanpy",
+                "version": "1.10.0",
+                "description": "Single-cell analysis",
+                "source": "conda",
+                "channel": "conda-forge",
+                "homepage": None,
+            },
         ],
     ):
         response = await client.get(

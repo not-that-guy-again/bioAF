@@ -62,14 +62,16 @@ class PackageSearchService:
             channel = None
             if item.get("owner"):
                 channel = item["owner"]
-            results.append({
-                "name": item.get("name", ""),
-                "version": item.get("version", item.get("latest_version", "")),
-                "description": item.get("summary", ""),
-                "source": "conda",
-                "channel": channel,
-                "homepage": None,
-            })
+            results.append(
+                {
+                    "name": item.get("name", ""),
+                    "version": item.get("version", item.get("latest_version", "")),
+                    "description": item.get("summary", ""),
+                    "source": "conda",
+                    "channel": channel,
+                    "homepage": None,
+                }
+            )
         return results
 
     @staticmethod
@@ -79,14 +81,16 @@ class PackageSearchService:
         if resp.status_code == 200:
             data = resp.json()
             info = data.get("info", {})
-            return [{
-                "name": info.get("name", query),
-                "version": info.get("version", ""),
-                "description": info.get("summary", ""),
-                "source": "pip",
-                "channel": None,
-                "homepage": info.get("home_page") or info.get("project_url"),
-            }]
+            return [
+                {
+                    "name": info.get("name", query),
+                    "version": info.get("version", ""),
+                    "description": info.get("summary", ""),
+                    "source": "pip",
+                    "channel": None,
+                    "homepage": info.get("home_page") or info.get("project_url"),
+                }
+            ]
 
         # Fall back to search via Simple API — limited, so return empty
         return []
@@ -97,22 +101,22 @@ class PackageSearchService:
         resp = await client.get(f"https://crandb.r-pkg.org/{query}")
         if resp.status_code == 200:
             data = resp.json()
-            return [{
-                "name": data.get("Package", query),
-                "version": data.get("Version", ""),
-                "description": data.get("Title", ""),
-                "source": "cran",
-                "channel": None,
-                "homepage": data.get("URL"),
-            }]
+            return [
+                {
+                    "name": data.get("Package", query),
+                    "version": data.get("Version", ""),
+                    "description": data.get("Title", ""),
+                    "source": "cran",
+                    "channel": None,
+                    "homepage": data.get("URL"),
+                }
+            ]
         return []
 
     @staticmethod
     async def _search_bioconductor(client: httpx.AsyncClient, query: str, limit: int) -> list[dict]:
         # Search bioconductor package list
-        resp = await client.get(
-            "https://bioconductor.org/packages/json/3.19/bioc/packages.json"
-        )
+        resp = await client.get("https://bioconductor.org/packages/json/3.19/bioc/packages.json")
         if resp.status_code != 200:
             return []
 
@@ -121,14 +125,16 @@ class PackageSearchService:
         query_lower = query.lower()
         for pkg_name, pkg_info in data.items():
             if query_lower in pkg_name.lower():
-                results.append({
-                    "name": pkg_name,
-                    "version": pkg_info.get("Version", ""),
-                    "description": pkg_info.get("Title", ""),
-                    "source": "bioconductor",
-                    "channel": None,
-                    "homepage": None,
-                })
+                results.append(
+                    {
+                        "name": pkg_name,
+                        "version": pkg_info.get("Version", ""),
+                        "description": pkg_info.get("Title", ""),
+                        "source": "bioconductor",
+                        "channel": None,
+                        "homepage": None,
+                    }
+                )
                 if len(results) >= limit:
                     break
         return results

@@ -112,6 +112,7 @@ async def generate_dashboard(
 
     # Check component enabled
     from app.services.component_service import ComponentService
+
     if not await ComponentService.is_enabled(session, "qc_dashboard"):
         raise HTTPException(400, "QC Dashboard component is not enabled")
 

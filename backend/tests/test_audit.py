@@ -18,9 +18,7 @@ async def test_audit_log_write(session: AsyncSession, admin_user):
     )
     await session.commit()
 
-    result = await session.execute(
-        text("SELECT * FROM audit_log WHERE action = 'test_action'")
-    )
+    result = await session.execute(text("SELECT * FROM audit_log WHERE action = 'test_action'"))
     rows = result.fetchall()
     assert len(rows) == 1
     assert rows[0].entity_type == "user"
@@ -70,9 +68,7 @@ async def test_audit_log_system_event(session: AsyncSession):
     )
     await session.commit()
 
-    result = await session.execute(
-        text("SELECT * FROM audit_log WHERE entity_type = 'system'")
-    )
+    result = await session.execute(text("SELECT * FROM audit_log WHERE entity_type = 'system'"))
     rows = result.fetchall()
     assert len(rows) == 1
     assert rows[0].user_id is None
@@ -94,9 +90,7 @@ async def test_audit_log_immutability(session: AsyncSession, admin_user):
     await session.commit()
 
     # Verify the entry exists
-    result = await session.execute(
-        text("SELECT id FROM audit_log WHERE action = 'immutability_test'")
-    )
+    result = await session.execute(text("SELECT id FROM audit_log WHERE action = 'immutability_test'"))
     row = result.fetchone()
     assert row is not None
 
@@ -104,10 +98,13 @@ async def test_audit_log_immutability(session: AsyncSession, admin_user):
 @pytest.mark.asyncio
 async def test_login_creates_audit_entry(client, admin_user, session):
     """Test that login creates an audit log entry."""
-    response = await client.post("/api/auth/login", json={
-        "email": "admin@test.com",
-        "password": "testpassword123",
-    })
+    response = await client.post(
+        "/api/auth/login",
+        json={
+            "email": "admin@test.com",
+            "password": "testpassword123",
+        },
+    )
     assert response.status_code == 200
 
     result = await session.execute(

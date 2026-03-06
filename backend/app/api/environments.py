@@ -74,7 +74,9 @@ async def get_environment(
             "id": env.created_by.id,
             "name": env.created_by.name,
             "email": env.created_by.email,
-        } if env.created_by else None,
+        }
+        if env.created_by
+        else None,
         created_at=env.created_at,
     )
 
@@ -90,7 +92,9 @@ async def create_environment(
 
     try:
         env = await EnvironmentService.create_custom_environment(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             name=data.name,
             description=data.description,
             clone_from=data.clone_from,
@@ -126,7 +130,9 @@ async def clone_environment(
 
     try:
         env = await EnvironmentService.create_custom_environment(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             name=data.name,
             description=data.description,
             clone_from=name,
@@ -204,7 +210,11 @@ async def get_environment_history(
         raise HTTPException(404, "Environment not found")
 
     changes, total = await EnvironmentHistoryService.get_change_timeline(
-        session, org_id, env.id, page=page, page_size=page_size,
+        session,
+        org_id,
+        env.id,
+        page=page,
+        page_size=page_size,
     )
 
     return EnvironmentHistoryResponse(
@@ -275,7 +285,11 @@ async def rollback_environment(
 
     try:
         change = await EnvironmentHistoryService.rollback_environment(
-            session, org_id, user_id, env.id, data.target_change_id,
+            session,
+            org_id,
+            user_id,
+            env.id,
+            data.target_change_id,
         )
         await session.commit()
     except ValueError as e:
@@ -309,7 +323,11 @@ async def compare_environments(
 
     try:
         diff = await EnvironmentHistoryService.compare_environments(
-            session, org_id, name, sha1, sha2,
+            session,
+            org_id,
+            name,
+            sha1,
+            sha2,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

@@ -26,9 +26,7 @@ class DocumentService:
         """Upload a PDF document, create file + document records."""
         from app.services.upload_service import UploadService
 
-        file = await UploadService.simple_upload(
-            session, org_id, user_id, filename, content, file_type="pdf"
-        )
+        file = await UploadService.simple_upload(session, org_id, user_id, filename, content, file_type="pdf")
 
         doc = Document(
             organization_id=org_id,
@@ -70,6 +68,7 @@ class DocumentService:
 
             if extracted.strip():
                 from app.database import async_session_factory
+
                 async with async_session_factory() as session:
                     doc = await session.get(Document, document_id)
                     if doc:
@@ -106,12 +105,14 @@ class DocumentService:
             # PostgreSQL full-text search on extracted_text and title
             ts_query = func.plainto_tsquery("english", query)
             base = base.where(
-                func.to_tsvector("english", func.coalesce(Document.title, "") + " " + func.coalesce(Document.extracted_text, ""))
-                .op("@@")(ts_query)
+                func.to_tsvector(
+                    "english", func.coalesce(Document.title, "") + " " + func.coalesce(Document.extracted_text, "")
+                ).op("@@")(ts_query)
             )
             count_base = count_base.where(
-                func.to_tsvector("english", func.coalesce(Document.title, "") + " " + func.coalesce(Document.extracted_text, ""))
-                .op("@@")(ts_query)
+                func.to_tsvector(
+                    "english", func.coalesce(Document.title, "") + " " + func.coalesce(Document.extracted_text, "")
+                ).op("@@")(ts_query)
             )
 
         total_result = await session.execute(count_base)
@@ -194,9 +195,7 @@ class DocumentService:
         return doc
 
     @staticmethod
-    async def delete_document(
-        session: AsyncSession, document_id: int, org_id: int, user_id: int
-    ) -> bool:
+    async def delete_document(session: AsyncSession, document_id: int, org_id: int, user_id: int) -> bool:
         doc = await DocumentService.get_document(session, document_id, org_id)
         if not doc:
             return False

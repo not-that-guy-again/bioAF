@@ -125,7 +125,7 @@ class EnvironmentService:
 
         packages = []
         # Match strings inside install.packages or BiocManager::install
-        pattern = r'(?:install\.packages|BiocManager::install)\s*\(\s*c\s*\((.*?)\)\s*\)'
+        pattern = r"(?:install\.packages|BiocManager::install)\s*\(\s*c\s*\((.*?)\)\s*\)"
         for match in re.finditer(pattern, content, re.DOTALL):
             pkg_str = match.group(1)
             for pkg_match in re.finditer(r'"([^"]+)"', pkg_str):
@@ -144,33 +144,39 @@ class EnvironmentService:
     async def list_environments(session: AsyncSession, org_id: int) -> list[dict]:
         """List all environments with package counts."""
         result = await session.execute(
-            select(Environment).where(
+            select(Environment)
+            .where(
                 Environment.organization_id == org_id,
                 Environment.status != "archived",
-            ).order_by(Environment.is_default.desc(), Environment.name)
+            )
+            .order_by(Environment.is_default.desc(), Environment.name)
         )
         envs = list(result.scalars().all())
 
         env_list = []
         for env in envs:
             pkg_count = len(env.packages) if env.packages else 0
-            env_list.append({
-                "id": env.id,
-                "name": env.name,
-                "env_type": env.env_type,
-                "description": env.description,
-                "is_default": env.is_default,
-                "package_count": pkg_count,
-                "jupyter_kernel_name": env.jupyter_kernel_name,
-                "status": env.status,
-                "last_synced_at": env.last_synced_at,
-                "created_by": {
-                    "id": env.created_by.id,
-                    "name": env.created_by.name,
-                    "email": env.created_by.email,
-                } if env.created_by else None,
-                "created_at": env.created_at,
-            })
+            env_list.append(
+                {
+                    "id": env.id,
+                    "name": env.name,
+                    "env_type": env.env_type,
+                    "description": env.description,
+                    "is_default": env.is_default,
+                    "package_count": pkg_count,
+                    "jupyter_kernel_name": env.jupyter_kernel_name,
+                    "status": env.status,
+                    "last_synced_at": env.last_synced_at,
+                    "created_by": {
+                        "id": env.created_by.id,
+                        "name": env.created_by.name,
+                        "email": env.created_by.email,
+                    }
+                    if env.created_by
+                    else None,
+                    "created_at": env.created_at,
+                }
+            )
         return env_list
 
     @staticmethod
@@ -235,7 +241,9 @@ class EnvironmentService:
         repo = await GitOpsService.get_repo(session, org_id)
         if repo:
             commit_sha = await GitOpsService.commit_and_push(
-                session, org_id, user_id,
+                session,
+                org_id,
+                user_id,
                 files={yaml_path: yaml_content},
                 message=f"env: create custom environment {name}",
             )
@@ -304,9 +312,7 @@ class EnvironmentService:
         yaml_content: str,
     ) -> None:
         """Parse YAML and sync environment_packages table."""
-        result = await session.execute(
-            select(Environment).where(Environment.id == environment_id)
-        )
+        result = await session.execute(select(Environment).where(Environment.id == environment_id))
         env = result.scalar_one_or_none()
         if not env:
             return
@@ -359,11 +365,15 @@ class EnvironmentService:
                     deps.append({"pip": [pkg_spec]})
                 else:
                     # Remove existing entry
-                    pip_section[:] = [p for p in pip_section if not p.split("==")[0].split(">=")[0].strip() == package_name]
+                    pip_section[:] = [
+                        p for p in pip_section if not p.split("==")[0].split(">=")[0].strip() == package_name
+                    ]
                     pip_section.append(pkg_spec)
             elif action == "remove":
                 if pip_section:
-                    pip_section[:] = [p for p in pip_section if not p.split("==")[0].split(">=")[0].strip() == package_name]
+                    pip_section[:] = [
+                        p for p in pip_section if not p.split("==")[0].split(">=")[0].strip() == package_name
+                    ]
                     if not pip_section and pip_idx is not None:
                         deps.pop(pip_idx)
             elif action == "update":
@@ -378,10 +388,22 @@ class EnvironmentService:
 
             if action == "install":
                 # Remove existing entry if present
-                deps[:] = [d for d in deps if not (isinstance(d, str) and d.split("==")[0].split(">=")[0].split("=")[0].strip() == package_name)]
+                deps[:] = [
+                    d
+                    for d in deps
+                    if not (
+                        isinstance(d, str) and d.split("==")[0].split(">=")[0].split("=")[0].strip() == package_name
+                    )
+                ]
                 deps.append(pkg_spec)
             elif action == "remove":
-                deps[:] = [d for d in deps if not (isinstance(d, str) and d.split("==")[0].split(">=")[0].split("=")[0].strip() == package_name)]
+                deps[:] = [
+                    d
+                    for d in deps
+                    if not (
+                        isinstance(d, str) and d.split("==")[0].split(">=")[0].split("=")[0].strip() == package_name
+                    )
+                ]
             elif action == "update":
                 for i, d in enumerate(deps):
                     if isinstance(d, str) and d.split("==")[0].split(">=")[0].split("=")[0].strip() == package_name:

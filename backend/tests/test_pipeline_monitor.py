@@ -54,6 +54,7 @@ def test_parse_duration():
 
 # --- Integration tests for sync_run_statuses ---
 
+
 @pytest_asyncio.fixture
 async def running_pipeline_run(session, admin_user):
     from app.models.experiment import Experiment
@@ -92,16 +93,19 @@ COMPLETED_TRACE = """task_id\thash\tnative_id\tprocess\ttag\tname\tstatus\texit\
 @pytest.mark.asyncio
 async def test_sync_detects_completion(session, running_pipeline_run):
     """Monitor detects when all processes are completed."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        side_effect=[
-            COMPLETED_TRACE,  # trace file read
-            "",  # output file listing
-        ],
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            side_effect=[
+                COMPLETED_TRACE,  # trace file read
+                "",  # output file listing
+            ],
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         await PipelineMonitorService.sync_run_statuses(session)
 
@@ -127,16 +131,19 @@ FAILED_TRACE = """task_id\thash\tnative_id\tprocess\ttag\tname\tstatus\texit\tsu
 @pytest.mark.asyncio
 async def test_sync_detects_failure(session, running_pipeline_run):
     """Monitor detects when a process has failed."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        side_effect=[
-            FAILED_TRACE,
-            "",
-        ],
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            side_effect=[
+                FAILED_TRACE,
+                "",
+            ],
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         await PipelineMonitorService.sync_run_statuses(session)
 
@@ -152,16 +159,19 @@ async def test_sync_detects_failure(session, running_pipeline_run):
 @pytest.mark.asyncio
 async def test_sync_creates_process_records(session, running_pipeline_run):
     """Monitor creates PipelineProcess records from trace."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        side_effect=[
-            COMPLETED_TRACE,
-            "",
-        ],
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            side_effect=[
+                COMPLETED_TRACE,
+                "",
+            ],
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         await PipelineMonitorService.sync_run_statuses(session)
 

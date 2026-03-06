@@ -152,7 +152,9 @@ class TerraformService:
                     tfvars_content = TFVARS_FILE.read_text()
                     component_desc = run.component_key or "infrastructure"
                     await GitOpsService.commit_and_push(
-                        session, repo.organization_id, user_id,
+                        session,
+                        repo.organization_id,
+                        user_id,
                         files={"terraform/terraform.tfvars": tfvars_content},
                         message=f"terraform: apply {component_desc}",
                     )
@@ -218,12 +220,12 @@ class TerraformService:
             for i, line in enumerate(lines):
                 stripped = line.strip()
                 if stripped.startswith(f"{key}") and "=" in stripped:
-                    lines[i] = f'{key} = {formatted}'
+                    lines[i] = f"{key} = {formatted}"
                     updated = True
                     break
 
             if not updated:
-                lines.append(f'{key} = {formatted}')
+                lines.append(f"{key} = {formatted}")
 
         TFVARS_FILE.write_text("\n".join(lines) + "\n")
 

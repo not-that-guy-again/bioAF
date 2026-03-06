@@ -16,9 +16,7 @@ class QuotaService:
     @staticmethod
     async def get_quota(session: AsyncSession, user_id: int) -> UserQuota | None:
         result = await session.execute(
-            select(UserQuota)
-            .options(selectinload(UserQuota.user))
-            .where(UserQuota.user_id == user_id)
+            select(UserQuota).options(selectinload(UserQuota.user)).where(UserQuota.user_id == user_id)
         )
         quota = result.scalar_one_or_none()
 
@@ -33,9 +31,7 @@ class QuotaService:
         return quota
 
     @staticmethod
-    async def get_or_create_quota(
-        session: AsyncSession, user_id: int, org_id: int
-    ) -> UserQuota:
+    async def get_or_create_quota(session: AsyncSession, user_id: int, org_id: int) -> UserQuota:
         quota = await QuotaService.get_quota(session, user_id)
         if not quota:
             now = datetime.now(timezone.utc)
@@ -51,12 +47,8 @@ class QuotaService:
         return quota
 
     @staticmethod
-    async def check_quota(
-        session: AsyncSession, user_id: int, estimated_hours: float
-    ) -> tuple[bool, str]:
-        result = await session.execute(
-            select(UserQuota).where(UserQuota.user_id == user_id)
-        )
+    async def check_quota(session: AsyncSession, user_id: int, estimated_hours: float) -> tuple[bool, str]:
+        result = await session.execute(select(UserQuota).where(UserQuota.user_id == user_id))
         quota = result.scalar_one_or_none()
 
         if not quota:
@@ -82,12 +74,8 @@ class QuotaService:
         return True, "Within quota"
 
     @staticmethod
-    async def update_usage(
-        session: AsyncSession, user_id: int, hours_consumed: float
-    ) -> None:
-        result = await session.execute(
-            select(UserQuota).where(UserQuota.user_id == user_id)
-        )
+    async def update_usage(session: AsyncSession, user_id: int, hours_consumed: float) -> None:
+        result = await session.execute(select(UserQuota).where(UserQuota.user_id == user_id))
         quota = result.scalar_one_or_none()
         if quota:
             quota.cpu_hours_used_current_month += Decimal(str(hours_consumed))
@@ -119,9 +107,7 @@ class QuotaService:
         return quota
 
     @staticmethod
-    async def list_quotas(
-        session: AsyncSession, org_id: int
-    ) -> list[UserQuota]:
+    async def list_quotas(session: AsyncSession, org_id: int) -> list[UserQuota]:
         result = await session.execute(
             select(UserQuota)
             .options(selectinload(UserQuota.user))
@@ -135,9 +121,7 @@ class QuotaService:
         """Background task: reset quotas that have passed their reset date."""
         try:
             now = datetime.now(timezone.utc)
-            result = await session.execute(
-                select(UserQuota).where(UserQuota.quota_reset_at <= now)
-            )
+            result = await session.execute(select(UserQuota).where(UserQuota.quota_reset_at <= now))
             quotas = list(result.scalars().all())
 
             for quota in quotas:

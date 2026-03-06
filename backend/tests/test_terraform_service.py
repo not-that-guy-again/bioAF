@@ -37,6 +37,7 @@ def test_parse_plan_json_invalid_json():
 async def test_update_tfvars(tmp_path):
     """Test that tfvars file is updated correctly."""
     import app.services.terraform_service as tf_mod
+
     original_dir = tf_mod.TERRAFORM_DIR
     original_file = tf_mod.TFVARS_FILE
     tf_mod.TERRAFORM_DIR = tmp_path
@@ -44,7 +45,7 @@ async def test_update_tfvars(tmp_path):
 
     try:
         # Create initial file
-        tf_mod.TFVARS_FILE.write_text('enable_slurm = false\n')
+        tf_mod.TFVARS_FILE.write_text("enable_slurm = false\n")
 
         TerraformService._update_tfvars({"enable_slurm": True})
 
@@ -59,6 +60,7 @@ async def test_update_tfvars(tmp_path):
 async def test_update_tfvars_new_key(tmp_path):
     """Test adding a new key to tfvars."""
     import app.services.terraform_service as tf_mod
+
     original_dir = tf_mod.TERRAFORM_DIR
     original_file = tf_mod.TFVARS_FILE
     tf_mod.TERRAFORM_DIR = tmp_path

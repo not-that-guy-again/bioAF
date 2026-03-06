@@ -166,7 +166,9 @@ class TemplateNotebookService:
                 repo = await GitOpsService.get_repo(session, org_id)
                 if repo:
                     return await GitOpsService.get_file(
-                        org_id, repo.github_repo_name, template.notebook_path,
+                        org_id,
+                        repo.github_repo_name,
+                        template.notebook_path,
                     )
         except Exception:
             pass
@@ -203,9 +205,7 @@ class TemplateNotebookService:
             # Try to set experiment-specific paths
             from app.models.experiment import Experiment
 
-            result = await session.execute(
-                select(Experiment).where(Experiment.id == experiment_id)
-            )
+            result = await session.execute(select(Experiment).where(Experiment.id == experiment_id))
             exp = result.scalar_one_or_none()
             if exp:
                 params["experiment_name"] = exp.name

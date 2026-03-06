@@ -50,7 +50,9 @@ class PackageService:
         # Commit to GitOps
         version_str = f"=={version}" if version else ""
         commit_sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={env.yaml_path: new_yaml},
             message=f"env: install {package_name}{version_str} into {environment_name}",
         )
@@ -104,7 +106,9 @@ class PackageService:
         new_yaml = EnvironmentService.update_conda_yaml(yaml_content, package_name, None, source, "remove")
 
         commit_sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={env.yaml_path: new_yaml},
             message=f"env: remove {package_name} from {environment_name}",
         )
@@ -170,7 +174,9 @@ class PackageService:
         new_yaml = EnvironmentService.update_conda_yaml(yaml_content, package_name, new_version, source, "update")
 
         commit_sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={env.yaml_path: new_yaml},
             message=f"env: update {package_name} to {new_version} in {environment_name}",
         )
@@ -197,7 +203,12 @@ class PackageService:
             entity_type="environment_package",
             entity_id=env.id,
             action="update",
-            details={"package": package_name, "old_version": old_version, "new_version": new_version, "environment": environment_name},
+            details={
+                "package": package_name,
+                "old_version": old_version,
+                "new_version": new_version,
+                "environment": environment_name,
+            },
             previous_value={"version": old_version},
         )
         await session.flush()
@@ -218,7 +229,9 @@ class PackageService:
         new_yaml = EnvironmentService.update_conda_yaml(yaml_content, package_name, version, "conda", "update")
 
         commit_sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={env.yaml_path: new_yaml},
             message=f"env: pin {package_name}=={version} in {environment_name}",
         )
@@ -272,7 +285,9 @@ class PackageService:
         new_yaml = EnvironmentService.update_conda_yaml(yaml_content, package_name, None, "conda", "update")
 
         commit_sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={env.yaml_path: new_yaml},
             message=f"env: unpin {package_name} in {environment_name}",
         )

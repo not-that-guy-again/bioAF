@@ -44,7 +44,11 @@ async def initialize_gitops(
 
     try:
         await GitOpsService.initialize_repo(
-            session, org_id, org.name, user_id, github_pat=data.github_pat,
+            session,
+            org_id,
+            org.name,
+            user_id,
+            github_pat=data.github_pat,
         )
         await session.commit()
     except ValueError as e:
@@ -70,10 +74,17 @@ async def list_commits(
         raise HTTPException(400, "GitOps repository not initialized")
 
     commits = await GitOpsService.list_commits(
-        org_id, repo.github_repo_name, path=path, page=page, page_size=page_size,
+        org_id,
+        repo.github_repo_name,
+        path=path,
+        page=page,
+        page_size=page_size,
     )
     return GitCommitListResponse(
-        commits=commits, total=len(commits), page=page, page_size=page_size,
+        commits=commits,
+        total=len(commits),
+        page=page,
+        page_size=page_size,
     )
 
 

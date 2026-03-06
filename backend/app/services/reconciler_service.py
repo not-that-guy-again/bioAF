@@ -43,9 +43,7 @@ class ReconcilerService:
     async def _reconcile_change(session: AsyncSession, change: EnvironmentChange) -> None:
         """Apply a single environment change to the SLURM cluster."""
         # Get environment info
-        result = await session.execute(
-            select(Environment).where(Environment.id == change.environment_id)
-        )
+        result = await session.execute(select(Environment).where(Environment.id == change.environment_id))
         env = result.scalar_one_or_none()
         if not env:
             raise ValueError(f"Environment {change.environment_id} not found")
@@ -57,7 +55,9 @@ class ReconcilerService:
 
         # Read current YAML from GitOps
         yaml_content = await GitOpsService.get_file(
-            change.organization_id, repo.github_repo_name, env.yaml_path,
+            change.organization_id,
+            repo.github_repo_name,
+            env.yaml_path,
         )
 
         # SSH into SLURM controller and apply changes
@@ -70,7 +70,10 @@ class ReconcilerService:
 
         # Sync package list from YAML to DB
         await EnvironmentService.sync_packages_from_yaml(
-            session, change.organization_id, env.id, yaml_content,
+            session,
+            change.organization_id,
+            env.id,
+            yaml_content,
         )
 
         # Update environment status
@@ -148,10 +151,12 @@ class ReconcilerService:
             return key
 
         import os
+
         return os.environ.get("BIOAF_SLURM_SSH_KEY", "")
 
     @staticmethod
     async def _get_slurm_controller_ip(org_id: int) -> str:
         """Get the SLURM controller IP. In production, read from component state."""
         import os
+
         return os.environ.get("BIOAF_SLURM_CONTROLLER_IP", "10.0.0.2")

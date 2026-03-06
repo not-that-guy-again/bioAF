@@ -102,9 +102,7 @@ class NotebookService:
         return notebook_session
 
     @staticmethod
-    async def stop_session(
-        session: AsyncSession, session_id: int, user_id: int
-    ) -> NotebookSession:
+    async def stop_session(session: AsyncSession, session_id: int, user_id: int) -> NotebookSession:
         notebook_session = await NotebookService.get_session(session, session_id)
         if not notebook_session:
             raise ValueError("Session not found")
@@ -146,9 +144,7 @@ class NotebookService:
             .options(selectinload(NotebookSession.user), selectinload(NotebookSession.experiment))
             .where(NotebookSession.organization_id == org_id)
         )
-        count_query = select(func.count(NotebookSession.id)).where(
-            NotebookSession.organization_id == org_id
-        )
+        count_query = select(func.count(NotebookSession.id)).where(NotebookSession.organization_id == org_id)
 
         if user_id:
             query = query.where(NotebookSession.user_id == user_id)

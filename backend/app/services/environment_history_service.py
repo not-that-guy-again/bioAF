@@ -23,7 +23,9 @@ class EnvironmentHistoryService:
         """Get paginated change timeline for an environment."""
         # Count total
         count_result = await session.execute(
-            select(func.count()).select_from(EnvironmentChange).where(
+            select(func.count())
+            .select_from(EnvironmentChange)
+            .where(
                 EnvironmentChange.organization_id == org_id,
                 EnvironmentChange.environment_id == environment_id,
             )
@@ -46,7 +48,9 @@ class EnvironmentHistoryService:
 
     @staticmethod
     async def get_change_detail(
-        session: AsyncSession, org_id: int, change_id: int,
+        session: AsyncSession,
+        org_id: int,
+        change_id: int,
     ) -> EnvironmentChange | None:
         result = await session.execute(
             select(EnvironmentChange).where(
@@ -75,9 +79,7 @@ class EnvironmentHistoryService:
             raise ValueError("Target change has no git commit reference")
 
         # Get environment
-        result = await session.execute(
-            select(Environment).where(Environment.id == environment_id)
-        )
+        result = await session.execute(select(Environment).where(Environment.id == environment_id))
         env = result.scalar_one_or_none()
         if not env:
             raise ValueError(f"Environment {environment_id} not found")
@@ -89,13 +91,18 @@ class EnvironmentHistoryService:
 
         # Read the YAML at the target commit
         old_content = await GitOpsService.get_file(
-            org_id, repo.github_repo_name, env.yaml_path, ref=target.git_commit_sha,
+            org_id,
+            repo.github_repo_name,
+            env.yaml_path,
+            ref=target.git_commit_sha,
         )
 
         # Commit as new version
         short_sha = target.git_commit_sha[:8]
         commit_sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={env.yaml_path: old_content},
             message=f"env: rollback {env.name} to commit {short_sha}",
         )
@@ -162,10 +169,12 @@ class EnvironmentHistoryService:
         changed = []
         for name in pkgs1:
             if name in pkgs2 and pkgs1[name].get("version") != pkgs2[name].get("version"):
-                changed.append({
-                    "name": name,
-                    "old_version": pkgs1[name].get("version"),
-                    "new_version": pkgs2[name].get("version"),
-                })
+                changed.append(
+                    {
+                        "name": name,
+                        "old_version": pkgs1[name].get("version"),
+                        "new_version": pkgs2[name].get("version"),
+                    }
+                )
 
         return {"added": added, "removed": removed, "changed": changed}

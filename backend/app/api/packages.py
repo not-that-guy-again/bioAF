@@ -70,7 +70,9 @@ async def install_package(
 
     try:
         change = await PackageService.install_package(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             environment_name=data.environment,
             package_name=data.package_name,
             version=data.version,
@@ -95,7 +97,9 @@ async def remove_package(
 
     try:
         change = await PackageService.remove_package(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             environment_name=data.environment,
             package_name=data.package_name,
             source=data.source,
@@ -118,7 +122,9 @@ async def update_package(
 
     try:
         change = await PackageService.update_package(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             environment_name=data.environment,
             package_name=data.package_name,
             new_version=data.new_version,
@@ -144,7 +150,12 @@ async def pin_package(
 
     try:
         change = await PackageService.pin_package(
-            session, org_id, user_id, environment, name, version,
+            session,
+            org_id,
+            user_id,
+            environment,
+            name,
+            version,
         )
         await session.commit()
     except ValueError as e:
@@ -165,7 +176,11 @@ async def unpin_package(
 
     try:
         change = await PackageService.unpin_package(
-            session, org_id, user_id, environment, name,
+            session,
+            org_id,
+            user_id,
+            environment,
+            name,
         )
         await session.commit()
     except ValueError as e:

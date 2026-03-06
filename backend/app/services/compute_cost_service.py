@@ -15,9 +15,7 @@ INSTANCE_PRICING = {
 
 class ComputeCostService:
     @staticmethod
-    def estimate_job_cost(
-        instance_type: str, duration_hours: float, is_spot: bool = False
-    ) -> float:
+    def estimate_job_cost(instance_type: str, duration_hours: float, is_spot: bool = False) -> float:
         pricing = INSTANCE_PRICING.get(instance_type)
         if not pricing:
             return 0.0

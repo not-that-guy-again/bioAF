@@ -32,6 +32,7 @@ class GitOpsService:
             return pat
         # For dev/test, fall back to env var
         import os
+
         pat = os.environ.get("BIOAF_GITHUB_PAT", "")
         if not pat:
             raise ValueError("GitHub PAT not configured")
@@ -47,9 +48,7 @@ class GitOpsService:
 
     @staticmethod
     async def get_repo(session: AsyncSession, org_id: int) -> GitOpsRepo | None:
-        result = await session.execute(
-            select(GitOpsRepo).where(GitOpsRepo.organization_id == org_id)
-        )
+        result = await session.execute(select(GitOpsRepo).where(GitOpsRepo.organization_id == org_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -125,7 +124,11 @@ class GitOpsService:
             initial_files = GitOpsService._collect_initial_files()
             for path, content in initial_files.items():
                 await GitOpsService._put_file(
-                    client, headers, f"{owner}/{repo_name}", path, content,
+                    client,
+                    headers,
+                    f"{owner}/{repo_name}",
+                    path,
+                    content,
                     f"init: add {path}",
                 )
 
@@ -228,7 +231,12 @@ class GitOpsService:
         async with httpx.AsyncClient(timeout=30.0) as client:
             for path, content in files.items():
                 sha = await GitOpsService._put_file(
-                    client, headers, repo.github_repo_name, path, content, message,
+                    client,
+                    headers,
+                    repo.github_repo_name,
+                    path,
+                    content,
+                    message,
                 )
                 if sha:
                     last_sha = sha
@@ -268,8 +276,11 @@ class GitOpsService:
 
     @staticmethod
     async def list_commits(
-        org_id: int, repo_full_name: str, path: str | None = None,
-        page: int = 1, page_size: int = 20,
+        org_id: int,
+        repo_full_name: str,
+        path: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
     ) -> list[dict]:
         """List commits, optionally filtered by path."""
         pat = await GitOpsService._get_github_pat()
@@ -351,7 +362,9 @@ class GitOpsService:
         """Revert a file to a previous commit's content. Returns new commit SHA."""
         old_content = await GitOpsService.get_file(org_id, repo_full_name, path, ref=target_sha)
         sha = await GitOpsService.commit_and_push(
-            session, org_id, user_id,
+            session,
+            org_id,
+            user_id,
             files={path: old_content},
             message=f"revert: {path} to commit {target_sha[:8]}",
         )

@@ -126,8 +126,13 @@ class PipelineCatalogService:
 
     @staticmethod
     async def add_custom_pipeline(
-        session: AsyncSession, org_id: int, user_id: int, name: str, source_url: str,
-        version: str | None = None, description: str | None = None,
+        session: AsyncSession,
+        org_id: int,
+        user_id: int,
+        name: str,
+        source_url: str,
+        version: str | None = None,
+        description: str | None = None,
     ) -> PipelineCatalogEntry:
         """Register a custom pipeline by Git URL."""
         # Generate pipeline_key from name
@@ -163,11 +168,12 @@ class PipelineCatalogService:
 
     @staticmethod
     async def update_pipeline_version(
-        session: AsyncSession, pipeline_id: int, user_id: int, version: str,
+        session: AsyncSession,
+        pipeline_id: int,
+        user_id: int,
+        version: str,
     ) -> PipelineCatalogEntry | None:
-        result = await session.execute(
-            select(PipelineCatalogEntry).where(PipelineCatalogEntry.id == pipeline_id)
-        )
+        result = await session.execute(select(PipelineCatalogEntry).where(PipelineCatalogEntry.id == pipeline_id))
         entry = result.scalar_one_or_none()
         if not entry:
             return None
