@@ -50,6 +50,8 @@ class PipelineRunLaunchRequest(BaseModel):
     sample_ids: list[int] | None = None
     parameters: dict = {}
     resume_from_run_id: int | None = None
+    reference_genome: str | None = None
+    alignment_algorithm: str | None = None
 
 
 class PipelineRunResponse(BaseModel):
@@ -68,6 +70,8 @@ class PipelineRunResponse(BaseModel):
     error_message: str | None = None
     work_dir: str | None = None
     slurm_job_id: str | None = None
+    reference_genome: str | None = None
+    alignment_algorithm: str | None = None
     resume_from_run_id: int | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
