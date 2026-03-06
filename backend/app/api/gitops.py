@@ -43,7 +43,7 @@ async def initialize_gitops(
         raise HTTPException(404, "Organization not found")
 
     try:
-        repo = await GitOpsService.initialize_repo(
+        await GitOpsService.initialize_repo(
             session, org_id, org.name, user_id, github_pat=data.github_pat,
         )
         await session.commit()
