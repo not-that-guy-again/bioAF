@@ -1,0 +1,258 @@
+"""Initial schema - all tables for bioAF platform.
+
+Revision ID: 001
+Revises:
+Create Date: 2026-03-05
+
+Phase 1 tables: organizations, users, verification_codes, audit_log,
+                component_states, terraform_runs, platform_config
+Phase 2+ placeholders: experiments, samples, batches, experiment_templates,
+                       experiment_custom_fields, sample_files, pipeline_runs,
+                       pipeline_run_samples, notebook_session_files
+"""
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
+
+# revision identifiers, used by Alembic.
+revision = "001"
+down_revision = None
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # ---------------------------------------------------------------
+    # Phase 1 tables (fully used)
+    # ---------------------------------------------------------------
+
+    op.create_table(
+        "organizations",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("setup_complete", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
+        sa.Column("smtp_configured", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "users",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("email", sa.String(length=255), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=True),
+        sa.Column("password_hash", sa.String(length=255), nullable=False),
+        sa.Column("role", sa.String(length=50), server_default=sa.text("'viewer'"), nullable=False),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'active'"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("email"),
+    )
+
+    op.create_table(
+        "verification_codes",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("code_hash", sa.String(length=255), nullable=False),
+        sa.Column("purpose", sa.String(length=50), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("used", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "terraform_runs",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("triggered_by_user_id", sa.Integer(), nullable=False),
+        sa.Column("action", sa.String(length=50), nullable=False),
+        sa.Column("component_key", sa.String(length=50), nullable=True),
+        sa.Column("plan_summary_json", JSONB(), nullable=True),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.ForeignKeyConstraint(["triggered_by_user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "audit_log",
+        sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
+        sa.Column("timestamp", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=True),
+        sa.Column("entity_type", sa.String(length=50), nullable=False),
+        sa.Column("entity_id", sa.Integer(), nullable=False),
+        sa.Column("action", sa.String(length=50), nullable=False),
+        sa.Column("details_json", JSONB(), nullable=True),
+        sa.Column("previous_value_json", JSONB(), nullable=True),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "component_states",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("component_key", sa.String(length=50), nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'disabled'"), nullable=False),
+        sa.Column("config_json", JSONB(), server_default=sa.text("'{}'"), nullable=False),
+        sa.Column("last_terraform_run_id", sa.Integer(), nullable=True),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["last_terraform_run_id"], ["terraform_runs.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("component_key"),
+    )
+
+    op.create_table(
+        "platform_config",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("key", sa.String(length=255), nullable=False),
+        sa.Column("value", sa.Text(), nullable=True),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("key"),
+    )
+
+    # ---------------------------------------------------------------
+    # Phase 2+ placeholder tables (empty schemas for stable data model)
+    # ---------------------------------------------------------------
+
+    op.create_table(
+        "experiments",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("hypothesis", sa.Text(), nullable=True),
+        sa.Column("owner_user_id", sa.Integer(), nullable=True),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'registered'"), nullable=False),
+        sa.Column("start_date", sa.Date(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["owner_user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "samples",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("experiment_id", sa.Integer(), nullable=False),
+        sa.Column("sample_id_external", sa.String(length=255), nullable=True),
+        sa.Column("organism", sa.String(length=100), nullable=True),
+        sa.Column("tissue_type", sa.String(length=100), nullable=True),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'registered'"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "batches",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("experiment_id", sa.Integer(), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("prep_date", sa.Date(), nullable=True),
+        sa.Column("operator_user_id", sa.Integer(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.ForeignKeyConstraint(["operator_user_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "experiment_templates",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("required_fields_json", JSONB(), nullable=True),
+        sa.Column("custom_fields_schema_json", JSONB(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "experiment_custom_fields",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("experiment_id", sa.Integer(), nullable=False),
+        sa.Column("field_name", sa.String(length=255), nullable=False),
+        sa.Column("field_value", sa.Text(), nullable=True),
+        sa.Column("field_type", sa.String(length=50), nullable=False),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "sample_files",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("sample_id", sa.Integer(), nullable=False),
+        sa.Column("file_id", sa.Integer(), nullable=True),
+        sa.ForeignKeyConstraint(["sample_id"], ["samples.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "pipeline_runs",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("experiment_id", sa.Integer(), nullable=True),
+        sa.Column("pipeline_name", sa.String(length=255), nullable=False),
+        sa.Column("status", sa.String(length=50), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "pipeline_run_samples",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("pipeline_run_id", sa.Integer(), nullable=False),
+        sa.Column("sample_id", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(["pipeline_run_id"], ["pipeline_runs.id"]),
+        sa.ForeignKeyConstraint(["sample_id"], ["samples.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_table(
+        "notebook_session_files",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("session_id", sa.Integer(), nullable=True),
+        sa.Column("file_id", sa.Integer(), nullable=True),
+        sa.Column("access_type", sa.String(length=50), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    # ---------------------------------------------------------------
+    # Audit log role enforcement (ADR-009)
+    # ---------------------------------------------------------------
+    # Wrapped in try/except since the bioaf_app role may not exist
+    # in test environments or local dev setups.
+    try:
+        op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO bioaf_app")
+        op.execute("REVOKE UPDATE, DELETE ON audit_log FROM bioaf_app")
+        op.execute("REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC")
+        op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app")
+    except Exception:
+        # Role may not exist in test/dev environments - that's OK
+        pass
+
+
+def downgrade() -> None:
+    # Drop in reverse dependency order
+    op.drop_table("notebook_session_files")
+    op.drop_table("pipeline_run_samples")
+    op.drop_table("pipeline_runs")
+    op.drop_table("sample_files")
+    op.drop_table("experiment_custom_fields")
+    op.drop_table("experiment_templates")
+    op.drop_table("batches")
+    op.drop_table("samples")
+    op.drop_table("experiments")
+    op.drop_table("platform_config")
+    op.drop_table("component_states")
+    op.drop_table("audit_log")
+    op.drop_table("terraform_runs")
+    op.drop_table("verification_codes")
+    op.drop_table("users")
+    op.drop_table("organizations")
