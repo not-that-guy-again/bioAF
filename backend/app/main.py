@@ -76,6 +76,8 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_storage_stats_refresh_loop()))
     background_tasks.append(asyncio.create_task(_reconciler_loop()))
     background_tasks.append(asyncio.create_task(_notification_cleanup_loop()))
+    background_tasks.append(asyncio.create_task(_backup_health_check_loop()))
+    background_tasks.append(asyncio.create_task(_cost_billing_sync_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -225,6 +227,45 @@ async def _notification_cleanup_loop():
             break
         except Exception as e:
             logger.error("Notification cleanup error: %s", e)
+
+
+async def _backup_health_check_loop():
+    """Check backup health every hour, emit events if backups are overdue."""
+    from app.services.backup_service import BackupService
+
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 1 hour
+            await BackupService.check_backup_health()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Backup health check error: %s", e)
+
+
+async def _cost_billing_sync_loop():
+    """Sync billing data daily and check budget thresholds."""
+    from app.database import async_session_factory
+    from app.services.cost_service import CostService
+    from app.models.organization import Organization
+    from sqlalchemy import select
+
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await CostService.sync_billing_data(session, org.id)
+                        await CostService.check_budget_thresholds(session, org.id)
+                    except Exception as e:
+                        logger.warning("Billing sync failed for org %d: %s", org.id, e)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Cost billing sync error: %s", e)
 
 
 app = FastAPI(
