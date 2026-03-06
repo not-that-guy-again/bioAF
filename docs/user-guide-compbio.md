@@ -9,6 +9,7 @@ Log in with your credentials. Your account has the **comp_bio** role, giving you
 ## Pipeline Catalog
 
 Navigate to **Pipeline Catalog** to browse available pipelines:
+
 - **nf-core/scrnaseq** - Single-cell RNA-seq processing
 - **nf-core/rnaseq** - Bulk RNA-seq alignment and quantification
 - **nf-core/atacseq** - ATAC-seq analysis
@@ -27,6 +28,7 @@ Each pipeline shows its description, required inputs, and default parameters.
 4. Click **Submit**
 
 Monitor runs from **Pipeline Runs**:
+
 - View real-time progress and logs
 - See per-stage completion status
 - Access output files when complete
@@ -51,6 +53,7 @@ Browse and search installed packages across conda, pip, CRAN, and Bioconductor c
 ### Environments (Sidebar > Environments)
 
 Manage reproducible software environments:
+
 - Create new environments with specific package versions
 - Clone existing environments
 - Export environment definitions (environment.yml, requirements.txt)
@@ -59,6 +62,7 @@ Manage reproducible software environments:
 ## Data Management
 
 Navigate to **Data** for file management:
+
 - Browse uploaded files and pipeline outputs
 - Download individual files or datasets
 - Organize files by experiment and project
@@ -66,6 +70,7 @@ Navigate to **Data** for file management:
 ## Results and Visualization
 
 From **Results**:
+
 - View QC dashboards with quality metrics per pipeline run
 - Launch cellxgene for interactive single-cell exploration
 - Browse publication-quality plots
@@ -74,6 +79,7 @@ From **Results**:
 ## Notebook Templates
 
 Access pre-configured analysis templates from **Templates**:
+
 - Standard analysis workflows
 - Customizable parameters
 - Auto-populated with your experiment data

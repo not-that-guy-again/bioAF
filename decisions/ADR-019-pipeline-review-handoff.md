@@ -107,7 +107,7 @@ This means Jake never needs to separately communicate the handoff. The review ac
 
 The experiment status machine (ADR-006) gains awareness of reviews:
 
-```
+```text
 processing → pipeline_complete → reviewed → analysis → complete
                                     ↑
                               (re-review)
@@ -121,7 +121,7 @@ processing → pipeline_complete → reviewed → analysis → complete
 
 ### API Endpoints
 
-```
+```text
 POST   /api/v1/pipeline-runs/{id}/reviews         → Submit a review
 GET    /api/v1/pipeline-runs/{id}/reviews          → List all reviews for a run
 GET    /api/v1/pipeline-runs/{id}/review           → Get the active (most recent non-superseded) review

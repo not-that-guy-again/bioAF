@@ -29,7 +29,7 @@ The bucket is FUSE-mounted on all compute nodes and notebook servers at `/data/r
 
 Directory structure:
 
-```
+```text
 /data/references/
 ├── genomes/
 │   ├── GRCh38/
@@ -146,7 +146,7 @@ Downloads are background tasks with progress tracking in the UI. The reference r
 
 ### API Endpoints
 
-```
+```text
 GET    /api/v1/references                        → List all reference datasets (filterable by category, scope, status)
 GET    /api/v1/references/{id}                    → Detail with file manifest and impact summary
 POST   /api/v1/references                         → Upload new reference dataset

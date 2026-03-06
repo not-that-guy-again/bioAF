@@ -7,6 +7,7 @@ bioAF is designed with data portability as a core principle (see [ADR-012](../de
 ### Database (Cloud SQL PostgreSQL)
 
 Your experiment metadata, sample records, pipeline configurations, and audit logs remain in Cloud SQL:
+
 - Connect with any PostgreSQL client: `psql`, DBeaver, pgAdmin
 - Export with `pg_dump` for migration to another database
 - PITR backups are retained per your configured retention policy
@@ -14,6 +15,7 @@ Your experiment metadata, sample records, pipeline configurations, and audit log
 ### Files (Filestore / GCS)
 
 All uploaded data files, pipeline outputs, and notebook files are stored in GCS buckets and Filestore:
+
 - Access via `gsutil`, the GCP Console, or any S3-compatible client
 - Bucket names follow the pattern: `bioaf-{org}-{type}` (e.g., `bioaf-myorg-data`, `bioaf-myorg-results`)
 - Filestore NFS exports can be mounted from any GCE instance
@@ -21,6 +23,7 @@ All uploaded data files, pipeline outputs, and notebook files are stored in GCS 
 ### Notebooks
 
 JupyterHub and RStudio notebooks are stored on Filestore:
+
 - Mount the Filestore share on any compute instance
 - Notebooks are standard `.ipynb` and `.Rmd` files
 - Conda/pip environments are defined in standard `environment.yml` / `requirements.txt` files
@@ -28,6 +31,7 @@ JupyterHub and RStudio notebooks are stored on Filestore:
 ### Pipeline Definitions
 
 Nextflow and Snakemake pipeline definitions are standard workflow files:
+
 - Nextflow: `*.nf` files with `nextflow.config`
 - Snakemake: `Snakefile` with config YAML
 - Run them directly on any compatible compute environment
@@ -35,12 +39,14 @@ Nextflow and Snakemake pipeline definitions are standard workflow files:
 ### Terraform State
 
 Infrastructure state is stored in a GCS backend bucket:
+
 - Import into your own Terraform workspace
 - Or use `terraform state list` to see all managed resources
 
 ### Platform Configuration
 
 Nightly config backups in GCS contain:
+
 - Component configuration
 - User and organization settings
 - Notification rules and preferences

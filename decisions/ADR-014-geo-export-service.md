@@ -100,7 +100,7 @@ Before generating the export, the service runs a validation pass and categorizes
 
 **API endpoint:**
 
-```
+```text
 POST /api/v1/experiments/{experiment_id}/export/geo
 ```
 

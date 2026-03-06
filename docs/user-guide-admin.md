@@ -5,6 +5,7 @@ This guide covers bioAF administration: user management, infrastructure componen
 ## User Management
 
 Navigate to **Users & Roles**:
+
 - View all users with their roles and status
 - Change user roles: admin, comp_bio, bench, viewer
 - Deactivate users who have left
@@ -22,6 +23,7 @@ Navigate to **Users & Roles**:
 ## Infrastructure Components
 
 Navigate to **Components**:
+
 - Enable/disable infrastructure components through the UI
 - Each toggle triggers a Terraform apply
 - View component health status
@@ -30,6 +32,7 @@ Navigate to **Components**:
 ## Cost Center
 
 Navigate to **Cost Center** (admin sidebar):
+
 - **Current month spend** with daily trend
 - **Breakdown by component** showing which services cost the most
 - **Budget configuration**: set monthly budget and alert thresholds
@@ -38,12 +41,14 @@ Navigate to **Cost Center** (admin sidebar):
 ### Budget Alerts
 
 Configure alerts at 50%, 80%, and 100% of budget:
+
 - Notifications sent via configured channels (in-app, email, Slack)
 - Optional **scale-to-zero** at 100% stops compute workloads automatically
 
 ## Backup & Recovery
 
 Navigate to **Backup & Recovery** (admin sidebar):
+
 - View backup status for each tier: Cloud SQL, Filestore, GCS, Platform Config, Terraform State
 - Each tier shows: last backup, size, next scheduled, retention policy
 - **Config snapshots**: browse and diff configuration backups
@@ -64,6 +69,7 @@ Navigate to **Backup & Recovery** (admin sidebar):
 ### Notification Rules
 
 Configure which events trigger notifications and through which channels:
+
 - Pipeline completions/failures
 - Budget threshold alerts
 - Backup failures
@@ -72,12 +78,14 @@ Configure which events trigger notifications and through which channels:
 ### SMTP (Settings)
 
 Configure SMTP for email notifications:
+
 - Host, port, credentials, from address
 - Required for email invitations and email notifications
 
 ## Platform Upgrades
 
 In **Settings** under Platform Version:
+
 - View current version and check for updates
 - Review changelog before upgrading
 - Upgrade history with status tracking
@@ -86,6 +94,7 @@ In **Settings** under Platform Version:
 ## Access Logs
 
 Navigate to **Access Logs** (admin sidebar):
+
 - View who accessed what resource and when
 - Filter by user, resource type, action, and date range
 - Useful for compliance and auditing
@@ -93,6 +102,7 @@ Navigate to **Access Logs** (admin sidebar):
 ## Settings Overview
 
 The **Settings** page centralizes:
+
 - SMTP configuration
 - Slack webhook management
 - Platform version and upgrades

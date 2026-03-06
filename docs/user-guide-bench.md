@@ -49,6 +49,7 @@ When your experiment progresses to the analysis or complete stage:
 ## Notifications
 
 You'll receive notifications for:
+
 - Pipeline completion on your experiments
 - QC results ready
 - Experiment status changes

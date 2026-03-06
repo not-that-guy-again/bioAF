@@ -20,7 +20,7 @@ bioAF provides a Snapshot Comparison UI that lets scientists view, diff, and com
 
 The primary entry point is a chronological timeline of all snapshots for an experiment, grouped by notebook session.
 
-```
+```text
 Experiment: "GBM_atlas_v2"
 
 Session 1 (Sarah, Mar 5, Jupyter) ──────────────────────────
@@ -44,7 +44,7 @@ Selecting two or more snapshots opens a comparison view. The comparison is struc
 
 The system computes a structured diff between the `parameters_json` fields. Only changed parameters are highlighted.
 
-```
+```text
                           Snapshot A                    Snapshot B
                           leiden_0.5_no_correction      leiden_0.5_harmony_corrected
 ─────────────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ embeddings                [X_pca, X_umap]               [X_pca, X_harmony,    �
 
 A visual comparison of cluster sizes, shown as a grouped bar chart or a Sankey diagram (if cell overlap can be inferred from checkpoint data). This helps answer "did adding batch correction split one big cluster into two small ones, or did it rearrange cells entirely?"
 
-```
+```text
 Cluster sizes:
            Snapshot A    Snapshot B
 Cluster 0  1,200         890
@@ -81,7 +81,7 @@ Side-by-side display of figures saved with each snapshot. Typically UMAPs, which
 
 For Seurat snapshots, the `@commands` log provides an ordered list of every function called. The diff shows which operations were added, removed, or changed between snapshots.
 
-```
+```text
 Snapshot A                              Snapshot B
 ─────────────────────────────────────────────────────────
 NormalizeData (RNA)                     NormalizeData (RNA)
@@ -98,7 +98,7 @@ RunUMAP (pca, dims=1:30)               RunUMAP (harmony, dims=1:30)            �
 
 For comparing more than two snapshots (common when sweeping a parameter), the UI provides a table view:
 
-```
+```text
 Label                    Resolution  Correction  Cells   Clusters  Notes
 leiden_0.8_none          0.8         —           8,432   14        Over-clustered
 leiden_0.5_none          0.5         —           8,432   9
@@ -118,7 +118,7 @@ Snapshots appear in the experiment's provenance view (F-072) and audit timeline 
 
 ### API Endpoints
 
-```
+```text
 GET  /api/v1/experiments/{id}/snapshots
      → List all snapshots for an experiment, grouped by session
 

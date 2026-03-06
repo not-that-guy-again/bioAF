@@ -12,12 +12,14 @@
 ## GCP Project Setup
 
 1. Create a new GCP project or select an existing one:
+
    ```bash
    gcloud projects create my-bioaf-project
    gcloud config set project my-bioaf-project
    ```
 
 2. Enable required APIs:
+
    ```bash
    gcloud services enable \
      compute.googleapis.com \
@@ -29,6 +31,7 @@
    ```
 
 3. Create a service account for Terraform:
+
    ```bash
    gcloud iam service-accounts create bioaf-terraform \
      --display-name="bioAF Terraform"
@@ -66,12 +69,14 @@ bioaf deploy --project my-bioaf-project --region us-central1
 ### SMTP Configuration
 
 For email notifications and user invitations, configure SMTP in Admin > Settings:
+
 - Host, port, username, password, and from address
 - Test the configuration with the test email button
 
 ### Component Activation
 
 From the Components page, enable the infrastructure components your team needs:
+
 - **SLURM HPC Cluster** - Required for compute workloads
 - **Filestore NFS** - Shared storage for notebooks and pipelines
 - **JupyterHub / RStudio** - Interactive notebook environments
@@ -83,6 +88,7 @@ Each component is provisioned via Terraform when enabled through the UI.
 ### Backup Configuration
 
 Backups are configured automatically with sensible defaults:
+
 - Cloud SQL: Daily snapshots with 30-day retention, 7-day PITR
 - Filestore: Daily snapshots with 14-day retention
 - Platform config: Nightly exports to GCS
@@ -92,6 +98,7 @@ Review and adjust in Admin > Backup & Recovery.
 ### Budget Alerts
 
 Set up cost monitoring in Admin > Cost Center:
+
 - Set a monthly budget
 - Enable threshold alerts at 50%, 80%, 100%
 - Optionally enable scale-to-zero when budget is exceeded
@@ -99,6 +106,7 @@ Set up cost monitoring in Admin > Cost Center:
 ## Upgrading
 
 bioAF checks for new versions daily. When an update is available:
+
 1. Go to Admin > Settings
 2. Review the changelog
 3. Click "Check for updates" to verify

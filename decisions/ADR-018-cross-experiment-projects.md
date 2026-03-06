@@ -73,7 +73,7 @@ The `experiment_id` columns remain and are not made nullable — existing single
 
 With projects, provenance becomes a directed acyclic graph:
 
-```
+```text
 Experiment 7          Experiment 12
     │                     │
     ├── Sample A          ├── Sample E
