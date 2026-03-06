@@ -78,6 +78,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_notification_cleanup_loop()))
     background_tasks.append(asyncio.create_task(_backup_health_check_loop()))
     background_tasks.append(asyncio.create_task(_cost_billing_sync_loop()))
+    background_tasks.append(asyncio.create_task(_version_check_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -276,6 +277,30 @@ async def _cost_billing_sync_loop():
             break
         except Exception as e:
             logger.error("Cost billing sync error: %s", e)
+
+
+async def _version_check_loop():
+    """Check for platform updates daily."""
+    from app.database import async_session_factory
+    from app.services.upgrade_service import UpgradeService
+    from app.models.organization import Organization
+    from sqlalchemy import select
+
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await UpgradeService.background_version_check(org.id)
+                    except Exception as e:
+                        logger.warning("Version check failed for org %d: %s", org.id, e)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Version check error: %s", e)
 
 
 app = FastAPI(
