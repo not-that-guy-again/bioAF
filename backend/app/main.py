@@ -56,6 +56,14 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified")
 
+    # Initialize notification system
+    from app.database import async_session_factory as notif_session_factory
+    from app.services.notification_router import NotificationRouter
+
+    notification_router = NotificationRouter(notif_session_factory)
+    notification_router.register()
+    logger.info("Notification system initialized")
+
     logger.info("bioAF backend started successfully")
 
     # Start background tasks
@@ -67,6 +75,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_plot_archive_watcher_loop()))
     background_tasks.append(asyncio.create_task(_storage_stats_refresh_loop()))
     background_tasks.append(asyncio.create_task(_reconciler_loop()))
+    background_tasks.append(asyncio.create_task(_notification_cleanup_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -200,6 +209,22 @@ async def _reconciler_loop():
             break
         except Exception as e:
             logger.error("Reconciler error: %s", e)
+
+
+async def _notification_cleanup_loop():
+    """Delete read notifications older than 90 days, runs once daily."""
+    from app.database import async_session_factory
+    from app.services.notification_service import NotificationService
+
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            async with async_session_factory() as session:
+                await NotificationService.cleanup_old_notifications(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Notification cleanup error: %s", e)
 
 
 app = FastAPI(
