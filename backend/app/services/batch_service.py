@@ -6,17 +6,36 @@ from app.models.batch import Batch
 from app.models.sample import Sample
 from app.schemas.batch import BatchCreate, BatchUpdate
 from app.services.audit_service import log_action
+from app.services.vocabulary_validator import VocabularyValidator, _derive_instrument_platform
 
 
 class BatchService:
     @staticmethod
     async def create_batch(session: AsyncSession, experiment_id: int, user_id: int, data: BatchCreate) -> Batch:
+        # Validate controlled vocabulary fields
+        await VocabularyValidator.validate_batch_fields(
+            session,
+            {
+                "instrument_model": data.instrument_model,
+                "instrument_platform": data.instrument_platform,
+                "quality_score_encoding": data.quality_score_encoding,
+            },
+        )
+
+        # Auto-derive instrument_platform from instrument_model
+        instrument_platform = data.instrument_platform
+        if data.instrument_model and not instrument_platform:
+            instrument_platform = _derive_instrument_platform(data.instrument_model)
+
         batch = Batch(
             experiment_id=experiment_id,
             name=data.name,
             prep_date=data.prep_date,
             operator_user_id=data.operator_user_id,
             sequencer_run_id=data.sequencer_run_id,
+            instrument_model=data.instrument_model,
+            instrument_platform=instrument_platform,
+            quality_score_encoding=data.quality_score_encoding,
             notes=data.notes,
         )
         session.add(batch)
@@ -39,9 +58,32 @@ class BatchService:
         if not batch:
             return None
 
+        # Validate controlled vocabulary fields
+        await VocabularyValidator.validate_batch_fields(
+            session,
+            {
+                "instrument_model": data.instrument_model,
+                "instrument_platform": data.instrument_platform,
+                "quality_score_encoding": data.quality_score_encoding,
+            },
+        )
+
+        # Auto-derive instrument_platform from instrument_model
+        if data.instrument_model and not data.instrument_platform:
+            data.instrument_platform = _derive_instrument_platform(data.instrument_model)
+
         previous = {}
         updates = {}
-        for field in ["name", "prep_date", "operator_user_id", "sequencer_run_id", "notes"]:
+        for field in [
+            "name",
+            "prep_date",
+            "operator_user_id",
+            "sequencer_run_id",
+            "instrument_model",
+            "instrument_platform",
+            "quality_score_encoding",
+            "notes",
+        ]:
             new_val = getattr(data, field, None)
             if new_val is not None:
                 old_val = getattr(batch, field)
