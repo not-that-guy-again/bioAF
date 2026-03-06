@@ -59,7 +59,7 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-gray-700 text-xs text-gray-500">
-        v1.0.0
+        v0.1.0
       </div>
     </aside>
   );
