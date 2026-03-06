@@ -29,6 +29,7 @@ All data, infrastructure state, and configuration are stored in resources owned 
 ### Teardown Flow
 
 `bioaf destroy --keep-data` removes the bioAF control plane and compute infrastructure while preserving:
+
 - All GCS buckets (raw data, working data, results, config backups)
 - Cloud SQL database (experiment tracking, audit log, user records)
 - GitHub repository (infrastructure definitions, environment specs)

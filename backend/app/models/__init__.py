@@ -11,6 +11,9 @@ from app.models.experiment_custom_field import ExperimentCustomField
 from app.models.notebook_session import NotebookSession
 from app.models.slurm_job import SlurmJob
 from app.models.user_quota import UserQuota
+from app.models.pipeline_run import PipelineRun, PipelineRunSample
+from app.models.pipeline_catalog_entry import PipelineCatalogEntry
+from app.models.pipeline_process import PipelineProcess
 
 __all__ = [
     "User",
@@ -29,4 +32,8 @@ __all__ = [
     "NotebookSession",
     "SlurmJob",
     "UserQuota",
+    "PipelineRun",
+    "PipelineRunSample",
+    "PipelineCatalogEntry",
+    "PipelineProcess",
 ]

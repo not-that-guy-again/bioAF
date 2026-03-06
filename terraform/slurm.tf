@@ -42,13 +42,13 @@ resource "google_compute_instance" "slurm_controller" {
   }
 
   metadata_startup_script = templatefile("../scripts/slurm/controller-startup.sh.tpl", {
-    munge_key_secret           = google_secret_manager_secret.slurm_munge_key[0].secret_id
-    project_id                 = var.project_id
-    controller_hostname        = "bioaf-slurm-controller"
-    standard_partition_nodes   = var.slurm_max_nodes_standard
+    munge_key_secret            = google_secret_manager_secret.slurm_munge_key[0].secret_id
+    project_id                  = var.project_id
+    controller_hostname         = "bioaf-slurm-controller"
+    standard_partition_nodes    = var.slurm_max_nodes_standard
     interactive_partition_nodes = var.slurm_max_nodes_interactive
-    standard_instance_type     = var.slurm_instance_type_standard
-    interactive_instance_type  = var.slurm_instance_type_interactive
+    standard_instance_type      = var.slurm_instance_type_standard
+    interactive_instance_type   = var.slurm_instance_type_interactive
   })
 
   tags = ["bioaf-slurm-controller"]
@@ -135,7 +135,7 @@ resource "google_compute_instance_template" "slurm_standard" {
   metadata = {
     enable-oslogin     = "TRUE"
     slurm-idle-timeout = var.slurm_idle_timeout_minutes
-    startup-script     = templatefile("../scripts/slurm/compute-startup.sh.tpl", {
+    startup-script = templatefile("../scripts/slurm/compute-startup.sh.tpl", {
       munge_key_secret    = google_secret_manager_secret.slurm_munge_key[0].secret_id
       project_id          = var.project_id
       controller_hostname = "bioaf-slurm-controller"

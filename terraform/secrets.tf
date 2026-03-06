@@ -92,6 +92,22 @@ resource "google_secret_manager_secret_version" "github_pat" {
   secret_data = "{}"
 }
 
+# Secret: SLURM SSH key (empty, populated during SLURM provisioning)
+resource "google_secret_manager_secret" "slurm_ssh_key" {
+  count     = var.enable_slurm ? 1 : 0
+  secret_id = "bioaf-slurm-ssh-key"
+
+  replication {
+    auto {}
+  }
+}
+
+data "google_secret_manager_secret_version" "slurm_ssh_key" {
+  count   = var.enable_slurm ? 1 : 0
+  secret  = google_secret_manager_secret.slurm_ssh_key[0].secret_id
+  project = var.project_id
+}
+
 # =============================================================================
 # Dedicated service account for secret access
 # =============================================================================

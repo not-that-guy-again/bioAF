@@ -21,6 +21,9 @@ import type {
   QCStatus,
   NotebookSession,
   SessionListResponse,
+  PipelineRun,
+  PipelineRunListResponse,
+  PipelineRunStatus,
 } from "@/lib/types";
 
 type Tab = "overview" | "samples" | "batches" | "analysis" | "pipelines" | "results" | "audit";
@@ -39,6 +42,7 @@ export default function ExperimentDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [notebookSessions, setNotebookSessions] = useState<NotebookSession[]>([]);
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
 
   const [showSampleForm, setShowSampleForm] = useState(false);
   const [showBatchForm, setShowBatchForm] = useState(false);
@@ -57,6 +61,7 @@ export default function ExperimentDetailPage() {
     if (activeTab === "samples") loadSamples();
     if (activeTab === "batches") loadBatches();
     if (activeTab === "analysis") loadNotebookSessions();
+    if (activeTab === "pipelines") loadPipelineRuns();
     if (activeTab === "audit") loadAudit();
   }, [activeTab, id]);
 
@@ -90,6 +95,13 @@ export default function ExperimentDetailPage() {
       const data = await api.get<AuditLogResponse>(`/api/experiments/${id}/audit?page=${page}`);
       setAuditEntries(data.entries);
       setAuditTotal(data.total);
+    } catch {}
+  }
+
+  async function loadPipelineRuns() {
+    try {
+      const data = await api.get<PipelineRunListResponse>(`/api/pipeline-runs?experiment_id=${id}`);
+      setPipelineRuns(data.runs);
     } catch {}
   }
 
@@ -453,9 +465,64 @@ export default function ExperimentDetailPage() {
           )}
 
           {activeTab === "pipelines" && (
-            <div className="bg-white rounded-lg shadow p-12 text-center">
-              <h2 className="text-lg font-semibold text-gray-400 mb-2">Pipeline Runs</h2>
-              <p className="text-gray-400">Pipeline runs will appear here when pipelines are configured. Coming in Phase 4.</p>
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Pipeline Runs</h2>
+                <button
+                  onClick={() => router.push(`/pipelines?experiment=${id}`)}
+                  className="bg-bioaf-600 text-white px-4 py-2 rounded-md text-sm hover:bg-bioaf-700"
+                >
+                  Launch Pipeline
+                </button>
+              </div>
+              {pipelineRuns.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-12 text-center">
+                  <p className="text-gray-400">No pipeline runs for this experiment yet.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pipeline</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Started</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {pipelineRuns.map((r) => {
+                        const statusColors: Record<string, string> = {
+                          pending: "bg-gray-100 text-gray-700", running: "bg-blue-100 text-blue-700",
+                          completed: "bg-green-100 text-green-700", failed: "bg-red-100 text-red-700",
+                          cancelled: "bg-orange-100 text-orange-700",
+                        };
+                        return (
+                          <tr key={r.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm">{r.pipeline_name} {r.pipeline_version ? `v${r.pipeline_version}` : ""}</td>
+                            <td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs rounded-full ${statusColors[r.status] || ""}`}>{r.status}</span></td>
+                            <td className="px-4 py-3">
+                              {r.progress ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div className="h-full bg-bioaf-500 rounded-full" style={{ width: `${r.progress.percent_complete}%` }} />
+                                  </div>
+                                  <span className="text-xs">{Math.round(r.progress.percent_complete)}%</span>
+                                </div>
+                              ) : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-500">{r.started_at ? new Date(r.started_at).toLocaleString() : "—"}</td>
+                            <td className="px-4 py-3">
+                              <button onClick={() => router.push(`/pipelines/runs/${r.id}`)} className="text-bioaf-600 text-sm hover:underline">View</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

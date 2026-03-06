@@ -15,6 +15,8 @@ from app.api.audit import router as audit_router
 from app.api.compute import router as compute_router
 from app.api.notebooks import router as notebooks_router
 from app.api.quotas import router as quotas_router
+from app.api.pipelines import router as pipelines_router
+from app.api.pipeline_runs import router as pipeline_runs_router
 
 api_router = APIRouter()
 
@@ -33,3 +35,5 @@ api_router.include_router(audit_router)
 api_router.include_router(compute_router)
 api_router.include_router(notebooks_router)
 api_router.include_router(quotas_router)
+api_router.include_router(pipelines_router)
+api_router.include_router(pipeline_runs_router)

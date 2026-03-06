@@ -1,0 +1,370 @@
+import json
+import logging
+from datetime import datetime, timezone
+
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models.experiment import Experiment
+from app.models.pipeline_catalog_entry import PipelineCatalogEntry
+from app.models.pipeline_run import PipelineRun, PipelineRunSample
+from app.models.sample import Sample
+from app.schemas.pipeline_run import PipelineRunLaunchRequest
+from app.services.audit_service import log_action
+from app.services.pipeline_catalog_service import PipelineCatalogService
+from app.services.quota_service import QuotaService
+from app.services.sample_sheet_service import SampleSheetService
+from app.services.slurm_service import SlurmService
+
+logger = logging.getLogger("bioaf.pipeline_runs")
+
+
+class PipelineRunService:
+    @staticmethod
+    async def launch_run(
+        session: AsyncSession, org_id: int, user_id: int, data: PipelineRunLaunchRequest,
+    ) -> PipelineRun:
+        """Launch a pipeline run — the core orchestration method."""
+        # 1. Load pipeline from catalog
+        pipeline = await PipelineCatalogService.get_pipeline(session, org_id, data.pipeline_key)
+        if not pipeline:
+            raise ValueError(f"Pipeline '{data.pipeline_key}' not found or not enabled")
+
+        # 2. Load experiment
+        exp_result = await session.execute(
+            select(Experiment).where(
+                Experiment.id == data.experiment_id,
+                Experiment.organization_id == org_id,
+            )
+        )
+        experiment = exp_result.scalar_one_or_none()
+        if not experiment:
+            raise ValueError(f"Experiment {data.experiment_id} not found")
+
+        # 3. Resolve sample_ids
+        if data.sample_ids:
+            sample_result = await session.execute(
+                select(Sample).where(
+                    Sample.id.in_(data.sample_ids),
+                    Sample.experiment_id == data.experiment_id,
+                )
+            )
+            samples = list(sample_result.scalars().all())
+            if len(samples) != len(data.sample_ids):
+                raise ValueError("Some sample IDs do not belong to this experiment")
+        else:
+            sample_result = await session.execute(
+                select(Sample).where(Sample.experiment_id == data.experiment_id)
+            )
+            samples = list(sample_result.scalars().all())
+
+        # 4. Check quota
+        allowed, message = await QuotaService.check_quota(session, user_id, estimated_hours=2.0)
+        if not allowed:
+            raise ValueError(f"Quota exceeded: {message}")
+
+        # 5. Merge parameters (user params override defaults)
+        merged_params = dict(pipeline.default_params_json or {})
+        merged_params.update(data.parameters)
+
+        # 6. Create pipeline_runs record
+        run = PipelineRun(
+            organization_id=org_id,
+            experiment_id=data.experiment_id,
+            submitted_by_user_id=user_id,
+            pipeline_name=pipeline.name,
+            pipeline_version=pipeline.version,
+            parameters_json=merged_params,
+            status="pending",
+            work_dir=f"/data/working/nextflow/run-{{id}}",
+        )
+        if data.resume_from_run_id:
+            run.resume_from_run_id = data.resume_from_run_id
+        session.add(run)
+        await session.flush()
+
+        # Update work_dir with actual ID
+        run.work_dir = f"/data/working/nextflow/run-{run.id}"
+
+        # 7. Create pipeline_run_samples linkage
+        for sample in samples:
+            link = PipelineRunSample(pipeline_run_id=run.id, sample_id=sample.id)
+            session.add(link)
+        await session.flush()
+
+        # 8. Generate sample sheet
+        sample_sheet_csv = SampleSheetService.generate_sheet(
+            pipeline.pipeline_key, samples, merged_params,
+        )
+
+        # 9. Build the Nextflow command
+        outdir = f"/data/results/experiments/{data.experiment_id}/runs/{run.id}"
+        resume_flag = ""
+        if data.resume_from_run_id:
+            # Get the original run's work dir for resume
+            orig_result = await session.execute(
+                select(PipelineRun.work_dir).where(PipelineRun.id == data.resume_from_run_id)
+            )
+            orig_work_dir = orig_result.scalar_one_or_none()
+            if orig_work_dir:
+                resume_flag = f"-resume -w {orig_work_dir}"
+
+        nf_command = (
+            f"nextflow run {pipeline.source_url} -r {pipeline.version} "
+            f"-profile bioaf_slurm "
+            f"-c /etc/bioaf/pipelines/nextflow.config "
+            f"-params-file /tmp/bioaf-run-{run.id}-params.json "
+            f"--input /tmp/bioaf-run-{run.id}-samplesheet.csv "
+            f"--outdir {outdir} "
+            f"-w {run.work_dir} "
+            f"-with-trace -with-report -with-timeline "
+            f"{resume_flag}"
+        ).strip()
+
+        # 10. SSH to login node: write params file, sample sheet, submit
+        try:
+            params_json = json.dumps(merged_params, indent=2)
+            await SlurmService._run_ssh_command(
+                f"cat > /tmp/bioaf-run-{run.id}-params.json << 'PARAMSEOF'\n{params_json}\nPARAMSEOF"
+            )
+            await SlurmService._run_ssh_command(
+                f"cat > /tmp/bioaf-run-{run.id}-samplesheet.csv << 'SHEETEOF'\n{sample_sheet_csv}\nSHEETEOF"
+            )
+
+            # Submit via nohup, capture PID
+            output = await SlurmService._run_ssh_command(
+                f"nohup {nf_command} > /tmp/bioaf-run-{run.id}.log 2>&1 & echo $!"
+            )
+            pid = output.strip()
+
+            run.status = "running"
+            run.started_at = datetime.now(timezone.utc)
+            run.slurm_job_id = pid  # Store the process ID
+
+        except Exception as e:
+            run.status = "failed"
+            run.error_message = str(e)
+            logger.error("Pipeline launch failed for run %d: %s", run.id, e)
+
+        await session.flush()
+
+        # 11. Update experiment status to "processing"
+        try:
+            from app.services.experiment_service import ExperimentService
+            await ExperimentService.update_status(
+                session, data.experiment_id, org_id, user_id, "processing",
+            )
+        except Exception as e:
+            # Status transition may not be valid from current state — that's OK
+            logger.warning("Could not update experiment status: %s", e)
+
+        # 12. Write audit log
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="pipeline_run",
+            entity_id=run.id,
+            action="launch",
+            details={
+                "pipeline_key": data.pipeline_key,
+                "experiment_id": data.experiment_id,
+                "sample_count": len(samples),
+                "status": run.status,
+            },
+        )
+
+        return run
+
+    @staticmethod
+    async def cancel_run(session: AsyncSession, run_id: int, user_id: int) -> PipelineRun:
+        run = await PipelineRunService.get_run_model(session, run_id)
+        if not run:
+            raise ValueError("Run not found")
+
+        old_status = run.status
+
+        # Cancel via SSH
+        if run.slurm_job_id:
+            try:
+                await SlurmService._run_ssh_command(f"kill {run.slurm_job_id} 2>/dev/null; scancel --name=bioaf-run-{run.id} 2>/dev/null || true")
+            except Exception as e:
+                logger.warning("Failed to cancel run %d: %s", run_id, e)
+
+        run.status = "cancelled"
+        run.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="pipeline_run",
+            entity_id=run.id,
+            action="cancel",
+            details={"status": "cancelled"},
+            previous_value={"status": old_status},
+        )
+        return run
+
+    @staticmethod
+    async def get_run_model(session: AsyncSession, run_id: int) -> PipelineRun | None:
+        result = await session.execute(
+            select(PipelineRun)
+            .options(
+                selectinload(PipelineRun.experiment),
+                selectinload(PipelineRun.submitted_by),
+                selectinload(PipelineRun.processes),
+                selectinload(PipelineRun.samples),
+            )
+            .where(PipelineRun.id == run_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_run(session: AsyncSession, run_id: int, org_id: int) -> PipelineRun | None:
+        result = await session.execute(
+            select(PipelineRun)
+            .options(
+                selectinload(PipelineRun.experiment),
+                selectinload(PipelineRun.submitted_by),
+                selectinload(PipelineRun.processes),
+                selectinload(PipelineRun.samples),
+            )
+            .where(PipelineRun.id == run_id, PipelineRun.organization_id == org_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_runs(
+        session: AsyncSession, org_id: int, page: int = 1, page_size: int = 25,
+        experiment_id: int | None = None, pipeline_key: str | None = None,
+        status: str | None = None, submitted_by_user_id: int | None = None,
+    ) -> tuple[list[PipelineRun], int]:
+        query = (
+            select(PipelineRun)
+            .options(selectinload(PipelineRun.experiment), selectinload(PipelineRun.submitted_by))
+            .where(PipelineRun.organization_id == org_id)
+        )
+        count_query = select(func.count(PipelineRun.id)).where(PipelineRun.organization_id == org_id)
+
+        if experiment_id:
+            query = query.where(PipelineRun.experiment_id == experiment_id)
+            count_query = count_query.where(PipelineRun.experiment_id == experiment_id)
+        if pipeline_key:
+            query = query.where(PipelineRun.pipeline_name == pipeline_key)
+            count_query = count_query.where(PipelineRun.pipeline_name == pipeline_key)
+        if status:
+            query = query.where(PipelineRun.status == status)
+            count_query = count_query.where(PipelineRun.status == status)
+        if submitted_by_user_id:
+            query = query.where(PipelineRun.submitted_by_user_id == submitted_by_user_id)
+            count_query = count_query.where(PipelineRun.submitted_by_user_id == submitted_by_user_id)
+
+        query = query.order_by(PipelineRun.created_at.desc())
+        query = query.offset((page - 1) * page_size).limit(page_size)
+
+        result = await session.execute(query)
+        runs = list(result.scalars().all())
+
+        count_result = await session.execute(count_query)
+        total = count_result.scalar() or 0
+
+        return runs, total
+
+    @staticmethod
+    async def compare_runs(session: AsyncSession, run_ids: list[int]) -> dict:
+        """Compare parameters across multiple runs."""
+        result = await session.execute(
+            select(PipelineRun)
+            .options(selectinload(PipelineRun.experiment), selectinload(PipelineRun.submitted_by))
+            .where(PipelineRun.id.in_(run_ids))
+        )
+        runs = list(result.scalars().all())
+
+        # Compute parameter diffs
+        all_keys: set[str] = set()
+        for run in runs:
+            if run.parameters_json:
+                all_keys.update(run.parameters_json.keys())
+
+        diffs = {}
+        for key in sorted(all_keys):
+            values = []
+            for run in runs:
+                val = (run.parameters_json or {}).get(key)
+                values.append(val)
+            if len(set(str(v) for v in values)) > 1:
+                diffs[key] = {str(run.id): (run.parameters_json or {}).get(key) for run in runs}
+
+        return {"runs": runs, "parameter_diffs": diffs}
+
+    @staticmethod
+    async def reproduce_run(session: AsyncSession, original_run_id: int, user_id: int) -> PipelineRun:
+        """Re-launch with identical parameters."""
+        original = await PipelineRunService.get_run_model(session, original_run_id)
+        if not original:
+            raise ValueError("Original run not found")
+
+        # Reconstruct launch request from original
+        sample_ids = [s.id for s in original.samples] if original.samples else None
+
+        # Find the pipeline_key from catalog
+        pipeline_key = original.pipeline_name
+
+        data = PipelineRunLaunchRequest(
+            pipeline_key=pipeline_key,
+            experiment_id=original.experiment_id,
+            sample_ids=sample_ids,
+            parameters=original.parameters_json or {},
+            resume_from_run_id=original_run_id,
+        )
+
+        new_run = await PipelineRunService.launch_run(
+            session, original.organization_id, user_id, data,
+        )
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="pipeline_run",
+            entity_id=new_run.id,
+            action="reproduce",
+            details={"original_run_id": original_run_id},
+        )
+
+        return new_run
+
+    @staticmethod
+    async def export_provenance(session: AsyncSession, run_id: int) -> dict:
+        """Export complete provenance for a run."""
+        run = await PipelineRunService.get_run_model(session, run_id)
+        if not run:
+            raise ValueError("Run not found")
+
+        return {
+            "run_id": run.id,
+            "pipeline_name": run.pipeline_name,
+            "pipeline_version": run.pipeline_version,
+            "parameters": run.parameters_json,
+            "input_files": run.input_files_json,
+            "output_files": run.output_files_json,
+            "container_versions": run.container_versions_json,
+            "experiment": {
+                "id": run.experiment.id,
+                "name": run.experiment.name,
+            } if run.experiment else None,
+            "samples": [
+                {"id": s.id, "sample_id_external": s.sample_id_external, "organism": s.organism}
+                for s in (run.samples or [])
+            ],
+            "submitted_by": {
+                "id": run.submitted_by.id,
+                "name": run.submitted_by.name,
+                "email": run.submitted_by.email,
+            } if run.submitted_by else None,
+            "status": run.status,
+            "work_dir": run.work_dir,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+        }

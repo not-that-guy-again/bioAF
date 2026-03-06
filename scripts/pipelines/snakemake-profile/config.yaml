@@ -1,0 +1,7 @@
+executor: slurm
+default-resources:
+  partition: standard
+  account: bioaf-default
+use-singularity: true
+singularity-prefix: /data/containers
+jobs: 100

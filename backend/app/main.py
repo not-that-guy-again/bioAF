@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_job_status_sync_loop()))
     background_tasks.append(asyncio.create_task(_idle_session_check_loop()))
     background_tasks.append(asyncio.create_task(_quota_reset_loop()))
+    background_tasks.append(asyncio.create_task(_pipeline_monitor_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -123,6 +124,22 @@ async def _quota_reset_loop():
             break
         except Exception as e:
             logger.error("Quota reset error: %s", e)
+
+
+async def _pipeline_monitor_loop():
+    """Sync pipeline run statuses every 30 seconds."""
+    from app.database import async_session_factory
+    from app.services.pipeline_monitor_service import PipelineMonitorService
+
+    while True:
+        try:
+            await asyncio.sleep(30)
+            async with async_session_factory() as session:
+                await PipelineMonitorService.sync_run_statuses(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Pipeline monitor error: %s", e)
 
 
 app = FastAPI(
