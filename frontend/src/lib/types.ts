@@ -385,3 +385,125 @@ export interface BudgetInfo {
   projected_spend: number;
   threshold_alerts: string[];
 }
+
+// Phase 4 — Pipeline Orchestration
+
+export type PipelineRunStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type PipelineProcessStatus = "pending" | "running" | "completed" | "failed" | "cached";
+
+export interface ParameterSchema {
+  definitions?: Record<string, {
+    title?: string;
+    properties?: Record<string, {
+      type?: string;
+      description?: string;
+      default?: unknown;
+      enum?: string[];
+      hidden?: boolean;
+      format?: string;
+      minimum?: number;
+      maximum?: number;
+      fa_icon?: string;
+    }>;
+    required?: string[];
+  }>;
+}
+
+export interface PipelineCatalog {
+  id: number;
+  pipeline_key: string;
+  name: string;
+  description: string | null;
+  source_type: string;
+  source_url: string | null;
+  version: string | null;
+  parameter_schema: ParameterSchema | null;
+  default_params: Record<string, unknown> | null;
+  is_builtin: boolean;
+  enabled: boolean;
+}
+
+export interface PipelineCatalogListResponse {
+  pipelines: PipelineCatalog[];
+  total: number;
+}
+
+export interface PipelineProgress {
+  total_processes: number;
+  completed: number;
+  running: number;
+  failed: number;
+  cached: number;
+  percent_complete: number;
+}
+
+export interface PipelineProcess {
+  id: number;
+  process_name: string;
+  task_id: string | null;
+  status: PipelineProcessStatus;
+  exit_code: number | null;
+  cpu_usage: number | null;
+  memory_peak_gb: number | null;
+  duration_seconds: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface PipelineRun {
+  id: number;
+  pipeline_key: string | null;
+  pipeline_name: string;
+  pipeline_version: string | null;
+  experiment: ExperimentSummary | null;
+  submitted_by: UserSummary | null;
+  status: PipelineRunStatus;
+  parameters: Record<string, unknown> | null;
+  input_files: Record<string, unknown> | null;
+  output_files: Record<string, unknown> | null;
+  progress: PipelineProgress | null;
+  cost_estimate: number | null;
+  error_message: string | null;
+  work_dir: string | null;
+  slurm_job_id: string | null;
+  resume_from_run_id: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string | null;
+}
+
+export interface PipelineRunDetail extends PipelineRun {
+  processes: PipelineProcess[];
+  samples: Array<{
+    id: number;
+    sample_id_external: string | null;
+    organism: string | null;
+  }>;
+}
+
+export interface PipelineRunListResponse {
+  runs: PipelineRun[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface PipelineRunLaunchRequest {
+  pipeline_key: string;
+  experiment_id: number;
+  sample_ids?: number[] | null;
+  parameters: Record<string, unknown>;
+  resume_from_run_id?: number | null;
+}
+
+export interface PipelineRunCompareResponse {
+  runs: PipelineRun[];
+  parameter_diffs: Record<string, Record<string, unknown>>;
+}
+
+export interface PipelineAddRequest {
+  name: string;
+  source_url: string;
+  version?: string | null;
+  description?: string | null;
+}
