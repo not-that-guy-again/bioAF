@@ -23,6 +23,7 @@ export default function ComponentDetailPage() {
       return;
     }
     fetchComponent();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, id]);
 
   const fetchComponent = async () => {

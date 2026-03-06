@@ -42,6 +42,7 @@ export default function PipelineLauncherPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, pipelineKey]);
 
   useEffect(() => {

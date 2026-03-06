@@ -60,6 +60,7 @@ export default function ExperimentDetailPage() {
       return;
     }
     loadExperiment();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, router]);
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export default function ExperimentDetailPage() {
     if (activeTab === "analysis") loadNotebookSessions();
     if (activeTab === "pipelines") loadPipelineRuns();
     if (activeTab === "audit") loadAudit();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, id]);
 
   async function loadExperiment() {

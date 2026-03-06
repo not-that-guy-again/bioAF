@@ -1,8 +1,9 @@
 import time
 from collections import defaultdict
 
-from fastapi import Request, HTTPException
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from app.config import settings
 
@@ -15,11 +16,13 @@ RATE_LIMITS: dict[str, int] = {
 }
 
 
+# Module-level storage so tests can call rate_limit_requests.clear()
+rate_limit_requests: dict[tuple[str, str], list[float]] = defaultdict(list)
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
-        # Sliding window: {(path, ip): [timestamps]}
-        self._requests: dict[tuple[str, str], list[float]] = defaultdict(list)
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -32,14 +35,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             window_start = now - 60  # 1-minute sliding window
 
             # Clean old entries
-            self._requests[key] = [t for t in self._requests[key] if t > window_start]
+            rate_limit_requests[key] = [t for t in rate_limit_requests[key] if t > window_start]
 
-            if len(self._requests[key]) >= limit:
-                raise HTTPException(
+            if len(rate_limit_requests[key]) >= limit:
+                return JSONResponse(
                     status_code=429,
-                    detail=f"Too many requests. Limit: {limit} per minute.",
+                    content={"detail": f"Too many requests. Limit: {limit} per minute."},
                 )
 
-            self._requests[key].append(now)
+            rate_limit_requests[key].append(now)
 
         return await call_next(request)
