@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend/app:/app/app
+    environment:
+      - BIOAF_DATABASE_URL=postgresql+asyncpg://bioaf_app:devpassword@postgres:5432/bioaf
+      - BIOAF_JWT_SECRET_KEY=dev-secret-key-do-not-use-in-production
+      - BIOAF_DEBUG=true
+      - BIOAF_ENVIRONMENT=development
+      - BIOAF_USE_SECRET_MANAGER=false
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend/src:/app/src
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    command: npm run dev
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=bioaf
+      - POSTGRES_USER=bioaf_app
+      - POSTGRES_PASSWORD=devpassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bioaf_app -d bioaf"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -1,2 +1,27 @@
 # Documentation
 documentation/
+
+# Environment
+.env
+
+# Python
+*.pyc
+__pycache__/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+.next/
+node_modules/
+
+# Terraform
+*.tfvars
+!terraform.tfvars.template
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan

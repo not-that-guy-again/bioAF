@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+
+# Install Terraform
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl unzip && \
+    curl -fsSL https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip -o terraform.zip && \
+    unzip terraform.zip -d /usr/local/bin/ && \
+    rm terraform.zip && \
+    apt-get purge -y curl unzip && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ app/
+COPY alembic/ alembic/
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

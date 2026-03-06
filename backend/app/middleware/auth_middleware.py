@@ -1,0 +1,43 @@
+from fastapi import Request, HTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
+
+from app.services.auth_service import AuthService
+
+# Endpoints that don't require authentication
+PUBLIC_PATHS = {
+    "/api/health/live",
+    "/api/health/ready",
+    "/api/health/status",
+    "/api/auth/login",
+    "/api/auth/verify-email",
+    "/api/auth/request-reset",
+    "/api/auth/reset-password",
+    "/api/bootstrap/status",
+    "/api/bootstrap/create-admin",
+    "/api/users/accept-invite",
+    "/docs",
+    "/openapi.json",
+}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # Skip auth for public endpoints
+        if path in PUBLIC_PATHS or path.startswith("/api/health"):
+            return await call_next(request)
+
+        # Extract token from Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+
+        token = auth_header.split(" ", 1)[1]
+        try:
+            payload = AuthService.validate_token(token)
+            request.state.current_user = payload
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+        return await call_next(request)
