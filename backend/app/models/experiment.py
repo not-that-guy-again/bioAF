@@ -12,6 +12,8 @@ EXPERIMENT_STATUSES = [
     "sequencing",
     "fastq_uploaded",
     "processing",
+    "pipeline_complete",
+    "reviewed",
     "analysis",
     "complete",
 ]
@@ -21,7 +23,9 @@ EXPERIMENT_STATUS_TRANSITIONS = {
     "library_prep": ["sequencing"],
     "sequencing": ["fastq_uploaded"],
     "fastq_uploaded": ["processing"],
-    "processing": ["analysis"],
+    "processing": ["pipeline_complete"],
+    "pipeline_complete": ["reviewed", "analysis"],
+    "reviewed": ["analysis"],
     "analysis": ["complete", "processing"],
     "complete": [],
 }

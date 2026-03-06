@@ -8,6 +8,7 @@ from app.models.experiment_template import ExperimentTemplate
 from app.models.sample import Sample
 from app.schemas.sample import SampleCreate, SampleUpdate
 from app.services.audit_service import log_action
+from app.services.vocabulary_validator import VocabularyValidator
 
 
 SAMPLE_STATUS_TRANSITIONS = {
@@ -51,6 +52,16 @@ class SampleService:
         if errors:
             raise HTTPException(400, detail="; ".join(errors))
 
+        # Validate controlled vocabulary fields
+        await VocabularyValidator.validate_sample_fields(
+            session,
+            {
+                "molecule_type": data.molecule_type,
+                "library_prep_method": data.library_prep_method,
+                "library_layout": data.library_layout,
+            },
+        )
+
         sample = Sample(
             experiment_id=experiment_id,
             batch_id=data.batch_id,
@@ -63,6 +74,9 @@ class SampleService:
             viability_pct=data.viability_pct,
             cell_count=data.cell_count,
             prep_notes=data.prep_notes,
+            molecule_type=data.molecule_type,
+            library_prep_method=data.library_prep_method,
+            library_layout=data.library_layout,
             qc_status=data.qc_status,
             qc_notes=data.qc_notes,
             status="registered",
@@ -96,6 +110,17 @@ class SampleService:
         if all_errors:
             raise HTTPException(400, detail="; ".join(all_errors))
 
+        # Validate vocabulary fields for all samples
+        for i, data in enumerate(samples_data):
+            await VocabularyValidator.validate_sample_fields(
+                session,
+                {
+                    "molecule_type": data.molecule_type,
+                    "library_prep_method": data.library_prep_method,
+                    "library_layout": data.library_layout,
+                },
+            )
+
         created = []
         for data in samples_data:
             sample = Sample(
@@ -110,6 +135,9 @@ class SampleService:
                 viability_pct=data.viability_pct,
                 cell_count=data.cell_count,
                 prep_notes=data.prep_notes,
+                molecule_type=data.molecule_type,
+                library_prep_method=data.library_prep_method,
+                library_layout=data.library_layout,
                 qc_status=data.qc_status,
                 qc_notes=data.qc_notes,
                 status="registered",
@@ -138,6 +166,16 @@ class SampleService:
         if not sample:
             return None
 
+        # Validate controlled vocabulary fields
+        await VocabularyValidator.validate_sample_fields(
+            session,
+            {
+                "molecule_type": data.molecule_type,
+                "library_prep_method": data.library_prep_method,
+                "library_layout": data.library_layout,
+            },
+        )
+
         previous = {}
         updates = {}
         for field in [
@@ -151,6 +189,9 @@ class SampleService:
             "viability_pct",
             "cell_count",
             "prep_notes",
+            "molecule_type",
+            "library_prep_method",
+            "library_layout",
         ]:
             new_val = getattr(data, field, None)
             if new_val is not None:

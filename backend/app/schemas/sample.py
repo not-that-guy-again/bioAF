@@ -21,6 +21,9 @@ class SampleCreate(BaseModel):
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
+    molecule_type: str | None = None
+    library_prep_method: str | None = None
+    library_layout: str | None = None
     qc_status: str | None = None
     qc_notes: str | None = None
 
@@ -50,6 +53,9 @@ class SampleUpdate(BaseModel):
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
+    molecule_type: str | None = None
+    library_prep_method: str | None = None
+    library_layout: str | None = None
 
     @field_validator("viability_pct")
     @classmethod
@@ -100,6 +106,9 @@ class SampleResponse(BaseModel):
     viability_pct: float | None
     cell_count: int | None
     prep_notes: str | None
+    molecule_type: str | None = None
+    library_prep_method: str | None = None
+    library_layout: str | None = None
     qc_status: str | None
     qc_notes: str | None
     status: str

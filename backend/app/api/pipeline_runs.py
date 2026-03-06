@@ -47,6 +47,8 @@ def _run_response(run) -> PipelineRunResponse:
         error_message=run.error_message,
         work_dir=run.work_dir,
         slurm_job_id=run.slurm_job_id,
+        reference_genome=run.reference_genome,
+        alignment_algorithm=run.alignment_algorithm,
         resume_from_run_id=run.resume_from_run_id,
         started_at=run.started_at,
         completed_at=run.completed_at,
