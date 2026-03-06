@@ -38,6 +38,16 @@ slurm_max_nodes_interactive   = 5
 slurm_instance_type_interactive = "n2-standard-4"
 slurm_idle_timeout_minutes    = 10
 
+# Filestore configuration (used when enable_filestore = true)
+filestore_capacity_gb = 1024
+
+# Notebook configuration (used when enable_jupyter / enable_rstudio = true)
+jupyter_cpu_limit          = "4"
+jupyter_memory_limit       = "8Gi"
+rstudio_cpu_limit          = "4"
+rstudio_memory_limit       = "8Gi"
+session_idle_timeout_hours = 4
+
 # GKE authorized networks (optional)
 # gke_authorized_networks = [
 #   { cidr_block = "10.0.0.0/8", display_name = "Internal" },

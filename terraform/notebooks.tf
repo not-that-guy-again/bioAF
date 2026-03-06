@@ -42,3 +42,22 @@ resource "google_service_account_iam_member" "rstudio_workload_identity" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[bioaf-rstudio/rstudio]"
 }
+
+# Namespace names and resource config for JupyterHub and RStudio.
+# Actual namespace creation and Helm deployment is managed by the bioAF
+# control plane when the component is enabled, not by Terraform directly.
+locals {
+  jupyter_namespace = "bioaf-jupyter"
+  rstudio_namespace = "bioaf-rstudio"
+
+  jupyter_resource_limits = var.enable_jupyter ? {
+    cpu_limit    = var.jupyter_cpu_limit
+    memory_limit = var.jupyter_memory_limit
+    idle_timeout = var.session_idle_timeout_hours
+  } : {}
+
+  rstudio_resource_limits = var.enable_rstudio ? {
+    cpu_limit    = var.rstudio_cpu_limit
+    memory_limit = var.rstudio_memory_limit
+  } : {}
+}
