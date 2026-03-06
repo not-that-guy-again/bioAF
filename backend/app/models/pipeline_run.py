@@ -41,6 +41,7 @@ class PipelineRun(Base):
     resume_from = relationship("PipelineRun", remote_side=[id])
     processes = relationship("PipelineProcess", back_populates="pipeline_run", cascade="all, delete-orphan")
     samples = relationship("Sample", secondary="pipeline_run_samples", viewonly=True)
+    references = relationship("ReferenceDataset", secondary="pipeline_run_references", viewonly=True)
 
 
 class PipelineRunSample(Base):
