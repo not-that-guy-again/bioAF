@@ -55,6 +55,38 @@ async function fetchApi<T>(
   return response.json();
 }
 
+async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    removeToken();
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    throw new ApiError(401, "Unauthorized");
+  }
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: "Unknown error" }));
+    throw new ApiError(response.status, error.detail || "Request failed");
+  }
+
+  return response.json();
+}
+
 export const api = {
   get: <T>(path: string) => fetchApi<T>(path),
   post: <T>(path: string, body?: unknown) =>
@@ -69,6 +101,7 @@ export const api = {
     }),
   delete: <T>(path: string) =>
     fetchApi<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, file: File) => uploadFile<T>(path, file),
 };
 
 export { ApiError };
