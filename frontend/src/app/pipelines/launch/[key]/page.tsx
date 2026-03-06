@@ -297,6 +297,8 @@ function ParameterForm({
     );
   }
 
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const managedParams = new Set(["input", "outdir"]);
 
   function setValue(key: string, val: unknown) {
@@ -304,7 +306,6 @@ function ParameterForm({
   }
 
   const groups = Object.entries(schema.definitions);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   return (
     <div className="space-y-6">

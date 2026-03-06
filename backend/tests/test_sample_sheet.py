@@ -24,7 +24,7 @@ def test_generate_scrnaseq_sheet():
     }
     result = SampleSheetService.generate_scrnaseq_sheet(samples, parameters)
 
-    lines = [l.strip() for l in result.strip().splitlines()]
+    lines = [line.strip() for line in result.strip().splitlines()]
     assert lines[0] == "sample,fastq_1,fastq_2,expected_cells"
     assert "SAMPLE_A" in lines[1]
     assert "/data/raw/SAMPLE_A_R1.fastq.gz" in lines[1]
@@ -41,7 +41,7 @@ def test_generate_rnaseq_sheet():
     }
     result = SampleSheetService.generate_rnaseq_sheet(samples, parameters)
 
-    lines = [l.strip() for l in result.strip().splitlines()]
+    lines = [line.strip() for line in result.strip().splitlines()]
     assert lines[0] == "sample,fastq_1,fastq_2,strandedness"
     assert "RNA_1" in lines[1]
     assert "reverse" in lines[1]
@@ -53,7 +53,7 @@ def test_generate_generic_sheet():
     parameters = {"input_paths": {"1": ["/data/raw/GEN_1_R1.fastq.gz"]}}
     result = SampleSheetService.generate_generic_sheet(samples, parameters)
 
-    lines = [l.strip() for l in result.strip().splitlines()]
+    lines = [line.strip() for line in result.strip().splitlines()]
     assert lines[0] == "sample,fastq_1,fastq_2"
     assert "GEN_1" in lines[1]
 
@@ -64,7 +64,7 @@ def test_sheet_with_no_linked_files():
     parameters = {}
     result = SampleSheetService.generate_scrnaseq_sheet(samples, parameters)
 
-    lines = [l.strip() for l in result.strip().splitlines()]
+    lines = [line.strip() for line in result.strip().splitlines()]
     assert "NO_FILES" in lines[1]
     # Should have empty file paths
     parts = lines[1].split(",")
