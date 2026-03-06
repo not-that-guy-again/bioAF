@@ -12,6 +12,9 @@ from app.api.batches import router as batches_router
 from app.api.projects import router as projects_router
 from app.api.templates import router as templates_router
 from app.api.audit import router as audit_router
+from app.api.compute import router as compute_router
+from app.api.notebooks import router as notebooks_router
+from app.api.quotas import router as quotas_router
 
 api_router = APIRouter()
 
@@ -27,3 +30,6 @@ api_router.include_router(batches_router)
 api_router.include_router(projects_router)
 api_router.include_router(templates_router)
 api_router.include_router(audit_router)
+api_router.include_router(compute_router)
+api_router.include_router(notebooks_router)
+api_router.include_router(quotas_router)

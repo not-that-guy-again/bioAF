@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -56,11 +57,72 @@ async def lifespan(app: FastAPI):
     logger.info("Database connection verified")
 
     logger.info("bioAF backend started successfully")
+
+    # Start background tasks
+    background_tasks = []
+    background_tasks.append(asyncio.create_task(_job_status_sync_loop()))
+    background_tasks.append(asyncio.create_task(_idle_session_check_loop()))
+    background_tasks.append(asyncio.create_task(_quota_reset_loop()))
+    logger.info("Background tasks started")
+
     yield
+
+    # Cancel background tasks
+    for task in background_tasks:
+        task.cancel()
+    await asyncio.gather(*background_tasks, return_exceptions=True)
 
     # Shutdown
     await engine.dispose()
     logger.info("bioAF backend shut down")
+
+
+async def _job_status_sync_loop():
+    """Sync SLURM job statuses every 60 seconds."""
+    from app.database import async_session_factory
+    from app.services.slurm_service import SlurmService
+
+    while True:
+        try:
+            await asyncio.sleep(60)
+            async with async_session_factory() as session:
+                await SlurmService.sync_job_statuses(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Job status sync error: %s", e)
+
+
+async def _idle_session_check_loop():
+    """Check for idle notebook sessions every 5 minutes."""
+    from app.database import async_session_factory
+    from app.services.notebook_service import NotebookService
+
+    while True:
+        try:
+            await asyncio.sleep(300)
+            async with async_session_factory() as session:
+                await NotebookService.check_idle_sessions(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Idle session check error: %s", e)
+
+
+async def _quota_reset_loop():
+    """Check for monthly quota resets every hour."""
+    from app.database import async_session_factory
+    from app.services.quota_service import QuotaService
+
+    while True:
+        try:
+            await asyncio.sleep(3600)
+            async with async_session_factory() as session:
+                await QuotaService.reset_monthly_quotas(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Quota reset error: %s", e)
 
 
 app = FastAPI(
