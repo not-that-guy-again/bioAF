@@ -48,9 +48,7 @@ class ReferenceDataService:
             .order_by(ReferenceDataset.created_at.desc())
         )
         count_query = (
-            select(func.count())
-            .select_from(ReferenceDataset)
-            .where(ReferenceDataset.organization_id == org_id)
+            select(func.count()).select_from(ReferenceDataset).where(ReferenceDataset.organization_id == org_id)
         )
 
         if category:

@@ -115,15 +115,9 @@ class GeoExportService:
             raise ValueError("Experiment not found")
 
         # 2. Samples with batches
-        sample_query = (
-            select(Sample)
-            .options(selectinload(Sample.batch))
-            .where(Sample.experiment_id == experiment_id)
-        )
+        sample_query = select(Sample).options(selectinload(Sample.batch)).where(Sample.experiment_id == experiment_id)
         if qc_status_filter == "exclude_failed":
-            sample_query = sample_query.where(
-                (Sample.qc_status != "fail") | (Sample.qc_status.is_(None))
-            )
+            sample_query = sample_query.where((Sample.qc_status != "fail") | (Sample.qc_status.is_(None)))
         sample_result = await session.execute(sample_query)
         samples = list(sample_result.scalars().all())
 
@@ -156,10 +150,7 @@ class GeoExportService:
             "description": experiment.description,
             "hypothesis": getattr(experiment, "hypothesis", None),
             "owner_user_name": None,  # Would need user join
-            "samples": [
-                {"organism": s.organism, "tissue_type": s.tissue_type}
-                for s in samples
-            ],
+            "samples": [{"organism": s.organism, "tissue_type": s.tissue_type} for s in samples],
         }
 
         samples_data = []
@@ -203,8 +194,7 @@ class GeoExportService:
         if files:
             files_data = {
                 "raw_files": [
-                    {"filename": f.filename, "md5_checksum": f.md5_checksum, "gcs_uri": f.gcs_uri}
-                    for f in raw_files
+                    {"filename": f.filename, "md5_checksum": f.md5_checksum, "gcs_uri": f.gcs_uri} for f in raw_files
                 ],
                 "processed_files": [
                     {"filename": f.filename, "md5_checksum": f.md5_checksum, "gcs_uri": f.gcs_uri}

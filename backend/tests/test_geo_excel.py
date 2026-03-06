@@ -65,13 +65,17 @@ def _load(data: bytes):
 
 
 def test_workbook_has_three_sheets():
-    wb_bytes = generate_geo_workbook(_complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files())
+    wb_bytes = generate_geo_workbook(
+        _complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files()
+    )
     wb = _load(wb_bytes)
     assert wb.sheetnames == ["SERIES", "SAMPLES", "PROTOCOLS"]
 
 
 def test_series_sheet_headers_and_data():
-    wb_bytes = generate_geo_workbook(_complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files())
+    wb_bytes = generate_geo_workbook(
+        _complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files()
+    )
     wb = _load(wb_bytes)
     ws = wb["SERIES"]
 
@@ -109,7 +113,9 @@ def test_placeholder_for_missing_required():
 
 
 def test_derived_library_strategy():
-    wb_bytes = generate_geo_workbook(_complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files())
+    wb_bytes = generate_geo_workbook(
+        _complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files()
+    )
     wb = _load(wb_bytes)
     ws = wb["SAMPLES"]
 
@@ -119,7 +125,9 @@ def test_derived_library_strategy():
 
 
 def test_derived_library_source():
-    wb_bytes = generate_geo_workbook(_complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files())
+    wb_bytes = generate_geo_workbook(
+        _complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files()
+    )
     wb = _load(wb_bytes)
     ws = wb["SAMPLES"]
 
@@ -129,7 +137,9 @@ def test_derived_library_source():
 
 
 def test_protocols_sheet_genome_build():
-    wb_bytes = generate_geo_workbook(_complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files())
+    wb_bytes = generate_geo_workbook(
+        _complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files()
+    )
     wb = _load(wb_bytes)
     ws = wb["PROTOCOLS"]
 
@@ -139,7 +149,9 @@ def test_protocols_sheet_genome_build():
 
 
 def test_bold_headers():
-    wb_bytes = generate_geo_workbook(_complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files())
+    wb_bytes = generate_geo_workbook(
+        _complete_experiment(), [_complete_sample()], _complete_pipeline(), _complete_files()
+    )
     wb = _load(wb_bytes)
 
     for sheet_name in ["SERIES", "SAMPLES", "PROTOCOLS"]:

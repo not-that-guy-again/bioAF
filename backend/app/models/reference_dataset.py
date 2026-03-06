@@ -21,9 +21,7 @@ REFERENCE_STATUSES = ["active", "deprecated", "pending_approval"]
 
 class ReferenceDataset(Base):
     __tablename__ = "reference_datasets"
-    __table_args__ = (
-        UniqueConstraint("organization_id", "name", "version", name="uq_reference_org_name_version"),
-    )
+    __table_args__ = (UniqueConstraint("organization_id", "name", "version", name="uq_reference_org_name_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)

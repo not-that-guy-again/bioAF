@@ -31,9 +31,7 @@ async def export_geo(
 
     try:
         if validate_only:
-            report = await GeoExportService.validate(
-                session, experiment_id, org_id, pipeline_run_id, qc_status_filter
-            )
+            report = await GeoExportService.validate(session, experiment_id, org_id, pipeline_run_id, qc_status_filter)
 
             await log_action(
                 session,

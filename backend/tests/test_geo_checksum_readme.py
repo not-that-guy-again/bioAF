@@ -55,9 +55,7 @@ def test_readme_contains_experiment_name():
         series_fields=[],
         sample_validations=[],
         protocol_fields=[],
-        file_manifest=FileManifestStatus(
-            total_files=0, files_with_checksums=0, files_missing_checksums=0, files=[]
-        ),
+        file_manifest=FileManifestStatus(total_files=0, files_with_checksums=0, files_missing_checksums=0, files=[]),
         summary=ValidationSummary(
             total_fields=20, complete=15, populated_unvalidated=2, missing_required=1, missing_recommended=2
         ),
@@ -75,9 +73,7 @@ def test_readme_warns_missing_checksums():
         series_fields=[],
         sample_validations=[],
         protocol_fields=[],
-        file_manifest=FileManifestStatus(
-            total_files=0, files_with_checksums=0, files_missing_checksums=0, files=[]
-        ),
+        file_manifest=FileManifestStatus(total_files=0, files_with_checksums=0, files_missing_checksums=0, files=[]),
         summary=ValidationSummary(
             total_fields=10, complete=10, populated_unvalidated=0, missing_required=0, missing_recommended=0
         ),
@@ -95,9 +91,7 @@ def test_readme_includes_gcs_paths():
         series_fields=[],
         sample_validations=[],
         protocol_fields=[],
-        file_manifest=FileManifestStatus(
-            total_files=0, files_with_checksums=0, files_missing_checksums=0, files=[]
-        ),
+        file_manifest=FileManifestStatus(total_files=0, files_with_checksums=0, files_missing_checksums=0, files=[]),
         summary=ValidationSummary(
             total_fields=10, complete=10, populated_unvalidated=0, missing_required=0, missing_recommended=0
         ),
