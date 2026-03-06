@@ -95,6 +95,9 @@ class SampleResponseBrief(BaseModel):
     sample_id_external: str | None
     organism: str | None
     tissue_type: str | None
+    molecule_type: str | None = None
+    library_prep_method: str | None = None
+    library_layout: str | None = None
     qc_status: str | None
     status: str
     created_at: datetime
@@ -105,6 +108,8 @@ class SampleResponseBrief(BaseModel):
 class BatchResponseBrief(BaseModel):
     id: int
     name: str
+    instrument_model: str | None = None
+    instrument_platform: str | None = None
     sample_count: int = 0
     created_at: datetime
 

@@ -17,6 +17,7 @@ from app.services.pipeline_catalog_service import PipelineCatalogService
 from app.services.quota_service import QuotaService
 from app.services.sample_sheet_service import SampleSheetService
 from app.services.slurm_service import SlurmService
+from app.services.vocabulary_validator import VocabularyValidator
 
 logger = logging.getLogger("bioaf.pipeline_runs")
 
@@ -66,11 +67,20 @@ class PipelineRunService:
         if not allowed:
             raise ValueError(f"Quota exceeded: {message}")
 
-        # 5. Merge parameters (user params override defaults)
+        # 5. Validate controlled vocabulary fields
+        await VocabularyValidator.validate_pipeline_run_fields(
+            session,
+            {
+                "reference_genome": data.reference_genome,
+                "alignment_algorithm": data.alignment_algorithm,
+            },
+        )
+
+        # 6. Merge parameters (user params override defaults)
         merged_params = dict(pipeline.default_params_json or {})
         merged_params.update(data.parameters)
 
-        # 6. Create pipeline_runs record
+        # 7. Create pipeline_runs record
         run = PipelineRun(
             organization_id=org_id,
             experiment_id=data.experiment_id,
@@ -78,6 +88,8 @@ class PipelineRunService:
             pipeline_name=pipeline.name,
             pipeline_version=pipeline.version,
             parameters_json=merged_params,
+            reference_genome=data.reference_genome,
+            alignment_algorithm=data.alignment_algorithm,
             status="pending",
             work_dir="/data/working/nextflow/run-{id}",
         )
