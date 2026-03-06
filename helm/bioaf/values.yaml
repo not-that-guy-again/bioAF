@@ -1,0 +1,59 @@
+backend:
+  image:
+    repository: ghcr.io/bioaf/bioaf-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  port: 8000
+  env:
+    BIOAF_ENVIRONMENT: production
+    BIOAF_GCP_PROJECT_ID: ""
+    BIOAF_GCS_BUCKET: ""
+    BIOAF_LOG_LEVEL: info
+
+frontend:
+  image:
+    repository: ghcr.io/bioaf/bioaf-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  port: 3000
+
+ingress:
+  enabled: true
+  className: gce
+  annotations:
+    kubernetes.io/ingress.class: gce
+    networking.gke.io/managed-certificates: bioaf-cert
+    kubernetes.io/ingress.global-static-ip-name: bioaf-ip
+
+configBackup:
+  schedule: "0 2 * * *"
+  retentionDays: 7
+  image:
+    repository: ghcr.io/bioaf/bioaf-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: bioaf-backend
+  annotations:
+    iam.gke.io/gcp-service-account: ""
+
+monitoring:
+  enabled: true

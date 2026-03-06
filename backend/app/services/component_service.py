@@ -1,0 +1,234 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.component import ComponentState
+from app.services.audit_service import log_action
+
+# Static component catalog definitions
+COMPONENT_CATALOG: dict[str, dict] = {
+    "slurm": {
+        "name": "SLURM HPC Cluster",
+        "description": "High-performance compute cluster with autoscaling for batch bioinformatics jobs",
+        "category": "compute",
+        "dependencies": [],
+        "estimated_monthly_cost": "$200-$1,500",
+        "provisioning_time_estimate": "~15 minutes",
+        "config_schema": [
+            {"key": "slurm_max_nodes_standard", "label": "Max Standard Nodes", "type": "number", "default": 20},
+            {
+                "key": "slurm_instance_type_standard",
+                "label": "Standard Instance Type",
+                "type": "string",
+                "default": "n2-highmem-8",
+            },
+            {"key": "slurm_use_spot_standard", "label": "Use Spot VMs", "type": "boolean", "default": True},
+            {"key": "slurm_max_nodes_interactive", "label": "Max Interactive Nodes", "type": "number", "default": 5},
+            {
+                "key": "slurm_instance_type_interactive",
+                "label": "Interactive Instance Type",
+                "type": "string",
+                "default": "n2-standard-4",
+            },
+            {"key": "slurm_idle_timeout_minutes", "label": "Idle Timeout (min)", "type": "number", "default": 10},
+        ],
+    },
+    "filestore": {
+        "name": "Filestore NFS",
+        "description": "Managed NFS storage for shared file access across compute nodes and notebooks",
+        "category": "compute",
+        "dependencies": ["slurm"],
+        "estimated_monthly_cost": "$200-$500",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [
+            {"key": "filestore_capacity_gb", "label": "Capacity (GB)", "type": "number", "default": 1024},
+        ],
+    },
+    "jupyter": {
+        "name": "JupyterHub",
+        "description": "Managed Jupyter notebook environment with pre-built scRNA-seq kernels",
+        "category": "analysis",
+        "dependencies": ["slurm", "filestore"],
+        "estimated_monthly_cost": "$50-$200",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [],
+    },
+    "rstudio": {
+        "name": "RStudio Server",
+        "description": "Managed RStudio environment with Seurat and Bioconductor pre-installed",
+        "category": "analysis",
+        "dependencies": ["slurm", "filestore"],
+        "estimated_monthly_cost": "$50-$200",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [],
+    },
+    "nextflow": {
+        "name": "Nextflow",
+        "description": "Pipeline orchestration with nf-core/scrnaseq and custom workflow support",
+        "category": "compute",
+        "dependencies": ["slurm"],
+        "estimated_monthly_cost": "$0 (uses SLURM compute)",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+    "snakemake": {
+        "name": "Snakemake",
+        "description": "Alternative pipeline orchestration with SLURM executor support",
+        "category": "compute",
+        "dependencies": ["slurm"],
+        "estimated_monthly_cost": "$0 (uses SLURM compute)",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+    "cellxgene": {
+        "name": "cellxgene",
+        "description": "Interactive single-cell data explorer for h5ad files",
+        "category": "visualization",
+        "dependencies": [],
+        "estimated_monthly_cost": "$20-$50",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+    "meilisearch": {
+        "name": "Meilisearch",
+        "description": "Full-text search over protocols, metadata, and pipeline logs",
+        "category": "search",
+        "dependencies": [],
+        "estimated_monthly_cost": "$20-$50",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+    "qc_dashboard": {
+        "name": "QC Dashboard",
+        "description": "Auto-generated quality control dashboards after pipeline runs",
+        "category": "visualization",
+        "dependencies": ["nextflow"],
+        "estimated_monthly_cost": "$10-$30",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+}
+
+# Dependency graph for cascade checks
+DEPENDENTS: dict[str, list[str]] = {}
+for key, comp in COMPONENT_CATALOG.items():
+    for dep in comp["dependencies"]:
+        DEPENDENTS.setdefault(dep, []).append(key)
+
+
+class ComponentService:
+    @staticmethod
+    def get_catalog() -> dict[str, dict]:
+        return COMPONENT_CATALOG
+
+    @staticmethod
+    async def get_all_states(session: AsyncSession) -> list[ComponentState]:
+        result = await session.execute(select(ComponentState).order_by(ComponentState.component_key))
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def get_state(session: AsyncSession, component_key: str) -> ComponentState | None:
+        result = await session.execute(select(ComponentState).where(ComponentState.component_key == component_key))
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def initialize_states(session: AsyncSession) -> None:
+        """Initialize component_states rows for all catalog entries if missing."""
+        for key in COMPONENT_CATALOG:
+            existing = await ComponentService.get_state(session, key)
+            if not existing:
+                state = ComponentState(component_key=key, enabled=False, status="disabled", config_json={})
+                session.add(state)
+        await session.flush()
+
+    @staticmethod
+    def check_dependencies(component_key: str, enabled_components: set[str]) -> list[str]:
+        """Check unmet dependencies. Returns list of missing dependency keys."""
+        catalog_entry = COMPONENT_CATALOG.get(component_key)
+        if not catalog_entry:
+            return []
+        return [dep for dep in catalog_entry["dependencies"] if dep not in enabled_components]
+
+    @staticmethod
+    def get_dependents(component_key: str) -> list[str]:
+        """Get components that depend on this one."""
+        return DEPENDENTS.get(component_key, [])
+
+    @staticmethod
+    async def enable_component(
+        session: AsyncSession,
+        component_key: str,
+        user_id: int,
+    ) -> ComponentState:
+        state = await ComponentService.get_state(session, component_key)
+        if not state:
+            state = ComponentState(component_key=component_key, enabled=False, status="disabled", config_json={})
+            session.add(state)
+            await session.flush()
+
+        old_status = state.status
+        state.enabled = True
+        state.status = "provisioning"
+        await session.flush()
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="component",
+            entity_id=state.id,
+            action="enable",
+            details={"component_key": component_key},
+            previous_value={"status": old_status, "enabled": False},
+        )
+        return state
+
+    @staticmethod
+    async def disable_component(
+        session: AsyncSession,
+        component_key: str,
+        user_id: int,
+    ) -> ComponentState:
+        state = await ComponentService.get_state(session, component_key)
+        if not state:
+            raise ValueError(f"Component {component_key} not found")
+
+        old_status = state.status
+        state.enabled = False
+        state.status = "destroying"
+        await session.flush()
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="component",
+            entity_id=state.id,
+            action="disable",
+            details={"component_key": component_key},
+            previous_value={"status": old_status, "enabled": True},
+        )
+        return state
+
+    @staticmethod
+    async def update_config(
+        session: AsyncSession,
+        component_key: str,
+        config: dict,
+        user_id: int,
+    ) -> ComponentState:
+        state = await ComponentService.get_state(session, component_key)
+        if not state:
+            raise ValueError(f"Component {component_key} not found")
+
+        old_config = dict(state.config_json)
+        state.config_json = config
+        await session.flush()
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="component",
+            entity_id=state.id,
+            action="configure",
+            details={"config": config},
+            previous_value={"config": old_config},
+        )
+        return state
