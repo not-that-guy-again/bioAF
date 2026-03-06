@@ -22,6 +22,7 @@ bioAF versions are published as tagged releases on the bioAF GitHub repository. 
 ### Release Artifacts
 
 Each GitHub release includes:
+
 - Tagged container image on ghcr.io (e.g., `ghcr.io/bioaf/bioaf:v1.3.0`)
 - Updated Terraform templates (if infrastructure changes are needed)
 - Database migration scripts (if schema changes are needed)

@@ -4,7 +4,7 @@ A turnkey computational biology platform for small biotech companies (5-50 resea
 
 ## Architecture Overview
 
-```
+```text
 Frontend (Next.js 14)  -->  Backend (FastAPI)  -->  Cloud SQL PostgreSQL 16
                                 |
                          Terraform Runner
@@ -15,6 +15,7 @@ Frontend (Next.js 14)  -->  Backend (FastAPI)  -->  Cloud SQL PostgreSQL 16
 ```
 
 **Key design decisions:**
+
 - GCP-only infrastructure ([ADR-001](decisions/ADR-001-gcp-only.md))
 - Email-based authentication ([ADR-003](decisions/ADR-003-email-auth.md))
 - Tiered backup strategy ([ADR-004](decisions/ADR-004-tiered-backups.md))
@@ -125,7 +126,7 @@ bioAF manages these infrastructure components through its UI:
 
 ## Project Structure
 
-```
+```text
 bioAF/
   backend/        FastAPI application
   frontend/       Next.js 14 application

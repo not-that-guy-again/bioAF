@@ -11,6 +11,8 @@ Phase 2 tables: projects, experiments, samples, batches, experiment_templates,
 Phase 3+ placeholders: sample_files, pipeline_runs, pipeline_run_samples,
                        notebook_session_files
 Phase 3 tables: notebook_sessions, slurm_jobs, user_quotas
+Phase 4 tables: pipeline_catalog, pipeline_processes
+Phase 4 updates: pipeline_runs (additional columns)
 """
 
 from alembic import op
@@ -244,12 +246,30 @@ def upgrade() -> None:
     op.create_table(
         "pipeline_runs",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
         sa.Column("experiment_id", sa.Integer(), nullable=True),
+        sa.Column("submitted_by_user_id", sa.Integer(), nullable=True),
         sa.Column("pipeline_name", sa.String(length=255), nullable=False),
+        sa.Column("pipeline_version", sa.String(length=50), nullable=True),
+        sa.Column("parameters_json", JSONB(), nullable=True),
+        sa.Column("input_files_json", JSONB(), nullable=True),
+        sa.Column("output_files_json", JSONB(), nullable=True),
+        sa.Column("container_versions_json", JSONB(), nullable=True),
+        sa.Column("nextflow_trace_json", JSONB(), nullable=True),
+        sa.Column("progress_json", JSONB(), nullable=True),
         sa.Column("status", sa.String(length=50), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("cost_estimate", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("work_dir", sa.String(length=500), nullable=True),
+        sa.Column("slurm_job_id", sa.String(length=50), nullable=True),
+        sa.Column("resume_from_run_id", sa.Integer(), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"]),
+        sa.ForeignKeyConstraint(["submitted_by_user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["resume_from_run_id"], ["pipeline_runs.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -260,6 +280,51 @@ def upgrade() -> None:
         sa.Column("sample_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(["pipeline_run_id"], ["pipeline_runs.id"]),
         sa.ForeignKeyConstraint(["sample_id"], ["samples.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    # ---------------------------------------------------------------
+    # Phase 4 tables (pipeline orchestration)
+    # ---------------------------------------------------------------
+
+    op.create_table(
+        "pipeline_catalog",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("organization_id", sa.Integer(), nullable=False),
+        sa.Column("pipeline_key", sa.String(length=100), nullable=False),
+        sa.Column("name", sa.String(length=255), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("source_type", sa.String(length=20), nullable=False),
+        sa.Column("source_url", sa.String(length=500), nullable=True),
+        sa.Column("version", sa.String(length=50), nullable=True),
+        sa.Column("schema_json", JSONB(), nullable=True),
+        sa.Column("default_params_json", JSONB(), nullable=True),
+        sa.Column("is_builtin", sa.Boolean(), server_default=sa.text("FALSE"), nullable=False),
+        sa.Column("enabled", sa.Boolean(), server_default=sa.text("TRUE"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("NOW()"), nullable=False),
+        sa.ForeignKeyConstraint(["organization_id"], ["organizations.id"]),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("organization_id", "pipeline_key", name="uq_pipeline_catalog_org_key"),
+    )
+
+    op.create_table(
+        "pipeline_processes",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("pipeline_run_id", sa.Integer(), nullable=False),
+        sa.Column("process_name", sa.String(length=255), nullable=False),
+        sa.Column("task_id", sa.String(length=100), nullable=True),
+        sa.Column("status", sa.String(length=30), server_default=sa.text("'pending'"), nullable=False),
+        sa.Column("exit_code", sa.Integer(), nullable=True),
+        sa.Column("cpu_usage", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("memory_peak_gb", sa.Numeric(precision=10, scale=2), nullable=True),
+        sa.Column("duration_seconds", sa.Integer(), nullable=True),
+        sa.Column("slurm_job_id", sa.String(length=50), nullable=True),
+        sa.Column("stdout_path", sa.String(length=500), nullable=True),
+        sa.Column("stderr_path", sa.String(length=500), nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["pipeline_run_id"], ["pipeline_runs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -361,6 +426,14 @@ def upgrade() -> None:
     op.create_index("idx_audit_log_entity", "audit_log", ["entity_type", "entity_id"])
     op.create_index("idx_audit_log_timestamp", "audit_log", ["timestamp"])
 
+    # Phase 4 indexes
+    op.create_index("idx_pipeline_runs_org", "pipeline_runs", ["organization_id"])
+    op.create_index("idx_pipeline_runs_experiment", "pipeline_runs", ["experiment_id"])
+    op.create_index("idx_pipeline_runs_status", "pipeline_runs", ["status"])
+    op.create_index("idx_pipeline_runs_user", "pipeline_runs", ["submitted_by_user_id"])
+    op.create_index("idx_pipeline_catalog_org", "pipeline_catalog", ["organization_id"])
+    op.create_index("idx_pipeline_processes_run", "pipeline_processes", ["pipeline_run_id"])
+
     # Phase 3 indexes
     op.create_index("idx_notebook_sessions_user", "notebook_sessions", ["user_id"])
     op.create_index("idx_notebook_sessions_status", "notebook_sessions", ["status"])
@@ -388,6 +461,18 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop Phase 4 indexes
+    op.drop_index("idx_pipeline_processes_run")
+    op.drop_index("idx_pipeline_catalog_org")
+    op.drop_index("idx_pipeline_runs_user")
+    op.drop_index("idx_pipeline_runs_status")
+    op.drop_index("idx_pipeline_runs_experiment")
+    op.drop_index("idx_pipeline_runs_org")
+
+    # Drop Phase 4 tables
+    op.drop_table("pipeline_processes")
+    op.drop_table("pipeline_catalog")
+
     # Drop Phase 3 indexes
     op.drop_index("idx_user_quotas_user")
     op.drop_index("idx_slurm_jobs_slurm_id")

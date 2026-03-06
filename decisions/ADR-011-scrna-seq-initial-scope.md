@@ -17,20 +17,24 @@ bioAF v1 targets single-cell RNA-seq (scRNA-seq) workflows, specifically the 10x
 ### What This Means Concretely
 
 **Pre-built environments include:**
+
 - Python: scanpy, anndata, scvi-tools, leidenalg, scvelo, cellrank, scrublet, celltypist, matplotlib, seaborn, plotly
 - R: Seurat, SingleCellExperiment, scater, scran, DESeq2, ggplot2, tidyverse, ComplexHeatmap, monocle3
 - CLI: CellRanger (user-provided) / STARsolo (default), Nextflow, Snakemake, Singularity
 
 **Pre-installed pipelines:**
+
 - nf-core/scrnaseq (primary)
 - nf-core/rnaseq (adjacent use case)
 - nf-core/fetchngs (data retrieval)
 
 **Visualization:**
+
 - cellxgene for interactive cell atlas exploration
 - Plotly Dash QC dashboard tuned for scRNA-seq metrics (reads/cell, genes/cell, mitochondrial %, knee plot)
 
 **Template notebooks:**
+
 - QC and filtering
 - Normalization and dimensionality reduction
 - Clustering and marker gene identification

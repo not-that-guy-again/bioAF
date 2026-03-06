@@ -8,7 +8,7 @@ import { SystemHealth } from "@/components/dashboard/SystemHealth";
 import { ComponentInventory } from "@/components/dashboard/ComponentInventory";
 import { isAuthenticated } from "@/lib/auth";
 import { api } from "@/lib/api";
-import type { HealthStatus, ComponentState, Experiment, ExperimentListResponse } from "@/lib/types";
+import type { HealthStatus, ComponentState, Experiment, ExperimentListResponse, PipelineRun, PipelineRunListResponse } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ExperimentStatusBadge } from "@/components/experiments/ExperimentStatusBadge";
 import Link from "next/link";
@@ -18,6 +18,7 @@ export default function HomePage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [components, setComponents] = useState<ComponentState[]>([]);
   const [recentExperiments, setRecentExperiments] = useState<Experiment[]>([]);
+  const [activeRuns, setActiveRuns] = useState<PipelineRun[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,14 +29,16 @@ export default function HomePage() {
 
     async function fetchData() {
       try {
-        const [healthData, compData, expData] = await Promise.all([
+        const [healthData, compData, expData, runsData] = await Promise.all([
           api.get<HealthStatus>("/api/health/status"),
           api.get<{ components: ComponentState[] }>("/api/components"),
           api.get<ExperimentListResponse>("/api/experiments?page=1&page_size=5").catch(() => ({ experiments: [], total: 0, page: 1, page_size: 5 })),
+          api.get<PipelineRunListResponse>("/api/pipeline-runs?status=running&page_size=5").catch(() => ({ runs: [], total: 0, page: 1, page_size: 5 })),
         ]);
         setHealth(healthData);
         setComponents(compData.components);
         setRecentExperiments(expData.experiments);
+        setActiveRuns(runsData.runs);
       } catch {
         // Error handled by api client
       } finally {
@@ -106,9 +109,39 @@ export default function HomePage() {
                 </Link>
               )}
             </div>
-            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-gray-300">
-              <h3 className="font-semibold text-gray-400">Cost Summary</h3>
-              <p className="text-sm text-gray-400 mt-2">Coming in Phase 7</p>
+            <div className="bg-white rounded-lg shadow p-6 border-l-4 border-blue-400">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Active Pipeline Runs</h3>
+                <Link href="/pipelines/runs" className="text-sm text-bioaf-600 hover:text-bioaf-700">
+                  View all →
+                </Link>
+              </div>
+              {activeRuns.length === 0 ? (
+                <p className="text-sm text-gray-400">No active pipeline runs</p>
+              ) : (
+                <div className="space-y-3">
+                  {activeRuns.map((run) => (
+                    <Link
+                      key={run.id}
+                      href={`/pipelines/runs/${run.id}`}
+                      className="flex items-center justify-between hover:bg-gray-50 p-2 rounded -mx-2"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{run.pipeline_name}</p>
+                        <p className="text-xs text-gray-500">{run.experiment?.name || "—"}</p>
+                      </div>
+                      {run.progress && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full bg-bioaf-500 rounded-full" style={{ width: `${run.progress.percent_complete}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-500">{Math.round(run.progress.percent_complete)}%</span>
+                        </div>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </main>

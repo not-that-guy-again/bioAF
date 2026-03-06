@@ -10,6 +10,8 @@ const navItems = [
   { label: "Experiments", href: "/experiments", icon: "flask", active: true },
   { label: "Data", href: "/data", icon: "database", active: false, phase: "Phase 3" },
   { label: "Compute", href: "/compute", icon: "server", active: true },
+  { label: "Pipeline Catalog", href: "/pipelines", icon: "workflow", active: true, compBioOnly: true },
+  { label: "Pipeline Runs", href: "/pipelines/runs", icon: "play", active: true, compBioOnly: true },
   { label: "Results", href: "/results", icon: "chart", active: false, phase: "Phase 5" },
   { label: "Components", href: "/components", icon: "puzzle", active: true },
   { label: "Templates", href: "/admin/templates", icon: "template", active: true, adminOnly: true },
@@ -21,6 +23,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const user = getCurrentUser();
   const isAdmin = user?.role === "admin";
+  const isCompBio = user?.role === "comp_bio";
+  const canSeePipelines = isAdmin || isCompBio;
 
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
@@ -34,6 +38,7 @@ export function Sidebar() {
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => {
           if (item.adminOnly && !isAdmin) return null;
+          if ((item as Record<string, unknown>).compBioOnly && !canSeePipelines) return null;
           return (
             <NavItem
               key={item.href}

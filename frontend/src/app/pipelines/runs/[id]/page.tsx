@@ -1,0 +1,275 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/Header";
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { isAuthenticated } from "@/lib/auth";
+import { api } from "@/lib/api";
+import type { PipelineRunDetail, PipelineRunStatus, PipelineProcessStatus } from "@/lib/types";
+
+const STATUS_COLORS: Record<PipelineRunStatus | PipelineProcessStatus, string> = {
+  pending: "bg-gray-100 text-gray-700",
+  running: "bg-blue-100 text-blue-700",
+  completed: "bg-green-100 text-green-700",
+  failed: "bg-red-100 text-red-700",
+  cancelled: "bg-orange-100 text-orange-700",
+  cached: "bg-purple-100 text-purple-700",
+};
+
+type Tab = "progress" | "parameters" | "provenance" | "report" | "logs";
+
+export default function PipelineRunDetailPage() {
+  const router = useRouter();
+  const params = useParams();
+  const runId = params.id as string;
+
+  const [run, setRun] = useState<PipelineRunDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>("progress");
+  const [report, setReport] = useState<string>("");
+  const [logs, setLogs] = useState<{ stdout: string; stderr: string }>({ stdout: "", stderr: "" });
+  const [selectedProcess, setSelectedProcess] = useState<string>("");
+  const [provenance, setProvenance] = useState<Record<string, unknown> | null>(null);
+
+  const loadRun = useCallback(async () => {
+    try {
+      const data = await api.get<PipelineRunDetail>(`/api/pipeline-runs/${runId}`);
+      setRun(data);
+    } catch {} finally { setLoading(false); }
+  }, [runId]);
+
+  useEffect(() => {
+    if (!isAuthenticated()) { router.push("/login"); return; }
+    loadRun();
+  }, [router, loadRun]);
+
+  // Auto-refresh while active
+  useEffect(() => {
+    if (!run || !["running", "pending"].includes(run.status)) return;
+    const interval = setInterval(loadRun, 10000);
+    return () => clearInterval(interval);
+  }, [run?.status, loadRun]);
+
+  async function handleCancel() {
+    if (!confirm("Cancel this pipeline run?")) return;
+    try {
+      await api.post(`/api/pipeline-runs/${runId}/cancel`);
+      loadRun();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Cancel failed");
+    }
+  }
+
+  async function handleReproduce() {
+    try {
+      const newRun = await api.post<{ id: number }>(`/api/pipeline-runs/${runId}/reproduce`);
+      router.push(`/pipelines/runs/${newRun.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Reproduce failed");
+    }
+  }
+
+  async function loadReport() {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/pipeline-runs/${runId}/report`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("bioaf_token")}` },
+      });
+      setReport(await res.text());
+    } catch {}
+  }
+
+  async function loadLogs(processName: string) {
+    try {
+      const data = await api.get<{ stdout: string; stderr: string }>(`/api/pipeline-runs/${runId}/logs/${encodeURIComponent(processName)}`);
+      setLogs(data);
+    } catch {}
+  }
+
+  async function loadProvenance() {
+    try {
+      const data = await api.get<Record<string, unknown>>(`/api/pipeline-runs/${runId}/provenance`);
+      setProvenance(data);
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (activeTab === "report") loadReport();
+    if (activeTab === "provenance") loadProvenance();
+  }, [activeTab, runId]);
+
+  useEffect(() => {
+    if (selectedProcess && activeTab === "logs") loadLogs(selectedProcess);
+  }, [selectedProcess, activeTab]);
+
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  }
+
+  if (!run) {
+    return (
+      <div className="flex h-screen">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 flex items-center justify-center"><p className="text-gray-500">Run not found</p></main>
+        </div>
+      </div>
+    );
+  }
+
+  const isActive = ["running", "pending"].includes(run.status);
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "progress", label: "Progress" },
+    { key: "parameters", label: "Parameters" },
+    { key: "provenance", label: "Provenance" },
+    { key: "report", label: "Report" },
+    { key: "logs", label: "Logs" },
+  ];
+
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="flex items-center gap-4 mb-6">
+            <button onClick={() => router.push("/pipelines/runs")} className="text-gray-500 hover:text-gray-700">← Back</button>
+            <h1 className="text-2xl font-bold">Run #{run.id} — {run.pipeline_name}</h1>
+            <span className={`px-2 py-0.5 text-xs rounded-full ${STATUS_COLORS[run.status]}`}>{run.status}</span>
+            {isActive && (
+              <button onClick={handleCancel} className="ml-auto bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700">Cancel</button>
+            )}
+            {!isActive && (
+              <button onClick={handleReproduce} className="ml-auto bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm hover:bg-bioaf-700">Reproduce</button>
+            )}
+          </div>
+
+          {/* Overall progress */}
+          {run.progress && (
+            <div className="bg-white rounded-lg shadow p-4 mb-6">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-bioaf-500 rounded-full transition-all" style={{ width: `${run.progress.percent_complete}%` }} />
+                  </div>
+                </div>
+                <span className="text-sm font-medium">{Math.round(run.progress.percent_complete)}%</span>
+                <span className="text-xs text-gray-500">
+                  {run.progress.completed + run.progress.cached}/{run.progress.total_processes} processes
+                </span>
+              </div>
+              {run.error_message && <p className="text-sm text-red-600 mt-2">{run.error_message}</p>}
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="border-b border-gray-200 mb-6">
+            <nav className="flex -mb-px space-x-8">
+              {tabs.map((tab) => (
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                  className={`py-2 px-1 border-b-2 text-sm font-medium ${activeTab === tab.key ? "border-bioaf-500 text-bioaf-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >{tab.label}</button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Progress tab */}
+          {activeTab === "progress" && (
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Process</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPU</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Memory</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Exit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {run.processes.map((p) => (
+                    <tr key={p.id}>
+                      <td className="px-4 py-3 text-sm font-mono">{p.process_name}</td>
+                      <td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs rounded-full ${STATUS_COLORS[p.status]}`}>{p.status}</span></td>
+                      <td className="px-4 py-3 text-sm">{p.cpu_usage != null ? `${p.cpu_usage.toFixed(1)}%` : "—"}</td>
+                      <td className="px-4 py-3 text-sm">{p.memory_peak_gb != null ? `${p.memory_peak_gb.toFixed(2)} GB` : "—"}</td>
+                      <td className="px-4 py-3 text-sm">{p.duration_seconds != null ? `${Math.floor(p.duration_seconds / 60)}m ${p.duration_seconds % 60}s` : "—"}</td>
+                      <td className="px-4 py-3 text-sm">{p.exit_code ?? "—"}</td>
+                    </tr>
+                  ))}
+                  {run.processes.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No processes yet</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Parameters tab */}
+          {activeTab === "parameters" && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-semibold mb-4">Parameters</h2>
+              {run.parameters ? (
+                <pre className="text-sm bg-gray-50 p-4 rounded overflow-auto max-h-96">{JSON.stringify(run.parameters, null, 2)}</pre>
+              ) : <p className="text-gray-400">No parameters recorded</p>}
+            </div>
+          )}
+
+          {/* Provenance tab */}
+          {activeTab === "provenance" && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Provenance</h2>
+                <div className="flex gap-2">
+                  <a href={`/api/pipeline-runs/${runId}/provenance?format=json`} target="_blank" className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50">Export JSON</a>
+                  <a href={`/api/pipeline-runs/${runId}/provenance?format=yaml`} target="_blank" className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50">Export YAML</a>
+                </div>
+              </div>
+              {provenance ? (
+                <pre className="text-sm bg-gray-50 p-4 rounded overflow-auto max-h-96">{JSON.stringify(provenance, null, 2)}</pre>
+              ) : <LoadingSpinner size="sm" />}
+            </div>
+          )}
+
+          {/* Report tab */}
+          {activeTab === "report" && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-semibold mb-4">Nextflow Report</h2>
+              {report ? (
+                <iframe srcDoc={report} className="w-full h-[600px] border rounded" title="Nextflow Report" />
+              ) : <p className="text-gray-400">No report available yet</p>}
+            </div>
+          )}
+
+          {/* Logs tab */}
+          {activeTab === "logs" && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex items-center gap-4 mb-4">
+                <h2 className="text-lg font-semibold">Logs</h2>
+                <select value={selectedProcess} onChange={(e) => setSelectedProcess(e.target.value)} className="border rounded px-3 py-1.5 text-sm">
+                  <option value="">Select process...</option>
+                  {run.processes.map((p) => <option key={p.id} value={p.process_name}>{p.process_name}</option>)}
+                </select>
+              </div>
+              {selectedProcess ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium mb-1">stdout</h3>
+                    <pre className="text-xs bg-gray-900 text-green-400 p-4 rounded overflow-auto max-h-64">{logs.stdout || "(empty)"}</pre>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium mb-1">stderr</h3>
+                    <pre className="text-xs bg-gray-900 text-red-400 p-4 rounded overflow-auto max-h-64">{logs.stderr || "(empty)"}</pre>
+                  </div>
+                </div>
+              ) : <p className="text-gray-400">Select a process to view logs</p>}
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}

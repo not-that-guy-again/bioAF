@@ -9,7 +9,7 @@ resource "google_filestore_instance" "bioaf_nfs" {
   tier     = "BASIC_HDD"
 
   file_shares {
-    name       = "bioaf_shared"
+    name        = "bioaf_shared"
     capacity_gb = var.filestore_capacity_gb
   }
 
