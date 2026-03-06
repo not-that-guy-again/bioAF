@@ -37,11 +37,11 @@ resource "null_resource" "nextflow_config" {
       "mkdir -p /etc/bioaf/pipelines",
       "cat > /etc/bioaf/pipelines/nextflow.config << 'CONFIGEOF'",
       templatefile("${path.module}/../scripts/pipelines/nextflow.config.tpl", {
-        slurm_queue    = "standard"
-        slurm_account  = "bioaf-default"
+        slurm_queue     = "standard"
+        slurm_account   = "bioaf-default"
         container_cache = "/data/containers"
-        results_dir    = "/data/results"
-        work_dir       = "/data/working/nextflow"
+        results_dir     = "/data/results"
+        work_dir        = "/data/working/nextflow"
       }),
       "CONFIGEOF",
     ]

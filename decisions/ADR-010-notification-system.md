@@ -24,7 +24,7 @@ bioAF ships with three built-in notification channels: in-app (always enabled), 
 
 The notification system is an internal service within the bioAF control plane:
 
-```
+```text
 Platform Events → Event Bus → Notification Router → Channel Adapters
                                     │                    ├─ In-App (write to DB)
                                     │                    ├─ Email (SMTP)
@@ -39,6 +39,7 @@ Platform Events → Event Bus → Notification Router → Channel Adapters
 **Notification Router:** Reads the notification rules configuration to determine which events trigger which channels for which recipients. Rules are configurable by admin and per-user preferences are respected.
 
 **Channel Adapters:**
+
 - **In-app:** Writes to a `notifications` table in Postgres. The UI polls or uses WebSockets for real-time badge updates.
 - **Email:** Sends via SMTP using credentials from Secret Manager. Admin configures SMTP settings during bootstrap (or later). Zero-config fallback available for low-volume alerts.
 - **Slack:** Sends formatted messages via webhook POST. Admin provides webhook URL(s) in settings. Supports channel routing (e.g., pipeline alerts to #bioaf-pipelines, cost alerts to #bioaf-admin).

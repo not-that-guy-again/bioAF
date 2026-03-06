@@ -26,6 +26,7 @@ The experiment tracker is part of the mandatory foundation (deployed with `bioaf
 ### Status Machine
 
 Experiment status transitions automatically as data flows through the platform:
+
 - FASTQ upload → status moves to "fastq_uploaded"
 - Pipeline launch → "processing"
 - Pipeline complete → "analysis"
