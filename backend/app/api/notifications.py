@@ -34,7 +34,7 @@ async def list_notifications(
     session: AsyncSession = Depends(get_session),
 ):
     notifications, total = await NotificationService.list_notifications(
-        session, current_user["user_id"], read, event_type, severity, page, page_size,
+        session, int(current_user["sub"]), read, event_type, severity, page, page_size,
     )
     return NotificationListResponse(
         notifications=[NotificationResponse.model_validate(n) for n in notifications],
@@ -49,7 +49,7 @@ async def unread_count(
     current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
     session: AsyncSession = Depends(get_session),
 ):
-    count = await NotificationService.get_unread_count(session, current_user["user_id"])
+    count = await NotificationService.get_unread_count(session, int(current_user["sub"]))
     return UnreadCountResponse(count=count)
 
 
@@ -59,7 +59,7 @@ async def mark_read(
     current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
     session: AsyncSession = Depends(get_session),
 ):
-    notification = await NotificationService.mark_read(session, notification_id, current_user["user_id"])
+    notification = await NotificationService.mark_read(session, notification_id, int(current_user["sub"]))
     if not notification:
         raise HTTPException(404, "Notification not found")
     await session.commit()
@@ -71,7 +71,7 @@ async def mark_all_read(
     current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
     session: AsyncSession = Depends(get_session),
 ):
-    count = await NotificationService.mark_all_read(session, current_user["user_id"])
+    count = await NotificationService.mark_all_read(session, int(current_user["sub"]))
     await session.commit()
     return {"marked_read": count}
 
@@ -82,7 +82,7 @@ async def delete_notification(
     current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
     session: AsyncSession = Depends(get_session),
 ):
-    deleted = await NotificationService.delete_notification(session, notification_id, current_user["user_id"])
+    deleted = await NotificationService.delete_notification(session, notification_id, int(current_user["sub"]))
     if not deleted:
         raise HTTPException(404, "Notification not found")
     await session.commit()
@@ -96,7 +96,7 @@ async def get_preferences(
     current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
     session: AsyncSession = Depends(get_session),
 ):
-    prefs = await NotificationService.get_preferences(session, current_user["user_id"])
+    prefs = await NotificationService.get_preferences(session, int(current_user["sub"]))
     return [NotificationPreferenceResponse.model_validate(p) for p in prefs]
 
 
@@ -107,7 +107,7 @@ async def update_preferences(
     session: AsyncSession = Depends(get_session),
 ):
     prefs = await NotificationService.update_preferences(
-        session, current_user["user_id"],
+        session, int(current_user["sub"]),
         [p.model_dump() for p in body.preferences],
     )
     await session.commit()
