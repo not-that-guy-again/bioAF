@@ -20,6 +20,10 @@ from app.models.cellxgene_publication import CellxgenePublication
 from app.models.qc_dashboard import QCDashboard
 from app.models.plot_archive_entry import PlotArchiveEntry
 from app.models.storage_stats import StorageStatsCache
+from app.models.gitops_repo import GitOpsRepo
+from app.models.environment import Environment, EnvironmentPackage
+from app.models.environment_change import EnvironmentChange
+from app.models.template_notebook import TemplateNotebook
 
 __all__ = [
     "User",
@@ -48,4 +52,9 @@ __all__ = [
     "QCDashboard",
     "PlotArchiveEntry",
     "StorageStatsCache",
+    "GitOpsRepo",
+    "Environment",
+    "EnvironmentPackage",
+    "EnvironmentChange",
+    "TemplateNotebook",
 ]

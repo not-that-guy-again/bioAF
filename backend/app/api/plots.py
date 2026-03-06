@@ -22,7 +22,9 @@ def _plot_response(p) -> PlotArchiveResponse:
             md5_checksum=p.file.md5_checksum,
             file_type=p.file.file_type,
             tags=p.file.tags_json if isinstance(p.file.tags_json, list) else [],
-            uploader=UserSummary(id=p.file.uploader.id, name=p.file.uploader.name, email=p.file.uploader.email) if p.file and p.file.uploader else None,
+            uploader=UserSummary(id=p.file.uploader.id, name=p.file.uploader.name, email=p.file.uploader.email)
+            if p.file and p.file.uploader
+            else None,
             upload_timestamp=p.file.upload_timestamp,
             created_at=p.file.created_at,
         )
@@ -55,7 +57,8 @@ async def search_plots(
     org_id = int(current_user["org_id"])
 
     plots, total = await PlotArchiveService.search_plots(
-        session, org_id,
+        session,
+        org_id,
         experiment_id=experiment_id,
         pipeline_run_id=pipeline_run_id,
         query=query,
@@ -118,7 +121,10 @@ async def update_plot(
     user_id = int(current_user["sub"])
 
     plot = await PlotArchiveService.update_plot(
-        session, org_id, plot_id, user_id,
+        session,
+        org_id,
+        plot_id,
+        user_id,
         title=body.title,
         tags=body.tags,
     )

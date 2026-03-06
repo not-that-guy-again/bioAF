@@ -65,7 +65,9 @@ class PipelineMonitorService:
             if task_id in existing_by_task_id:
                 proc = existing_by_task_id[task_id]
             else:
-                proc = PipelineProcess(pipeline_run_id=run.id, process_name=proc_data.get("process", ""), task_id=task_id)
+                proc = PipelineProcess(
+                    pipeline_run_id=run.id, process_name=proc_data.get("process", ""), task_id=task_id
+                )
                 session.add(proc)
 
             proc.status = PipelineMonitorService._map_nf_status(proc_data.get("status", ""))
@@ -118,9 +120,13 @@ class PipelineMonitorService:
                 # No other active runs — advance experiment to "analysis"
                 try:
                     from app.services.experiment_service import ExperimentService
+
                     await ExperimentService.update_status(
-                        session, run.experiment_id, run.organization_id,
-                        run.submitted_by_user_id, "analysis",
+                        session,
+                        run.experiment_id,
+                        run.organization_id,
+                        run.submitted_by_user_id,
+                        "analysis",
                     )
                 except Exception as e:
                     logger.warning("Could not advance experiment status: %s", e)
@@ -148,11 +154,11 @@ class PipelineMonitorService:
         if run.status == "completed":
             try:
                 from app.services.component_service import ComponentService
+
                 if await ComponentService.is_enabled(session, "qc_dashboard"):
                     from app.services.qc_dashboard_service import QCDashboardService
-                    await QCDashboardService.generate_qc_dashboard(
-                        session, run.organization_id, run.id
-                    )
+
+                    await QCDashboardService.generate_qc_dashboard(session, run.organization_id, run.id)
                     logger.info("QC dashboard generated for run %d", run.id)
             except Exception as e:
                 logger.warning("Failed to generate QC dashboard for run %d: %s", run.id, e)
@@ -204,9 +210,7 @@ class PipelineMonitorService:
     @staticmethod
     async def get_run_report(session: AsyncSession, run_id: int) -> str:
         """Read the Nextflow HTML report."""
-        result = await session.execute(
-            select(PipelineRun.work_dir).where(PipelineRun.id == run_id)
-        )
+        result = await session.execute(select(PipelineRun.work_dir).where(PipelineRun.id == run_id))
         work_dir = result.scalar_one_or_none()
         if not work_dir:
             return ""

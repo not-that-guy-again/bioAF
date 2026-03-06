@@ -1,6 +1,5 @@
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
 
 
 @pytest_asyncio.fixture
@@ -105,6 +104,7 @@ async def test_get_qc_dashboard_not_found(client, admin_token):
 
 
 # --- Service unit tests ---
+
 
 def test_quality_rating_logic():
     from app.services.qc_dashboard_service import QCDashboardService

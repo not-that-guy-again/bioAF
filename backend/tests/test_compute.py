@@ -50,9 +50,7 @@ async def bench_user(session, admin_user):
 
 @pytest_asyncio.fixture
 async def bench_token(bench_user) -> str:
-    return AuthService.create_token(
-        bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id
-    )
+    return AuthService.create_token(bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id)
 
 
 @pytest_asyncio.fixture

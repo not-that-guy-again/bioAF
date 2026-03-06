@@ -5,7 +5,6 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.file import File
-from app.services.audit_service import log_action
 from app.services.file_service import FileService
 
 logger = logging.getLogger("bioaf.upload_service")
@@ -91,9 +90,7 @@ class UploadService:
 
         # Verify MD5 if expected
         if pending["expected_md5"] and pending["expected_md5"] != actual_md5:
-            raise ValueError(
-                f"MD5 mismatch: expected {pending['expected_md5']}, got {actual_md5}"
-            )
+            raise ValueError(f"MD5 mismatch: expected {pending['expected_md5']}, got {actual_md5}")
 
         # Determine file type from extension
         filename = pending["filename"]
@@ -127,9 +124,7 @@ class UploadService:
         # Auto-update experiment status if FASTQs uploaded
         experiment_id = pending["experiment_id"]
         if experiment_id and file_type == "fastq":
-            await UploadService._auto_update_experiment_status(
-                session, experiment_id, org_id, pending["user_id"]
-            )
+            await UploadService._auto_update_experiment_status(session, experiment_id, org_id, pending["user_id"])
 
         return file
 
@@ -172,9 +167,7 @@ class UploadService:
                 await FileService.link_file_to_sample(session, file.id, sample_id)
 
         if experiment_id and file_type == "fastq":
-            await UploadService._auto_update_experiment_status(
-                session, experiment_id, org_id, user_id
-            )
+            await UploadService._auto_update_experiment_status(session, experiment_id, org_id, user_id)
 
         return file
 
@@ -188,9 +181,7 @@ class UploadService:
         exp = await ExperimentService.get_experiment(session, experiment_id, org_id)
         if exp and exp.status in ("registered", "library_prep", "sequencing"):
             try:
-                await ExperimentService.update_status(
-                    session, experiment_id, org_id, user_id, "fastq_uploaded"
-                )
+                await ExperimentService.update_status(session, experiment_id, org_id, user_id, "fastq_uploaded")
             except Exception as e:
                 logger.warning("Could not auto-update experiment status: %s", e)
 
@@ -218,6 +209,7 @@ class UploadService:
         """Generate a signed URL for uploading to GCS."""
         try:
             from google.cloud import storage as gcs_storage
+
             client = gcs_storage.Client()
             bucket = client.bucket(bucket_name)
             blob = bucket.blob(gcs_path)
@@ -237,6 +229,7 @@ class UploadService:
         """Upload content to GCS."""
         try:
             from google.cloud import storage as gcs_storage
+
             client = gcs_storage.Client()
             bucket = client.bucket(bucket_name)
             blob = bucket.blob(gcs_path)

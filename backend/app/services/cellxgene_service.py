@@ -24,9 +24,7 @@ class CellxgeneService:
     ) -> CellxgenePublication:
         """Publish an h5ad file to cellxgene."""
         # Validate file exists and is h5ad
-        result = await session.execute(
-            select(File).where(File.id == file_id, File.organization_id == org_id)
-        )
+        result = await session.execute(select(File).where(File.id == file_id, File.organization_id == org_id))
         file = result.scalar_one_or_none()
         if not file:
             raise ValueError("File not found")
@@ -117,9 +115,7 @@ class CellxgeneService:
         return list(result.scalars().all())
 
     @staticmethod
-    async def get_publication(
-        session: AsyncSession, org_id: int, publication_id: int
-    ) -> CellxgenePublication | None:
+    async def get_publication(session: AsyncSession, org_id: int, publication_id: int) -> CellxgenePublication | None:
         result = await session.execute(
             select(CellxgenePublication)
             .options(
@@ -155,9 +151,7 @@ class CellxgeneService:
                 metadata=k8s_client.V1ObjectMeta(name=name, namespace=namespace),
                 spec=k8s_client.V1DeploymentSpec(
                     replicas=1,
-                    selector=k8s_client.V1LabelSelector(
-                        match_labels={"app": name}
-                    ),
+                    selector=k8s_client.V1LabelSelector(match_labels={"app": name}),
                     template=k8s_client.V1PodTemplateSpec(
                         metadata=k8s_client.V1ObjectMeta(labels={"app": name}),
                         spec=k8s_client.V1PodSpec(

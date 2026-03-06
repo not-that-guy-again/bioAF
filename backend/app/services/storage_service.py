@@ -49,7 +49,7 @@ class StorageService:
         for bucket_info in buckets_data:
             bucket_cost = 0.0
             for storage_class, bytes_val in bucket_info.get("by_storage_class", {}).items():
-                gb = bytes_val / (1024 ** 3)
+                gb = bytes_val / (1024**3)
                 rate = STORAGE_COSTS.get(storage_class.upper(), STORAGE_COSTS["STANDARD"])
                 bucket_cost += gb * rate
 
@@ -88,6 +88,7 @@ class StorageService:
         """Get lifecycle policy status from GCS buckets."""
         try:
             from google.cloud import storage as gcs_storage
+
             client = gcs_storage.Client()
             prefix = f"bioaf-{org_id}-"
             policies = []
@@ -96,11 +97,13 @@ class StorageService:
                 if bucket.lifecycle_rules:
                     for rule in bucket.lifecycle_rules:
                         rules.append(dict(rule))
-                policies.append({
-                    "bucket_name": bucket.name,
-                    "rules": rules,
-                    "enabled": len(rules) > 0,
-                })
+                policies.append(
+                    {
+                        "bucket_name": bucket.name,
+                        "rules": rules,
+                        "enabled": len(rules) > 0,
+                    }
+                )
             return policies
         except Exception as e:
             logger.warning("Failed to get lifecycle policies: %s", e)
@@ -111,6 +114,7 @@ class StorageService:
         """Query GCS for bucket stats. Falls back to empty list on failure."""
         try:
             from google.cloud import storage as gcs_storage
+
             client = gcs_storage.Client()
             prefix = f"bioaf-{org_id}-"
             results = []
@@ -123,18 +127,22 @@ class StorageService:
                     object_count += 1
                     sc = blob.storage_class or "STANDARD"
                     by_class[sc] = by_class.get(sc, 0) + (blob.size or 0)
-                results.append({
-                    "name": bucket.name,
-                    "total_bytes": total_bytes,
-                    "object_count": object_count,
-                    "by_storage_class": by_class,
-                })
+                results.append(
+                    {
+                        "name": bucket.name,
+                        "total_bytes": total_bytes,
+                        "object_count": object_count,
+                        "by_storage_class": by_class,
+                    }
+                )
             return results
         except Exception as e:
             logger.warning("GCS bucket query failed: %s", e)
-            return [{
-                "name": f"bioaf-{org_id}-data",
-                "total_bytes": 0,
-                "object_count": 0,
-                "by_storage_class": {},
-            }]
+            return [
+                {
+                    "name": f"bioaf-{org_id}-data",
+                    "total_bytes": 0,
+                    "object_count": 0,
+                    "by_storage_class": {},
+                }
+            ]

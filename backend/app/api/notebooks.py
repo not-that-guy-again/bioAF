@@ -61,8 +61,11 @@ async def list_sessions(
     filter_user_id = None if role == "admin" else user_id
 
     sessions, total = await NotebookService.list_sessions(
-        session, org_id, user_id=filter_user_id,
-        session_type=session_type, status=status,
+        session,
+        org_id,
+        user_id=filter_user_id,
+        session_type=session_type,
+        status=status,
     )
     return SessionListResponse(
         sessions=[_session_response(s) for s in sessions],

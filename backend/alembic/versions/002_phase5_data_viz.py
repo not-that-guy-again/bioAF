@@ -165,16 +165,14 @@ def upgrade() -> None:
     # ---------------------------------------------------------------
     # Wire up existing placeholder tables from Phase 2
     # ---------------------------------------------------------------
-    op.create_foreign_key(
-        "fk_sample_files_file", "sample_files", "files", ["file_id"], ["id"]
-    )
-    op.create_foreign_key(
-        "fk_nsf_file", "notebook_session_files", "files", ["file_id"], ["id"]
-    )
+    op.create_foreign_key("fk_sample_files_file", "sample_files", "files", ["file_id"], ["id"])
+    op.create_foreign_key("fk_nsf_file", "notebook_session_files", "files", ["file_id"], ["id"])
 
     # Grant permissions (may not exist in test/dev)
     try:
-        op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON files, documents, cellxgene_publications, qc_dashboards, plot_archive, storage_stats_cache TO bioaf_app")
+        op.execute(
+            "GRANT SELECT, INSERT, UPDATE, DELETE ON files, documents, cellxgene_publications, qc_dashboards, plot_archive, storage_stats_cache TO bioaf_app"
+        )
         op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app")
     except Exception:
         pass

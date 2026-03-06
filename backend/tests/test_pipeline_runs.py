@@ -54,7 +54,7 @@ async def samples(session, experiment):
     for i in range(3):
         s = Sample(
             experiment_id=experiment.id,
-            sample_id_external=f"SAMPLE_{i+1}",
+            sample_id_external=f"SAMPLE_{i + 1}",
             organism="Homo sapiens",
             tissue_type="PBMC",
         )
@@ -74,13 +74,16 @@ async def initialized_catalog(client, admin_token):
 @pytest_asyncio.fixture
 async def pipeline_run(session, admin_user, experiment, samples, initialized_catalog, client, admin_token):
     """Create a pipeline run via API."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="12345",
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            return_value="12345",
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         response = await client.post(
             "/api/pipeline-runs",
@@ -99,14 +102,17 @@ async def pipeline_run(session, admin_user, experiment, samples, initialized_cat
 @pytest.mark.asyncio
 async def test_launch_run(client, admin_token, experiment, samples, initialized_catalog):
     """Launch a pipeline run creates record, links samples, updates experiment."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="12345",
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
-    ) as mock_status:
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            return_value="12345",
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ) as mock_status,
+    ):
         response = await client.post(
             "/api/pipeline-runs",
             json={
@@ -180,13 +186,16 @@ async def test_launch_run_validates_samples(client, admin_token, experiment, sam
 @pytest.mark.asyncio
 async def test_launch_run_creates_audit_entry(client, admin_token, experiment, samples, initialized_catalog, session):
     """Launch creates an audit log entry."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="12345",
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            return_value="12345",
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         response = await client.post(
             "/api/pipeline-runs",
@@ -298,13 +307,16 @@ async def test_get_run_detail(client, admin_token, pipeline_run):
 @pytest.mark.asyncio
 async def test_reproduce_run(client, admin_token, pipeline_run):
     """Reproduce creates a new run with same params."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="67890",
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            return_value="67890",
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         response = await client.post(
             f"/api/pipeline-runs/{pipeline_run['id']}/reproduce",
@@ -334,23 +346,34 @@ async def test_provenance_export(client, admin_token, pipeline_run):
 @pytest.mark.asyncio
 async def test_compare_runs(client, admin_token, experiment, samples, initialized_catalog):
     """Compare runs shows parameter diffs."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="12345",
-    ), patch(
-        "app.services.experiment_service.ExperimentService.update_status",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.services.slurm_service.SlurmService._run_ssh_command",
+            new_callable=AsyncMock,
+            return_value="12345",
+        ),
+        patch(
+            "app.services.experiment_service.ExperimentService.update_status",
+            new_callable=AsyncMock,
+        ),
     ):
         # Create two runs with different params
         r1 = await client.post(
             "/api/pipeline-runs",
-            json={"pipeline_key": "nf-core/scrnaseq", "experiment_id": experiment.id, "parameters": {"aligner": "star"}},
+            json={
+                "pipeline_key": "nf-core/scrnaseq",
+                "experiment_id": experiment.id,
+                "parameters": {"aligner": "star"},
+            },
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         r2 = await client.post(
             "/api/pipeline-runs",
-            json={"pipeline_key": "nf-core/scrnaseq", "experiment_id": experiment.id, "parameters": {"aligner": "cellranger"}},
+            json={
+                "pipeline_key": "nf-core/scrnaseq",
+                "experiment_id": experiment.id,
+                "parameters": {"aligner": "cellranger"},
+            },
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 

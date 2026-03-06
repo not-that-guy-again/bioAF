@@ -19,3 +19,6 @@ anndata>=0.10
 scanpy>=1.10
 meilisearch>=0.31
 kubernetes>=29.0
+# Phase 6: GitOps + Package Management
+PyGithub>=2.1.0
+pyyaml>=6.0

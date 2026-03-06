@@ -59,9 +59,7 @@ class PlotArchiveService:
             .options(selectinload(PlotArchiveEntry.file).selectinload(File.uploader))
             .where(PlotArchiveEntry.organization_id == org_id)
         )
-        count_base = select(func.count(PlotArchiveEntry.id)).where(
-            PlotArchiveEntry.organization_id == org_id
-        )
+        count_base = select(func.count(PlotArchiveEntry.id)).where(PlotArchiveEntry.organization_id == org_id)
 
         if experiment_id:
             base = base.where(PlotArchiveEntry.experiment_id == experiment_id)
@@ -134,10 +132,12 @@ class PlotArchiveService:
         indexed = 0
         try:
             from google.cloud import storage as gcs_storage
+
             client = gcs_storage.Client()
 
             # Get all organizations (simplified — in practice scope by active orgs)
             from app.models.organization import Organization
+
             orgs_result = await session.execute(select(Organization))
             orgs = list(orgs_result.scalars().all())
 
@@ -161,9 +161,7 @@ class PlotArchiveService:
 
                         # Check not already in archive
                         gcs_uri = f"gs://{bucket_name}/{blob.name}"
-                        existing = await session.execute(
-                            select(File.id).where(File.gcs_uri == gcs_uri)
-                        )
+                        existing = await session.execute(select(File.id).where(File.gcs_uri == gcs_uri))
                         if existing.scalar_one_or_none():
                             continue
 

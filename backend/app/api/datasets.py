@@ -28,10 +28,18 @@ async def search_datasets(
     org_id = int(current_user["org_id"])
 
     datasets, total = await DatasetService.search_datasets(
-        session, org_id,
-        query=query, organism=organism, tissue=tissue, chemistry=chemistry,
-        status=status, date_from=date_from, date_to=date_to, batch_id=batch_id,
-        page=page, page_size=page_size,
+        session,
+        org_id,
+        query=query,
+        organism=organism,
+        tissue=tissue,
+        chemistry=chemistry,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        batch_id=batch_id,
+        page=page,
+        page_size=page_size,
     )
 
     return DatasetSearchResult(
@@ -48,7 +56,9 @@ async def search_datasets(
                 pipeline_run_count=d["pipeline_run_count"],
                 has_qc_dashboard=d["has_qc_dashboard"],
                 has_cellxgene=d["has_cellxgene"],
-                owner=UserSummary(id=d["owner"].id, name=d["owner"].name, email=d["owner"].email) if d.get("owner") else None,
+                owner=UserSummary(id=d["owner"].id, name=d["owner"].name, email=d["owner"].email)
+                if d.get("owner")
+                else None,
                 created_at=d["created_at"],
             )
             for d in datasets

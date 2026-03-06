@@ -110,28 +110,28 @@ class DatasetService:
             organisms = [s.organism for s in samples if s.organism]
             tissues = [s.tissue_type for s in samples if s.tissue_type]
 
-            datasets.append({
-                "experiment_id": exp.id,
-                "experiment_name": exp.name,
-                "status": exp.status,
-                "organism": max(set(organisms), key=organisms.count) if organisms else None,
-                "tissue": max(set(tissues), key=tissues.count) if tissues else None,
-                "sample_count": len(samples),
-                "file_count": file_count,
-                "total_size_bytes": total_size,
-                "pipeline_run_count": run_count,
-                "has_qc_dashboard": has_qc,
-                "has_cellxgene": has_cellxgene,
-                "owner": exp.owner,
-                "created_at": exp.created_at,
-            })
+            datasets.append(
+                {
+                    "experiment_id": exp.id,
+                    "experiment_name": exp.name,
+                    "status": exp.status,
+                    "organism": max(set(organisms), key=organisms.count) if organisms else None,
+                    "tissue": max(set(tissues), key=tissues.count) if tissues else None,
+                    "sample_count": len(samples),
+                    "file_count": file_count,
+                    "total_size_bytes": total_size,
+                    "pipeline_run_count": run_count,
+                    "has_qc_dashboard": has_qc,
+                    "has_cellxgene": has_cellxgene,
+                    "owner": exp.owner,
+                    "created_at": exp.created_at,
+                }
+            )
 
         return datasets, total
 
     @staticmethod
-    async def get_dataset_detail(
-        session: AsyncSession, org_id: int, experiment_id: int
-    ) -> dict | None:
+    async def get_dataset_detail(session: AsyncSession, org_id: int, experiment_id: int) -> dict | None:
         """Get full dataset detail for an experiment."""
         result = await session.execute(
             select(Experiment)
@@ -147,15 +147,11 @@ class DatasetService:
             return None
 
         # Pipeline runs
-        runs_result = await session.execute(
-            select(PipelineRun).where(PipelineRun.experiment_id == experiment_id)
-        )
+        runs_result = await session.execute(select(PipelineRun).where(PipelineRun.experiment_id == experiment_id))
         runs = list(runs_result.scalars().all())
 
         # QC dashboards
-        qc_result = await session.execute(
-            select(QCDashboard).where(QCDashboard.experiment_id == experiment_id)
-        )
+        qc_result = await session.execute(select(QCDashboard).where(QCDashboard.experiment_id == experiment_id))
         dashboards = list(qc_result.scalars().all())
 
         # cellxgene publications

@@ -14,9 +14,7 @@ class UserQuota(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)
     cpu_hours_monthly_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    cpu_hours_used_current_month: Mapped[Decimal] = mapped_column(
-        Numeric(10, 2), nullable=False, server_default="0"
-    )
+    cpu_hours_used_current_month: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, server_default="0")
     quota_reset_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

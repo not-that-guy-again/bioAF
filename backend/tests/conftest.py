@@ -88,9 +88,7 @@ async def admin_user(session):
 
 @pytest_asyncio.fixture
 async def admin_token(admin_user) -> str:
-    return AuthService.create_token(
-        admin_user.id, admin_user.email, admin_user.role, admin_user.organization_id
-    )
+    return AuthService.create_token(admin_user.id, admin_user.email, admin_user.role, admin_user.organization_id)
 
 
 @pytest_asyncio.fixture
@@ -113,6 +111,4 @@ async def viewer_user(session, admin_user):
 
 @pytest_asyncio.fixture
 async def viewer_token(viewer_user) -> str:
-    return AuthService.create_token(
-        viewer_user.id, viewer_user.email, viewer_user.role, viewer_user.organization_id
-    )
+    return AuthService.create_token(viewer_user.id, viewer_user.email, viewer_user.role, viewer_user.organization_id)

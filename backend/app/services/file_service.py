@@ -49,9 +49,7 @@ class FileService:
     @staticmethod
     async def get_file(session: AsyncSession, file_id: int, org_id: int) -> File | None:
         result = await session.execute(
-            select(File)
-            .options(selectinload(File.uploader))
-            .where(File.id == file_id, File.organization_id == org_id)
+            select(File).options(selectinload(File.uploader)).where(File.id == file_id, File.organization_id == org_id)
         )
         return result.scalar_one_or_none()
 
@@ -85,6 +83,7 @@ class FileService:
     @staticmethod
     async def link_file_to_sample(session: AsyncSession, file_id: int, sample_id: int) -> None:
         from sqlalchemy import text
+
         await session.execute(
             text("INSERT INTO sample_files (sample_id, file_id) VALUES (:sample_id, :file_id)"),
             {"sample_id": sample_id, "file_id": file_id},
@@ -95,8 +94,11 @@ class FileService:
         session: AsyncSession, file_id: int, session_id: int, access_type: str = "output"
     ) -> None:
         from sqlalchemy import text
+
         await session.execute(
-            text("INSERT INTO notebook_session_files (session_id, file_id, access_type) VALUES (:session_id, :file_id, :access_type)"),
+            text(
+                "INSERT INTO notebook_session_files (session_id, file_id, access_type) VALUES (:session_id, :file_id, :access_type)"
+            ),
             {"session_id": session_id, "file_id": file_id, "access_type": access_type},
         )
 

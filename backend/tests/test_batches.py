@@ -2,7 +2,6 @@ import pytest
 from sqlalchemy import text
 
 
-
 @pytest.fixture
 async def experiment_id(client, admin_token):
     resp = await client.post(

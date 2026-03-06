@@ -9,7 +9,6 @@ from app.schemas.document import (
     DocumentSearchResponse,
     DocumentUpdate,
 )
-from app.schemas.experiment import UserSummary
 from app.schemas.file import FileResponse
 from app.services.document_service import DocumentService
 
@@ -57,7 +56,9 @@ async def upload_document(
 
     content = await file.read()
     doc = await DocumentService.upload_document(
-        session, org_id, user_id,
+        session,
+        org_id,
+        user_id,
         filename=file.filename or "document.pdf",
         content=content,
         title=title,
@@ -122,6 +123,7 @@ async def download_document(
 
     try:
         from google.cloud import storage as gcs_storage
+
         client = gcs_storage.Client()
         parts = doc.file.gcs_uri.replace("gs://", "").split("/", 1)
         bucket = client.bucket(parts[0])
@@ -177,7 +179,10 @@ async def link_document(
     user_id = int(current_user["sub"])
 
     doc = await DocumentService.link_document(
-        session, document_id, org_id, user_id,
+        session,
+        document_id,
+        org_id,
+        user_id,
         experiment_id=body.experiment_id,
         sample_id=body.sample_id,
         pipeline_run_id=body.pipeline_run_id,

@@ -703,3 +703,139 @@ export interface ProvenanceChain {
   cellxgene_publications: ProvenanceNode[];
   qc_dashboards: ProvenanceNode[];
 }
+
+// Phase 6 — GitOps + Package Management
+
+export interface GitOpsRepoStatus {
+  initialized: boolean;
+  repo_url: string | null;
+  repo_name: string | null;
+  last_commit_sha: string | null;
+  last_commit_at: string | null;
+  status: string;
+}
+
+export interface GitCommit {
+  sha: string;
+  message: string;
+  author: string;
+  timestamp: string;
+  files_changed: number | null;
+}
+
+export interface GitCommitDetail extends GitCommit {
+  diff: string;
+  files: string[];
+}
+
+export interface GitCommitListResponse {
+  commits: GitCommit[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface PackageSearchResult {
+  name: string;
+  version: string;
+  description: string | null;
+  source: string;
+  channel: string | null;
+  homepage: string | null;
+}
+
+export interface PackageSearchResponse {
+  results: PackageSearchResult[];
+  total: number;
+  query: string;
+}
+
+export interface DependencyNode {
+  name: string;
+  version: string;
+  source: string;
+  action: string;
+}
+
+export interface DependencyTree {
+  package: string;
+  version: string;
+  dependencies: DependencyNode[];
+  total_new_packages: number;
+  estimated_disk_bytes: number | null;
+}
+
+export interface InstalledPackage {
+  name: string;
+  version: string | null;
+  source: string;
+  pinned: boolean;
+  installed_at: string;
+}
+
+export interface EnvironmentResponse {
+  id: number;
+  name: string;
+  env_type: string;
+  description: string | null;
+  is_default: boolean;
+  package_count: number;
+  jupyter_kernel_name: string | null;
+  status: string;
+  last_synced_at: string | null;
+  created_by: UserSummary | null;
+  created_at: string;
+}
+
+export interface EnvironmentListResponse {
+  environments: EnvironmentResponse[];
+  total: number;
+}
+
+export interface EnvironmentDetailResponse extends Omit<EnvironmentResponse, "package_count"> {
+  packages: InstalledPackage[];
+}
+
+export interface EnvironmentChangeResponse {
+  id: number;
+  change_type: string;
+  package_name: string | null;
+  old_version: string | null;
+  new_version: string | null;
+  git_commit_sha: string | null;
+  commit_message: string | null;
+  reconciled: boolean;
+  reconciled_at: string | null;
+  error_message: string | null;
+  user: UserSummary | null;
+  created_at: string;
+}
+
+export interface EnvironmentHistoryResponse {
+  changes: EnvironmentChangeResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface EnvironmentDiff {
+  added: string[];
+  removed: string[];
+  changed: Array<{ name: string; old_version: string | null; new_version: string | null }>;
+}
+
+export interface TemplateNotebookResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  category: string | null;
+  compatible_with: string | null;
+  parameters: Record<string, unknown>;
+  is_builtin: boolean;
+  created_at: string;
+}
+
+export interface TemplateNotebookListResponse {
+  notebooks: TemplateNotebookResponse[];
+  total: number;
+}
