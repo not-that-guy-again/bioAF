@@ -107,4 +107,5 @@ async def test_update_backup_settings_enforces_minimums(client: AsyncClient, adm
 async def test_backup_health_check(admin_user):
     """Test backup health check does not error."""
     from app.services.backup_service import BackupService
+
     await BackupService.check_backup_health(admin_user.organization_id)

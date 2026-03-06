@@ -38,7 +38,9 @@ async def list_config_snapshots(
     session: AsyncSession = Depends(get_session),
 ):
     snapshots, total = await BackupService.get_config_snapshots(
-        current_user["org_id"], page, page_size,
+        current_user["org_id"],
+        page,
+        page_size,
     )
     return ConfigSnapshotListResponse(
         snapshots=[ConfigSnapshot(**s) for s in snapshots],
@@ -65,7 +67,8 @@ async def restore_config(
     session: AsyncSession = Depends(get_session),
 ):
     result = await BackupService.restore_config(
-        current_user["org_id"], body.restore_point or "latest",
+        current_user["org_id"],
+        body.restore_point or "latest",
     )
     return RestoreResponse(**result)
 
@@ -108,6 +111,7 @@ async def update_backup_settings(
         errors.append("Cloud SQL snapshot retention must be at least 30 days")
     if errors:
         from fastapi import HTTPException
+
         raise HTTPException(400, detail="; ".join(errors))
 
     return {"status": "updated", "settings": body.model_dump(exclude_unset=True)}

@@ -25,9 +25,15 @@ async def list_activity_feed(
 ):
     org_id = current_user["org_id"]
     events, total = await ActivityFeedService.list_events(
-        session, org_id, page, page_size,
-        event_type=event_type, entity_type=entity_type, user_id=user_id,
-        start_date=start_date, end_date=end_date,
+        session,
+        org_id,
+        page,
+        page_size,
+        event_type=event_type,
+        entity_type=entity_type,
+        user_id=user_id,
+        start_date=start_date,
+        end_date=end_date,
     )
     return ActivityFeedListResponse(
         events=[ActivityFeedItem.model_validate(e) for e in events],

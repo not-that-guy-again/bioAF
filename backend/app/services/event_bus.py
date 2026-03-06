@@ -34,15 +34,11 @@ class EventBus:
         tasks = [self._safe_invoke(cb, event_type, payload) for cb in callbacks]
         await asyncio.gather(*tasks)
 
-    async def _safe_invoke(
-        self, callback: EventCallback, event_type: str, payload: dict[str, Any]
-    ) -> None:
+    async def _safe_invoke(self, callback: EventCallback, event_type: str, payload: dict[str, Any]) -> None:
         try:
             await callback(payload)
         except Exception:
-            logger.exception(
-                "Subscriber %s failed for event %s", callback.__qualname__, event_type
-            )
+            logger.exception("Subscriber %s failed for event %s", callback.__qualname__, event_type)
 
     def clear(self) -> None:
         self._subscribers.clear()

@@ -152,18 +152,24 @@ class PipelineRunService:
             logger.error("Pipeline launch failed for run %d: %s", run.id, e)
 
             import asyncio
-            asyncio.create_task(event_bus.emit(PIPELINE_FAILED, {
-                "event_type": PIPELINE_FAILED,
-                "org_id": org_id,
-                "user_id": user_id,
-                "target_user_id": user_id,
-                "entity_type": "pipeline_run",
-                "entity_id": run.id,
-                "title": f"Pipeline '{pipeline.name}' failed to launch",
-                "message": str(e),
-                "severity": "critical",
-                "summary": f"Pipeline run {run.id} failed to launch",
-            }))
+
+            asyncio.create_task(
+                event_bus.emit(
+                    PIPELINE_FAILED,
+                    {
+                        "event_type": PIPELINE_FAILED,
+                        "org_id": org_id,
+                        "user_id": user_id,
+                        "target_user_id": user_id,
+                        "entity_type": "pipeline_run",
+                        "entity_id": run.id,
+                        "title": f"Pipeline '{pipeline.name}' failed to launch",
+                        "message": str(e),
+                        "severity": "critical",
+                        "summary": f"Pipeline run {run.id} failed to launch",
+                    },
+                )
+            )
 
         await session.flush()
 

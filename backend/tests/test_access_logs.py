@@ -28,12 +28,22 @@ async def test_list_access_logs_with_data(client: AsyncClient, admin_token: str,
     from app.services.access_log_service import AccessLogService
 
     await AccessLogService.log_access(
-        session, admin_user.organization_id, admin_user.id,
-        "file", "123", "download", {"filename": "data.csv"},
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "file",
+        "123",
+        "download",
+        {"filename": "data.csv"},
     )
     await AccessLogService.log_access(
-        session, admin_user.organization_id, admin_user.id,
-        "notebook", "456", "session", {"notebook_name": "analysis.ipynb"},
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "notebook",
+        "456",
+        "session",
+        {"notebook_name": "analysis.ipynb"},
     )
     await session.commit()
 
@@ -51,12 +61,20 @@ async def test_filter_access_logs_by_resource_type(client: AsyncClient, admin_to
     from app.services.access_log_service import AccessLogService
 
     await AccessLogService.log_access(
-        session, admin_user.organization_id, admin_user.id,
-        "file", "1", "download",
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "file",
+        "1",
+        "download",
     )
     await AccessLogService.log_access(
-        session, admin_user.organization_id, admin_user.id,
-        "notebook", "2", "session",
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "notebook",
+        "2",
+        "session",
     )
     await session.commit()
 

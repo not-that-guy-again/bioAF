@@ -69,9 +69,7 @@ class AccessLogService:
         total = count_result.scalar() or 0
 
         result = await session.execute(
-            base.order_by(AccessLog.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
+            base.order_by(AccessLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
         )
         logs = list(result.scalars().all())
         return logs, total

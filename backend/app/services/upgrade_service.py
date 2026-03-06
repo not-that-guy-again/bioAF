@@ -58,7 +58,10 @@ class UpgradeService:
 
     @staticmethod
     async def get_upgrade_history(
-        session: AsyncSession, org_id: int, page: int = 1, page_size: int = 20,
+        session: AsyncSession,
+        org_id: int,
+        page: int = 1,
+        page_size: int = 20,
     ) -> tuple[list[UpgradeHistory], int]:
         count_result = await session.execute(
             select(func.count(UpgradeHistory.id)).where(
@@ -79,7 +82,10 @@ class UpgradeService:
 
     @staticmethod
     async def start_upgrade(
-        session: AsyncSession, org_id: int, target_version: str, user_id: int,
+        session: AsyncSession,
+        org_id: int,
+        target_version: str,
+        user_id: int,
     ) -> UpgradeHistory:
         """Initiate upgrade: create upgrade_history record with plan."""
         current = settings.app_version
@@ -98,7 +104,9 @@ class UpgradeService:
 
     @staticmethod
     async def confirm_upgrade(
-        session: AsyncSession, org_id: int, upgrade_id: int,
+        session: AsyncSession,
+        org_id: int,
+        upgrade_id: int,
     ) -> UpgradeHistory:
         """Confirm and execute upgrade."""
         result = await session.execute(
@@ -122,7 +130,10 @@ class UpgradeService:
 
     @staticmethod
     async def rollback(
-        session: AsyncSession, org_id: int, upgrade_id: int, user_id: int,
+        session: AsyncSession,
+        org_id: int,
+        upgrade_id: int,
+        user_id: int,
     ) -> UpgradeHistory:
         """Rollback an upgrade."""
         result = await session.execute(
@@ -150,11 +161,16 @@ class UpgradeService:
         """Daily version check, emits event if new version found."""
         result = await UpgradeService.check_for_updates(org_id)
         if result.get("update_available"):
-            asyncio.create_task(event_bus.emit(PLATFORM_UPDATE_AVAILABLE, {
-                "event_type": PLATFORM_UPDATE_AVAILABLE,
-                "org_id": org_id,
-                "title": f"Platform update available: {result['latest_version']}",
-                "message": f"A new version ({result['latest_version']}) is available. Current: {result['current_version']}",
-                "severity": "info",
-                "summary": f"Update available: {result['latest_version']}",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    PLATFORM_UPDATE_AVAILABLE,
+                    {
+                        "event_type": PLATFORM_UPDATE_AVAILABLE,
+                        "org_id": org_id,
+                        "title": f"Platform update available: {result['latest_version']}",
+                        "message": f"A new version ({result['latest_version']}) is available. Current: {result['current_version']}",
+                        "severity": "info",
+                        "summary": f"Update available: {result['latest_version']}",
+                    },
+                )
+            )

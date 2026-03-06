@@ -17,69 +17,79 @@ class BackupService:
         tiers = []
 
         # Cloud SQL
-        tiers.append({
-            "tier": "cloud_sql",
-            "name": "Cloud SQL (PostgreSQL)",
-            "last_backup": (now - timedelta(hours=6)).isoformat(),
-            "size_bytes": 524288000,
-            "next_scheduled": (now + timedelta(hours=18)).isoformat(),
-            "retention_days": 30,
-            "status": "healthy",
-            "pitr_window_hours": 168,
-            "versioning_enabled": None,
-        })
+        tiers.append(
+            {
+                "tier": "cloud_sql",
+                "name": "Cloud SQL (PostgreSQL)",
+                "last_backup": (now - timedelta(hours=6)).isoformat(),
+                "size_bytes": 524288000,
+                "next_scheduled": (now + timedelta(hours=18)).isoformat(),
+                "retention_days": 30,
+                "status": "healthy",
+                "pitr_window_hours": 168,
+                "versioning_enabled": None,
+            }
+        )
 
         # Filestore
-        tiers.append({
-            "tier": "filestore",
-            "name": "Filestore NFS Snapshots",
-            "last_backup": (now - timedelta(hours=12)).isoformat(),
-            "size_bytes": None,
-            "next_scheduled": (now + timedelta(hours=12)).isoformat(),
-            "retention_days": 14,
-            "status": "healthy",
-            "pitr_window_hours": None,
-            "versioning_enabled": None,
-        })
+        tiers.append(
+            {
+                "tier": "filestore",
+                "name": "Filestore NFS Snapshots",
+                "last_backup": (now - timedelta(hours=12)).isoformat(),
+                "size_bytes": None,
+                "next_scheduled": (now + timedelta(hours=12)).isoformat(),
+                "retention_days": 14,
+                "status": "healthy",
+                "pitr_window_hours": None,
+                "versioning_enabled": None,
+            }
+        )
 
         # GCS
-        tiers.append({
-            "tier": "gcs",
-            "name": "GCS Object Versioning",
-            "last_backup": None,
-            "size_bytes": None,
-            "next_scheduled": None,
-            "retention_days": None,
-            "status": "healthy",
-            "pitr_window_hours": None,
-            "versioning_enabled": True,
-        })
+        tiers.append(
+            {
+                "tier": "gcs",
+                "name": "GCS Object Versioning",
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": None,
+                "status": "healthy",
+                "pitr_window_hours": None,
+                "versioning_enabled": True,
+            }
+        )
 
         # Platform Config
-        tiers.append({
-            "tier": "platform_config",
-            "name": "Platform Configuration",
-            "last_backup": (now - timedelta(hours=8)).isoformat(),
-            "size_bytes": 102400,
-            "next_scheduled": (now + timedelta(hours=16)).isoformat(),
-            "retention_days": 365,
-            "status": "healthy",
-            "pitr_window_hours": None,
-            "versioning_enabled": None,
-        })
+        tiers.append(
+            {
+                "tier": "platform_config",
+                "name": "Platform Configuration",
+                "last_backup": (now - timedelta(hours=8)).isoformat(),
+                "size_bytes": 102400,
+                "next_scheduled": (now + timedelta(hours=16)).isoformat(),
+                "retention_days": 365,
+                "status": "healthy",
+                "pitr_window_hours": None,
+                "versioning_enabled": None,
+            }
+        )
 
         # Terraform State
-        tiers.append({
-            "tier": "terraform_state",
-            "name": "Terraform State",
-            "last_backup": None,
-            "size_bytes": None,
-            "next_scheduled": None,
-            "retention_days": None,
-            "status": "healthy",
-            "pitr_window_hours": None,
-            "versioning_enabled": True,
-        })
+        tiers.append(
+            {
+                "tier": "terraform_state",
+                "name": "Terraform State",
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": None,
+                "status": "healthy",
+                "pitr_window_hours": None,
+                "versioning_enabled": True,
+            }
+        )
 
         all_healthy = all(t["status"] == "healthy" for t in tiers)
         return {
@@ -99,12 +109,14 @@ class BackupService:
                 tier = "weekly"
             if i % 30 == 0 and i > 0:
                 tier = "monthly"
-            snapshots.append({
-                "date": d.strftime("%Y-%m-%d"),
-                "size_bytes": 102400 + i * 1024,
-                "tier": tier,
-            })
-        return snapshots[(page - 1) * page_size: page * page_size], 30
+            snapshots.append(
+                {
+                    "date": d.strftime("%Y-%m-%d"),
+                    "size_bytes": 102400 + i * 1024,
+                    "tier": tier,
+                }
+            )
+        return snapshots[(page - 1) * page_size : page * page_size], 30
 
     @staticmethod
     async def get_config_snapshot_diff(org_id: int, snapshot_date: str) -> dict:
@@ -136,12 +148,18 @@ class BackupService:
                 last = datetime.fromisoformat(tier["last_backup"])
                 if (now - last).total_seconds() > 86400:
                     import asyncio
-                    asyncio.create_task(event_bus.emit(BACKUP_FAILURE, {
-                        "event_type": BACKUP_FAILURE,
-                        "org_id": org_id,
-                        "entity_type": "backup",
-                        "title": f"Backup overdue: {tier['name']}",
-                        "message": f"Last backup was {(now - last).total_seconds() / 3600:.1f} hours ago",
-                        "severity": "critical",
-                        "summary": f"Backup overdue for {tier['name']}",
-                    }))
+
+                    asyncio.create_task(
+                        event_bus.emit(
+                            BACKUP_FAILURE,
+                            {
+                                "event_type": BACKUP_FAILURE,
+                                "org_id": org_id,
+                                "entity_type": "backup",
+                                "title": f"Backup overdue: {tier['name']}",
+                                "message": f"Last backup was {(now - last).total_seconds() / 3600:.1f} hours ago",
+                                "severity": "critical",
+                                "summary": f"Backup overdue for {tier['name']}",
+                            },
+                        )
+                    )

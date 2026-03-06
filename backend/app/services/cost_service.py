@@ -96,7 +96,10 @@ class CostService:
 
     @staticmethod
     async def get_cost_history(
-        session: AsyncSession, org_id: int, start_date: date, end_date: date,
+        session: AsyncSession,
+        org_id: int,
+        start_date: date,
+        end_date: date,
     ) -> tuple[list[dict], Decimal]:
         result = await session.execute(
             select(
@@ -124,26 +127,29 @@ class CostService:
 
     @staticmethod
     async def get_budget_config(session: AsyncSession, org_id: int) -> BudgetConfig | None:
-        result = await session.execute(
-            select(BudgetConfig).where(BudgetConfig.organization_id == org_id)
-        )
+        result = await session.execute(select(BudgetConfig).where(BudgetConfig.organization_id == org_id))
         return result.scalar_one_or_none()
 
     @staticmethod
     async def update_budget_config(
-        session: AsyncSession, org_id: int, data: dict,
+        session: AsyncSession,
+        org_id: int,
+        data: dict,
     ) -> BudgetConfig:
-        result = await session.execute(
-            select(BudgetConfig).where(BudgetConfig.organization_id == org_id)
-        )
+        result = await session.execute(select(BudgetConfig).where(BudgetConfig.organization_id == org_id))
         config = result.scalar_one_or_none()
 
         if not config:
             config = BudgetConfig(organization_id=org_id)
             session.add(config)
 
-        for key in ["monthly_budget", "threshold_50_enabled", "threshold_80_enabled",
-                     "threshold_100_enabled", "scale_to_zero_on_100"]:
+        for key in [
+            "monthly_budget",
+            "threshold_50_enabled",
+            "threshold_80_enabled",
+            "threshold_100_enabled",
+            "scale_to_zero_on_100",
+        ]:
             if key in data and data[key] is not None:
                 setattr(config, key, data[key])
 
@@ -171,29 +177,44 @@ class CostService:
         usage_pct = float(current_spend) / float(config.monthly_budget) * 100
 
         if usage_pct >= 100 and config.threshold_100_enabled:
-            asyncio.create_task(event_bus.emit(BUDGET_THRESHOLD_100, {
-                "event_type": BUDGET_THRESHOLD_100,
-                "org_id": org_id,
-                "title": "Budget limit reached (100%)",
-                "message": f"Spend ${current_spend:.2f} has reached the ${config.monthly_budget:.2f} monthly budget",
-                "severity": "critical",
-                "summary": f"Monthly budget 100% reached: ${current_spend:.2f}/${config.monthly_budget:.2f}",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    BUDGET_THRESHOLD_100,
+                    {
+                        "event_type": BUDGET_THRESHOLD_100,
+                        "org_id": org_id,
+                        "title": "Budget limit reached (100%)",
+                        "message": f"Spend ${current_spend:.2f} has reached the ${config.monthly_budget:.2f} monthly budget",
+                        "severity": "critical",
+                        "summary": f"Monthly budget 100% reached: ${current_spend:.2f}/${config.monthly_budget:.2f}",
+                    },
+                )
+            )
         elif usage_pct >= 80 and config.threshold_80_enabled:
-            asyncio.create_task(event_bus.emit(BUDGET_THRESHOLD_80, {
-                "event_type": BUDGET_THRESHOLD_80,
-                "org_id": org_id,
-                "title": f"Budget at {usage_pct:.0f}%",
-                "message": f"Spend ${current_spend:.2f} of ${config.monthly_budget:.2f} monthly budget",
-                "severity": "warning",
-                "summary": f"Monthly budget at {usage_pct:.0f}%",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    BUDGET_THRESHOLD_80,
+                    {
+                        "event_type": BUDGET_THRESHOLD_80,
+                        "org_id": org_id,
+                        "title": f"Budget at {usage_pct:.0f}%",
+                        "message": f"Spend ${current_spend:.2f} of ${config.monthly_budget:.2f} monthly budget",
+                        "severity": "warning",
+                        "summary": f"Monthly budget at {usage_pct:.0f}%",
+                    },
+                )
+            )
         elif usage_pct >= 50 and config.threshold_50_enabled:
-            asyncio.create_task(event_bus.emit(BUDGET_THRESHOLD_50, {
-                "event_type": BUDGET_THRESHOLD_50,
-                "org_id": org_id,
-                "title": f"Budget at {usage_pct:.0f}%",
-                "message": f"Spend ${current_spend:.2f} of ${config.monthly_budget:.2f} monthly budget",
-                "severity": "info",
-                "summary": f"Monthly budget at {usage_pct:.0f}%",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    BUDGET_THRESHOLD_50,
+                    {
+                        "event_type": BUDGET_THRESHOLD_50,
+                        "org_id": org_id,
+                        "title": f"Budget at {usage_pct:.0f}%",
+                        "message": f"Spend ${current_spend:.2f} of ${config.monthly_budget:.2f} monthly budget",
+                        "severity": "info",
+                        "summary": f"Monthly budget at {usage_pct:.0f}%",
+                    },
+                )
+            )

@@ -28,14 +28,22 @@ async def test_activity_feed_with_data(client: AsyncClient, admin_token: str, ad
     from app.services.activity_feed_service import ActivityFeedService
 
     await ActivityFeedService.add_event(
-        session, admin_user.organization_id, admin_user.id,
-        "experiment.status_changed", "Experiment EXP-001 moved to sequencing",
-        entity_type="experiment", entity_id=1,
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "experiment.status_changed",
+        "Experiment EXP-001 moved to sequencing",
+        entity_type="experiment",
+        entity_id=1,
     )
     await ActivityFeedService.add_event(
-        session, admin_user.organization_id, admin_user.id,
-        "pipeline.completed", "Pipeline RNA-seq completed successfully",
-        entity_type="pipeline_run", entity_id=5,
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "pipeline.completed",
+        "Pipeline RNA-seq completed successfully",
+        entity_type="pipeline_run",
+        entity_id=5,
     )
     await session.commit()
 
@@ -53,12 +61,18 @@ async def test_filter_activity_feed_by_event_type(client: AsyncClient, admin_tok
     from app.services.activity_feed_service import ActivityFeedService
 
     await ActivityFeedService.add_event(
-        session, admin_user.organization_id, admin_user.id,
-        "pipeline.completed", "Pipeline done",
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "pipeline.completed",
+        "Pipeline done",
     )
     await ActivityFeedService.add_event(
-        session, admin_user.organization_id, admin_user.id,
-        "experiment.status_changed", "Experiment updated",
+        session,
+        admin_user.organization_id,
+        admin_user.id,
+        "experiment.status_changed",
+        "Experiment updated",
     )
     await session.commit()
 

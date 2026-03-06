@@ -164,17 +164,22 @@ class TerraformService:
                 logger.warning("Failed to commit tfvars to GitOps: %s", e)
 
         if run.status == "failed":
-            asyncio.create_task(event_bus.emit(TERRAFORM_APPLY_FAILURE, {
-                "event_type": TERRAFORM_APPLY_FAILURE,
-                "org_id": 1,  # Terraform runs are global
-                "user_id": user_id,
-                "entity_type": "terraform_run",
-                "entity_id": run.id,
-                "title": f"Terraform apply failed for {run.component_key or 'infrastructure'}",
-                "message": run.error_message or "Unknown error",
-                "severity": "critical",
-                "summary": f"Terraform apply failed for {run.component_key or 'infrastructure'}",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    TERRAFORM_APPLY_FAILURE,
+                    {
+                        "event_type": TERRAFORM_APPLY_FAILURE,
+                        "org_id": 1,  # Terraform runs are global
+                        "user_id": user_id,
+                        "entity_type": "terraform_run",
+                        "entity_id": run.id,
+                        "title": f"Terraform apply failed for {run.component_key or 'infrastructure'}",
+                        "message": run.error_message or "Unknown error",
+                        "severity": "critical",
+                        "summary": f"Terraform apply failed for {run.component_key or 'infrastructure'}",
+                    },
+                )
+            )
 
         await log_action(
             session,

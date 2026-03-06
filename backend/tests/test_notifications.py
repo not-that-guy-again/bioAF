@@ -183,10 +183,12 @@ async def test_preferences_crud(client: AsyncClient, admin_token: str):
     # Update
     response = await client.put(
         "/api/notifications/preferences",
-        json={"preferences": [
-            {"event_type": "pipeline.completed", "channel": "email", "enabled": True},
-            {"event_type": "pipeline.failed", "channel": "slack", "enabled": False},
-        ]},
+        json={
+            "preferences": [
+                {"event_type": "pipeline.completed", "channel": "email", "enabled": True},
+                {"event_type": "pipeline.failed", "channel": "slack", "enabled": False},
+            ]
+        },
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 200
@@ -211,9 +213,11 @@ async def test_rules_crud_admin(client: AsyncClient, admin_token: str):
 
     response = await client.put(
         "/api/notifications/rules",
-        json={"rules": [
-            {"event_type": "backup.failure", "channel": "email", "role_filter": "admin", "mandatory": True},
-        ]},
+        json={
+            "rules": [
+                {"event_type": "backup.failure", "channel": "email", "role_filter": "admin", "mandatory": True},
+            ]
+        },
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 200

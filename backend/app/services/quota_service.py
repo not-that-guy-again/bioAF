@@ -69,21 +69,26 @@ class QuotaService:
 
         projected = float(quota.cpu_hours_used_current_month) + estimated_hours
         if projected > quota.cpu_hours_monthly_limit:
-            asyncio.create_task(event_bus.emit(QUOTA_WARNING, {
-                "event_type": QUOTA_WARNING,
-                "org_id": quota.organization_id,
-                "user_id": user_id,
-                "target_user_id": user_id,
-                "entity_type": "user_quota",
-                "entity_id": quota.id,
-                "title": "Compute quota exceeded",
-                "message": (
-                    f"Used {float(quota.cpu_hours_used_current_month):.1f} of "
-                    f"{quota.cpu_hours_monthly_limit} CPU-hours this month"
-                ),
-                "severity": "warning",
-                "summary": f"User quota exceeded ({float(quota.cpu_hours_used_current_month):.1f}/{quota.cpu_hours_monthly_limit} CPU-hours)",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    QUOTA_WARNING,
+                    {
+                        "event_type": QUOTA_WARNING,
+                        "org_id": quota.organization_id,
+                        "user_id": user_id,
+                        "target_user_id": user_id,
+                        "entity_type": "user_quota",
+                        "entity_id": quota.id,
+                        "title": "Compute quota exceeded",
+                        "message": (
+                            f"Used {float(quota.cpu_hours_used_current_month):.1f} of "
+                            f"{quota.cpu_hours_monthly_limit} CPU-hours this month"
+                        ),
+                        "severity": "warning",
+                        "summary": f"User quota exceeded ({float(quota.cpu_hours_used_current_month):.1f}/{quota.cpu_hours_monthly_limit} CPU-hours)",
+                    },
+                )
+            )
             return False, (
                 f"Would exceed monthly limit: {float(quota.cpu_hours_used_current_month):.1f} used "
                 f"+ {estimated_hours:.1f} estimated = {projected:.1f} / {quota.cpu_hours_monthly_limit} limit"
@@ -92,21 +97,26 @@ class QuotaService:
         # Warn at 80% usage
         usage_pct = float(quota.cpu_hours_used_current_month) / quota.cpu_hours_monthly_limit
         if usage_pct >= 0.8:
-            asyncio.create_task(event_bus.emit(QUOTA_WARNING, {
-                "event_type": QUOTA_WARNING,
-                "org_id": quota.organization_id,
-                "user_id": user_id,
-                "target_user_id": user_id,
-                "entity_type": "user_quota",
-                "entity_id": quota.id,
-                "title": f"Compute quota at {usage_pct:.0%}",
-                "message": (
-                    f"Used {float(quota.cpu_hours_used_current_month):.1f} of "
-                    f"{quota.cpu_hours_monthly_limit} CPU-hours this month"
-                ),
-                "severity": "warning",
-                "summary": f"User quota at {usage_pct:.0%}",
-            }))
+            asyncio.create_task(
+                event_bus.emit(
+                    QUOTA_WARNING,
+                    {
+                        "event_type": QUOTA_WARNING,
+                        "org_id": quota.organization_id,
+                        "user_id": user_id,
+                        "target_user_id": user_id,
+                        "entity_type": "user_quota",
+                        "entity_id": quota.id,
+                        "title": f"Compute quota at {usage_pct:.0%}",
+                        "message": (
+                            f"Used {float(quota.cpu_hours_used_current_month):.1f} of "
+                            f"{quota.cpu_hours_monthly_limit} CPU-hours this month"
+                        ),
+                        "severity": "warning",
+                        "summary": f"User quota at {usage_pct:.0%}",
+                    },
+                )
+            )
 
         return True, "Within quota"
 

@@ -58,7 +58,9 @@ class NotificationService:
     @staticmethod
     async def get_unread_count(session: AsyncSession, user_id: int) -> int:
         result = await session.execute(
-            select(func.count()).select_from(Notification).where(
+            select(func.count())
+            .select_from(Notification)
+            .where(
                 Notification.user_id == user_id,
                 Notification.read == False,  # noqa: E712
             )
@@ -112,9 +114,7 @@ class NotificationService:
 
     @staticmethod
     async def get_preferences(session: AsyncSession, user_id: int) -> list[NotificationPreference]:
-        result = await session.execute(
-            select(NotificationPreference).where(NotificationPreference.user_id == user_id)
-        )
+        result = await session.execute(select(NotificationPreference).where(NotificationPreference.user_id == user_id))
         return list(result.scalars().all())
 
     @staticmethod
@@ -124,9 +124,7 @@ class NotificationService:
         preferences: list[dict],
     ) -> list[NotificationPreference]:
         # Delete existing preferences for this user
-        await session.execute(
-            delete(NotificationPreference).where(NotificationPreference.user_id == user_id)
-        )
+        await session.execute(delete(NotificationPreference).where(NotificationPreference.user_id == user_id))
 
         # Insert new preferences
         new_prefs = []
@@ -147,9 +145,7 @@ class NotificationService:
 
     @staticmethod
     async def get_rules(session: AsyncSession, org_id: int) -> list[NotificationRule]:
-        result = await session.execute(
-            select(NotificationRule).where(NotificationRule.organization_id == org_id)
-        )
+        result = await session.execute(select(NotificationRule).where(NotificationRule.organization_id == org_id))
         return list(result.scalars().all())
 
     @staticmethod
@@ -159,9 +155,7 @@ class NotificationService:
         rules: list[dict],
     ) -> list[NotificationRule]:
         # Delete existing rules for this org
-        await session.execute(
-            delete(NotificationRule).where(NotificationRule.organization_id == org_id)
-        )
+        await session.execute(delete(NotificationRule).where(NotificationRule.organization_id == org_id))
 
         new_rules = []
         for rule in rules:
@@ -183,9 +177,7 @@ class NotificationService:
 
     @staticmethod
     async def list_webhooks(session: AsyncSession, org_id: int) -> list[SlackWebhook]:
-        result = await session.execute(
-            select(SlackWebhook).where(SlackWebhook.organization_id == org_id)
-        )
+        result = await session.execute(select(SlackWebhook).where(SlackWebhook.organization_id == org_id))
         return list(result.scalars().all())
 
     @staticmethod
@@ -204,7 +196,10 @@ class NotificationService:
 
     @staticmethod
     async def update_webhook(
-        session: AsyncSession, webhook_id: int, org_id: int, data: dict,
+        session: AsyncSession,
+        webhook_id: int,
+        org_id: int,
+        data: dict,
     ) -> SlackWebhook | None:
         result = await session.execute(
             select(SlackWebhook).where(
@@ -249,7 +244,9 @@ class NotificationService:
 
     @staticmethod
     async def test_delivery(
-        session: AsyncSession, org_id: int, channel: str,
+        session: AsyncSession,
+        org_id: int,
+        channel: str,
     ) -> dict:
         title = "bioAF Test Notification"
         message = "This is a test notification from your bioAF platform."
@@ -281,10 +278,12 @@ class NotificationService:
                     message=message,
                     severity=severity,
                 )
-                results.append({
-                    "webhook": webhook.name,
-                    "status": "sent" if success else "failed",
-                })
+                results.append(
+                    {
+                        "webhook": webhook.name,
+                        "status": "sent" if success else "failed",
+                    }
+                )
             return {"channel": "slack", "status": "sent", "webhooks": results}
 
         return {"channel": channel, "status": "unknown_channel"}
@@ -301,9 +300,7 @@ class NotificationService:
             Notification.created_at < cutoff,
         )
         await session.execute(
-            delete(NotificationDeliveryLog).where(
-                NotificationDeliveryLog.notification_id.in_(old_notifications)
-            )
+            delete(NotificationDeliveryLog).where(NotificationDeliveryLog.notification_id.in_(old_notifications))
         )
 
         result = await session.execute(

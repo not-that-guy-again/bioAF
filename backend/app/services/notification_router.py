@@ -114,20 +114,30 @@ class NotificationRouter:
                             severity=severity,
                         )
                         await self._log_delivery(
-                            session, notification.id, "email",
+                            session,
+                            notification.id,
+                            "email",
                             "sent" if success else "failed",
                         )
                     elif rule.channel == "slack":
                         await self._deliver_slack(
-                            session, org_id, event_type, notification.id,
-                            title, message, severity,
+                            session,
+                            org_id,
+                            event_type,
+                            notification.id,
+                            title,
+                            message,
+                            severity,
                         )
 
             await session.commit()
 
     async def _resolve_recipients(
-        self, session: AsyncSession, org_id: int,
-        rules: list[NotificationRule], payload: dict[str, Any],
+        self,
+        session: AsyncSession,
+        org_id: int,
+        rules: list[NotificationRule],
+        payload: dict[str, Any],
     ) -> list[User]:
         """Resolve unique set of users who should receive the notification."""
         role_filters = set()
@@ -155,9 +165,7 @@ class NotificationRouter:
         if target_user_id:
             existing_ids = {u.id for u in recipients}
             if target_user_id not in existing_ids:
-                user_result = await session.execute(
-                    select(User).where(User.id == target_user_id)
-                )
+                user_result = await session.execute(select(User).where(User.id == target_user_id))
                 target_user = user_result.scalar_one_or_none()
                 if target_user:
                     recipients.append(target_user)
@@ -165,7 +173,11 @@ class NotificationRouter:
         return recipients
 
     async def _check_preference(
-        self, session: AsyncSession, user_id: int, event_type: str, channel: str,
+        self,
+        session: AsyncSession,
+        user_id: int,
+        event_type: str,
+        channel: str,
     ) -> bool:
         """Check if user has opted in/out for this event+channel. Default is enabled."""
         result = await session.execute(
@@ -181,8 +193,14 @@ class NotificationRouter:
         return pref.enabled
 
     async def _deliver_slack(
-        self, session: AsyncSession, org_id: int, event_type: str,
-        notification_id: int, title: str, message: str, severity: str,
+        self,
+        session: AsyncSession,
+        org_id: int,
+        event_type: str,
+        notification_id: int,
+        title: str,
+        message: str,
+        severity: str,
     ) -> None:
         """Deliver to all matching Slack webhooks for the org."""
         result = await session.execute(
@@ -205,13 +223,18 @@ class NotificationRouter:
                 severity=severity,
             )
             await self._log_delivery(
-                session, notification_id, "slack",
+                session,
+                notification_id,
+                "slack",
                 "sent" if success else "failed",
             )
 
     async def _log_delivery(
-        self, session: AsyncSession, notification_id: int,
-        channel: str, status: str,
+        self,
+        session: AsyncSession,
+        notification_id: int,
+        channel: str,
+        status: str,
     ) -> None:
         log = NotificationDeliveryLog(
             notification_id=notification_id,

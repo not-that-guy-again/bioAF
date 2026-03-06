@@ -145,6 +145,7 @@ async def test_upgrade_history_after_upgrade(client: AsyncClient, admin_token: s
 async def test_version_check_service():
     """Test version check returns valid data."""
     from app.services.upgrade_service import UpgradeService
+
     result = await UpgradeService.check_for_updates(1)
     assert "current_version" in result
     assert "update_available" in result

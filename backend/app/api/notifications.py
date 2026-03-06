@@ -34,7 +34,13 @@ async def list_notifications(
     session: AsyncSession = Depends(get_session),
 ):
     notifications, total = await NotificationService.list_notifications(
-        session, int(current_user["sub"]), read, event_type, severity, page, page_size,
+        session,
+        int(current_user["sub"]),
+        read,
+        event_type,
+        severity,
+        page,
+        page_size,
     )
     return NotificationListResponse(
         notifications=[NotificationResponse.model_validate(n) for n in notifications],
@@ -91,6 +97,7 @@ async def delete_notification(
 
 # ---- Preferences ----
 
+
 @router.get("/preferences", response_model=list[NotificationPreferenceResponse])
 async def get_preferences(
     current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
@@ -107,7 +114,8 @@ async def update_preferences(
     session: AsyncSession = Depends(get_session),
 ):
     prefs = await NotificationService.update_preferences(
-        session, int(current_user["sub"]),
+        session,
+        int(current_user["sub"]),
         [p.model_dump() for p in body.preferences],
     )
     await session.commit()
@@ -115,6 +123,7 @@ async def update_preferences(
 
 
 # ---- Rules (admin only) ----
+
 
 @router.get("/rules", response_model=list[NotificationRuleResponse])
 async def get_rules(
@@ -132,7 +141,8 @@ async def update_rules(
     session: AsyncSession = Depends(get_session),
 ):
     rules = await NotificationService.update_rules(
-        session, current_user["org_id"],
+        session,
+        current_user["org_id"],
         [r.model_dump() for r in body.rules],
     )
     await session.commit()
@@ -140,6 +150,7 @@ async def update_rules(
 
 
 # ---- Slack webhooks (admin only) ----
+
 
 @router.get("/slack-webhooks", response_model=list[SlackWebhookResponse])
 async def list_webhooks(
@@ -169,7 +180,9 @@ async def update_webhook(
     session: AsyncSession = Depends(get_session),
 ):
     webhook = await NotificationService.update_webhook(
-        session, webhook_id, current_user["org_id"],
+        session,
+        webhook_id,
+        current_user["org_id"],
         body.model_dump(exclude_unset=True),
     )
     if not webhook:
@@ -192,6 +205,7 @@ async def delete_webhook(
 
 
 # ---- Test delivery ----
+
 
 @router.post("/test", response_model=TestDeliveryResponse)
 async def test_delivery(

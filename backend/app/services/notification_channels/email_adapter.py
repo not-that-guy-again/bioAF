@@ -60,7 +60,11 @@ class EmailChannel:
                 backoff = BACKOFF_BASE ** (attempt * 2 + 1)
                 logger.warning(
                     "Email attempt %d/%d failed for %s: %s (backoff %ds)",
-                    attempt + 1, MAX_RETRIES, to, e, backoff,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    to,
+                    e,
+                    backoff,
                 )
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(backoff)

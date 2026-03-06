@@ -11,9 +11,9 @@ MAX_RETRIES = 3
 BACKOFF_BASE = 2  # seconds: 2, 8, 32
 
 SEVERITY_COLORS = {
-    "info": "#36a64f",     # green
+    "info": "#36a64f",  # green
     "warning": "#f2c744",  # yellow
-    "critical": "#e01e5a", # red
+    "critical": "#e01e5a",  # red
 }
 
 
@@ -55,7 +55,10 @@ class SlackChannel:
                 backoff = BACKOFF_BASE ** (attempt * 2 + 1)
                 logger.warning(
                     "Slack attempt %d/%d failed: %s (backoff %ds)",
-                    attempt + 1, MAX_RETRIES, e, backoff,
+                    attempt + 1,
+                    MAX_RETRIES,
+                    e,
+                    backoff,
                 )
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(backoff)

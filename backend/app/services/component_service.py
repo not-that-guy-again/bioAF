@@ -251,7 +251,11 @@ class ComponentService:
 
     @staticmethod
     async def report_health_issue(
-        session: AsyncSession, component_key: str, org_id: int, status: str, message: str,
+        session: AsyncSession,
+        component_key: str,
+        org_id: int,
+        status: str,
+        message: str,
     ) -> None:
         """Report a component health issue and emit the appropriate event."""
         catalog = COMPONENT_CATALOG.get(component_key, {})
@@ -264,12 +268,17 @@ class ComponentService:
             event_type = COMPONENT_HEALTH_DOWN
             severity = "critical"
 
-        asyncio.create_task(event_bus.emit(event_type, {
-            "event_type": event_type,
-            "org_id": org_id,
-            "entity_type": "component",
-            "title": f"{component_name} health {status}",
-            "message": message,
-            "severity": severity,
-            "summary": f"Component '{component_name}' is {status}: {message}",
-        }))
+        asyncio.create_task(
+            event_bus.emit(
+                event_type,
+                {
+                    "event_type": event_type,
+                    "org_id": org_id,
+                    "entity_type": "component",
+                    "title": f"{component_name} health {status}",
+                    "message": message,
+                    "severity": severity,
+                    "summary": f"Component '{component_name}' is {status}: {message}",
+                },
+            )
+        )

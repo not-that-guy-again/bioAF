@@ -25,9 +25,15 @@ async def list_access_logs(
 ):
     org_id = current_user["org_id"]
     logs, total = await AccessLogService.list_access_logs(
-        session, org_id, page, page_size,
-        user_id=user_id, resource_type=resource_type, action=action,
-        start_date=start_date, end_date=end_date,
+        session,
+        org_id,
+        page,
+        page_size,
+        user_id=user_id,
+        resource_type=resource_type,
+        action=action,
+        start_date=start_date,
+        end_date=end_date,
     )
     return AccessLogListResponse(
         logs=[AccessLogEntry.model_validate(entry) for entry in logs],

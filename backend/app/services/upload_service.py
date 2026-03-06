@@ -129,16 +129,21 @@ class UploadService:
         if experiment_id and file_type == "fastq":
             await UploadService._auto_update_experiment_status(session, experiment_id, org_id, pending["user_id"])
 
-        asyncio.create_task(event_bus.emit(DATA_UPLOADED, {
-            "event_type": DATA_UPLOADED,
-            "org_id": org_id,
-            "user_id": pending["user_id"],
-            "entity_type": "file",
-            "entity_id": file.id,
-            "title": f"File uploaded: {filename}",
-            "message": f"File '{filename}' ({file_type}) uploaded successfully",
-            "summary": f"File '{filename}' uploaded",
-        }))
+        asyncio.create_task(
+            event_bus.emit(
+                DATA_UPLOADED,
+                {
+                    "event_type": DATA_UPLOADED,
+                    "org_id": org_id,
+                    "user_id": pending["user_id"],
+                    "entity_type": "file",
+                    "entity_id": file.id,
+                    "title": f"File uploaded: {filename}",
+                    "message": f"File '{filename}' ({file_type}) uploaded successfully",
+                    "summary": f"File '{filename}' uploaded",
+                },
+            )
+        )
 
         return file
 
