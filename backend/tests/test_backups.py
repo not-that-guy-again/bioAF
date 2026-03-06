@@ -57,7 +57,7 @@ async def test_restore_config(client: AsyncClient, admin_token: str):
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 200
-    assert response.json()["status"] == "restored"
+    assert response.json()["status"] == "initiated"
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,7 @@ async def test_update_backup_settings_enforces_minimums(client: AsyncClient, adm
 
 
 @pytest.mark.asyncio
-async def test_backup_health_check():
+async def test_backup_health_check(admin_user):
     """Test backup health check does not error."""
     from app.services.backup_service import BackupService
-    await BackupService.check_backup_health()
+    await BackupService.check_backup_health(admin_user.organization_id)

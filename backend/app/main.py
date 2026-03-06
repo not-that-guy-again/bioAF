@@ -231,12 +231,22 @@ async def _notification_cleanup_loop():
 
 async def _backup_health_check_loop():
     """Check backup health every hour, emit events if backups are overdue."""
+    from app.database import async_session_factory
     from app.services.backup_service import BackupService
+    from app.models.organization import Organization
+    from sqlalchemy import select
 
     while True:
         try:
             await asyncio.sleep(3600)  # 1 hour
-            await BackupService.check_backup_health()
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await BackupService.check_backup_health(org.id)
+                    except Exception as e:
+                        logger.warning("Backup health check failed for org %d: %s", org.id, e)
         except asyncio.CancelledError:
             break
         except Exception as e:
