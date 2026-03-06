@@ -17,8 +17,12 @@ const navItems = [
   { label: "Templates", href: "/notebooks/templates", icon: "notebook", active: true, compBioOnly: true },
   { label: "Results", href: "/results", icon: "chart", active: true },
   { label: "Components", href: "/components", icon: "puzzle", active: true },
+  { label: "Activity Feed", href: "/activity", icon: "activity", active: true },
   { label: "Templates", href: "/admin/templates", icon: "template", active: true, adminOnly: true },
   { label: "Users & Roles", href: "/admin/users", icon: "users", active: true, adminOnly: true },
+  { label: "Backup & Recovery", href: "/admin/backups", icon: "shield", active: true, adminOnly: true },
+  { label: "Cost Center", href: "/admin/costs", icon: "dollar", active: true, adminOnly: true },
+  { label: "Access Logs", href: "/admin/access-logs", icon: "log", active: true, adminOnly: true },
   { label: "Settings", href: "/admin/settings", icon: "settings", active: true, adminOnly: true },
 ];
 

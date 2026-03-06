@@ -56,6 +56,14 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified")
 
+    # Initialize notification system
+    from app.database import async_session_factory as notif_session_factory
+    from app.services.notification_router import NotificationRouter
+
+    notification_router = NotificationRouter(notif_session_factory)
+    notification_router.register()
+    logger.info("Notification system initialized")
+
     logger.info("bioAF backend started successfully")
 
     # Start background tasks
@@ -67,6 +75,10 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_plot_archive_watcher_loop()))
     background_tasks.append(asyncio.create_task(_storage_stats_refresh_loop()))
     background_tasks.append(asyncio.create_task(_reconciler_loop()))
+    background_tasks.append(asyncio.create_task(_notification_cleanup_loop()))
+    background_tasks.append(asyncio.create_task(_backup_health_check_loop()))
+    background_tasks.append(asyncio.create_task(_cost_billing_sync_loop()))
+    background_tasks.append(asyncio.create_task(_version_check_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -200,6 +212,95 @@ async def _reconciler_loop():
             break
         except Exception as e:
             logger.error("Reconciler error: %s", e)
+
+
+async def _notification_cleanup_loop():
+    """Delete read notifications older than 90 days, runs once daily."""
+    from app.database import async_session_factory
+    from app.services.notification_service import NotificationService
+
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            async with async_session_factory() as session:
+                await NotificationService.cleanup_old_notifications(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Notification cleanup error: %s", e)
+
+
+async def _backup_health_check_loop():
+    """Check backup health every hour, emit events if backups are overdue."""
+    from app.database import async_session_factory
+    from app.services.backup_service import BackupService
+    from app.models.organization import Organization
+    from sqlalchemy import select
+
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 1 hour
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await BackupService.check_backup_health(org.id)
+                    except Exception as e:
+                        logger.warning("Backup health check failed for org %d: %s", org.id, e)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Backup health check error: %s", e)
+
+
+async def _cost_billing_sync_loop():
+    """Sync billing data daily and check budget thresholds."""
+    from app.database import async_session_factory
+    from app.services.cost_service import CostService
+    from app.models.organization import Organization
+    from sqlalchemy import select
+
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await CostService.sync_billing_data(session, org.id)
+                        await CostService.check_budget_thresholds(session, org.id)
+                    except Exception as e:
+                        logger.warning("Billing sync failed for org %d: %s", org.id, e)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Cost billing sync error: %s", e)
+
+
+async def _version_check_loop():
+    """Check for platform updates daily."""
+    from app.database import async_session_factory
+    from app.services.upgrade_service import UpgradeService
+    from app.models.organization import Organization
+    from sqlalchemy import select
+
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            async with async_session_factory() as session:
+                result = await session.execute(select(Organization))
+                orgs = list(result.scalars().all())
+                for org in orgs:
+                    try:
+                        await UpgradeService.background_version_check(org.id)
+                    except Exception as e:
+                        logger.warning("Version check failed for org %d: %s", org.id, e)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Version check error: %s", e)
 
 
 app = FastAPI(

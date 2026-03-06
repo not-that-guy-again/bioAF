@@ -1,0 +1,22 @@
+# Architecture Decision Records
+
+| ADR | Title | Summary |
+|-----|-------|---------|
+| [ADR-001](../decisions/ADR-001-gcp-only.md) | GCP-Only Infrastructure | Target GCP exclusively to reduce complexity and leverage managed services |
+| [ADR-002](../decisions/ADR-002-mandatory-optional-split.md) | Mandatory/Optional Component Split | Separate core platform from optional components for flexible deployment |
+| [ADR-003](../decisions/ADR-003-email-based-auth.md) | Email-Based Authentication | Use email/password auth with JWT tokens instead of OAuth/SSO for simplicity |
+| [ADR-004](../decisions/ADR-004-tiered-backup-strategy.md) | Tiered Backup Strategy | Multi-tier backup approach: Cloud SQL PITR, Filestore snapshots, GCS versioning, config exports |
+| [ADR-005](../decisions/ADR-005-github-based-upgrades.md) | GitHub-Based Upgrades | Use GitHub Releases for version checking and upgrade distribution |
+| [ADR-006](../decisions/ADR-006-experiment-tracking-as-foundation.md) | Experiment Tracking as Foundation | Build experiment lifecycle tracking as the core data model |
+| [ADR-007](../decisions/ADR-007-ui-driven-terraform.md) | UI-Driven Terraform | Users never touch HCL; all infrastructure changes through the web UI |
+| [ADR-008](../decisions/ADR-008-secret-manager.md) | Secret Manager Integration | Store all secrets in GCP Secret Manager, never in config files |
+| [ADR-009](../decisions/ADR-009-immutable-audit-log.md) | Immutable Audit Log | Append-only audit trail for compliance; no UPDATE or DELETE operations |
+| [ADR-010](../decisions/ADR-010-notification-system.md) | Notification System | In-process event bus with channel adapters (in-app, email, Slack) |
+| [ADR-011](../decisions/ADR-011-scrna-seq-initial-scope.md) | scRNA-seq Initial Scope | Focus on single-cell RNA-seq as the primary workflow |
+| [ADR-012](../decisions/ADR-012-data-portability.md) | Data Portability | All data accessible with standard tools after platform teardown |
+| [ADR-013](../decisions/ADR-013-minseqe-compliant-metadata.md) | MINSEQE-Compliant Metadata | Follow MINSEQE standards for experiment and sample metadata |
+| [ADR-014](../decisions/ADR-014-geo-export-service.md) | GEO Export Service | Support exporting data in GEO-compliant format |
+| [ADR-015](../decisions/ADR-015-analysis-snapshot-sdk.md) | Analysis Snapshot SDK | Capture reproducible analysis snapshots with environment and parameters |
+| [ADR-016](../decisions/ADR-016-snapshot-comparison-ui.md) | Snapshot Comparison UI | Visual diff tool for comparing analysis snapshots |
+| [ADR-017](../decisions/ADR-017-reference-data-management.md) | Reference Data Management | Centralized management of reference genomes and annotations |
+| [ADR-018](../decisions/ADR-018-cross-experiment-projects.md) | Cross-Experiment Projects | Group related experiments into projects for organization |

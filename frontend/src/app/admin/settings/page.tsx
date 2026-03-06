@@ -7,6 +7,32 @@ import { Header } from "@/components/layout/Header";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 
+interface SlackWebhook {
+  id: number;
+  name: string;
+  webhook_url: string;
+  channel_name: string | null;
+  event_types_json: string[];
+  enabled: boolean;
+}
+
+interface UpdateCheck {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
+  changelog: string | null;
+  release_url: string | null;
+}
+
+interface UpgradeHistoryItem {
+  id: number;
+  from_version: string;
+  to_version: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [smtpHost, setSmtpHost] = useState("");
@@ -17,10 +43,37 @@ export default function SettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // Slack webhooks
+  const [webhooks, setWebhooks] = useState<SlackWebhook[]>([]);
+  const [newWebhookName, setNewWebhookName] = useState("");
+  const [newWebhookUrl, setNewWebhookUrl] = useState("");
+  const [newWebhookChannel, setNewWebhookChannel] = useState("");
+
+  // Upgrade system
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheck | null>(null);
+  const [upgradeHistory, setUpgradeHistory] = useState<UpgradeHistoryItem[]>([]);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
     if (user?.role !== "admin") { router.push("/"); return; }
+
+    const load = async () => {
+      try {
+        const [wh, version, history] = await Promise.all([
+          api.get<SlackWebhook[]>("/api/notifications/slack-webhooks"),
+          api.get<UpdateCheck>("/api/upgrades/check"),
+          api.get<{ upgrades: UpgradeHistoryItem[] }>("/api/upgrades/history"),
+        ]);
+        setWebhooks(wh);
+        setUpdateCheck(version);
+        setUpgradeHistory(history.upgrades);
+      } catch {
+        // ignore
+      }
+    };
+    load();
   }, [router]);
 
   const handleSaveSmtp = async () => {
@@ -40,6 +93,54 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAddWebhook = async () => {
+    if (!newWebhookName || !newWebhookUrl) return;
+    try {
+      const wh = await api.post<SlackWebhook>("/api/notifications/slack-webhooks", {
+        name: newWebhookName,
+        webhook_url: newWebhookUrl,
+        channel_name: newWebhookChannel || null,
+        event_types: [],
+      });
+      setWebhooks([...webhooks, wh]);
+      setNewWebhookName("");
+      setNewWebhookUrl("");
+      setNewWebhookChannel("");
+    } catch {
+      setError("Failed to add webhook");
+    }
+  };
+
+  const handleDeleteWebhook = async (id: number) => {
+    try {
+      await api.delete(`/api/notifications/slack-webhooks/${id}`);
+      setWebhooks(webhooks.filter((w) => w.id !== id));
+    } catch {
+      setError("Failed to delete webhook");
+    }
+  };
+
+  const handleTestNotification = async (channel: string) => {
+    try {
+      await api.post("/api/notifications/test", { channel });
+      setMessage(`Test notification sent via ${channel}`);
+    } catch {
+      setError(`Failed to send test notification via ${channel}`);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const data = await api.get<UpdateCheck>("/api/upgrades/check");
+      setUpdateCheck(data);
+    } catch {
+      // ignore
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
   return (
     <div className="flex h-screen">
       <Sidebar />
@@ -48,13 +149,12 @@ export default function SettingsPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold mb-6">Admin Settings</h1>
 
+          {message && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">{message}</div>}
+          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">{error}</div>}
+
           {/* SMTP Configuration */}
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-lg font-semibold mb-4">SMTP Configuration</h2>
-
-            {message && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">{message}</div>}
-            {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">{error}</div>}
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Host</label>
@@ -82,16 +182,159 @@ export default function SettingsPage() {
             </button>
           </div>
 
-          {/* Slack Webhook Placeholder */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6 border-l-4 border-gray-300">
-            <h2 className="text-lg font-semibold text-gray-400">Slack Webhook</h2>
-            <p className="text-sm text-gray-400 mt-2">Full notification system coming in Phase 7</p>
+          {/* Slack Webhook Management */}
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Slack Webhooks</h2>
+              <button
+                onClick={() => handleTestNotification("slack")}
+                className="text-sm text-bioaf-600 hover:text-bioaf-700"
+              >
+                Test Slack
+              </button>
+            </div>
+
+            {webhooks.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {webhooks.map((wh) => (
+                  <div key={wh.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <div>
+                      <span className="font-medium text-sm">{wh.name}</span>
+                      {wh.channel_name && (
+                        <span className="ml-2 text-xs text-gray-500">{wh.channel_name}</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDeleteWebhook(wh.id)}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-3">
+              <input
+                type="text"
+                placeholder="Webhook name"
+                value={newWebhookName}
+                onChange={(e) => setNewWebhookName(e.target.value)}
+                className="px-3 py-2 border rounded text-sm"
+              />
+              <input
+                type="url"
+                placeholder="https://hooks.slack.com/..."
+                value={newWebhookUrl}
+                onChange={(e) => setNewWebhookUrl(e.target.value)}
+                className="px-3 py-2 border rounded text-sm"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="#channel"
+                  value={newWebhookChannel}
+                  onChange={(e) => setNewWebhookChannel(e.target.value)}
+                  className="flex-1 px-3 py-2 border rounded text-sm"
+                />
+                <button
+                  onClick={handleAddWebhook}
+                  className="px-3 py-2 bg-bioaf-600 text-white rounded text-sm hover:bg-bioaf-700"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <button onClick={() => handleTestNotification("in_app")} className="text-xs text-gray-500 hover:text-gray-700">
+                Test In-App
+              </button>
+              <button onClick={() => handleTestNotification("email")} className="text-xs text-gray-500 hover:text-gray-700">
+                Test Email
+              </button>
+            </div>
           </div>
 
-          {/* Version Info */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-lg font-semibold mb-2">Platform Info</h2>
-            <p className="text-sm text-gray-600">bioAF Version: <strong>0.1.0</strong></p>
+          {/* Platform Version & Upgrades */}
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 className="text-lg font-semibold mb-4">Platform Version</h2>
+
+            {updateCheck && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-600">Current Version:</span>
+                  <span className="font-mono font-bold">{updateCheck.current_version}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-600">Latest Version:</span>
+                  <span className="font-mono">{updateCheck.latest_version}</span>
+                </div>
+
+                {updateCheck.update_available && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-700">
+                    A new version ({updateCheck.latest_version}) is available!
+                    {updateCheck.release_url && (
+                      <a href={updateCheck.release_url} target="_blank" rel="noopener noreferrer" className="ml-2 underline">
+                        View release
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {updateCheck.changelog && (
+                  <div className="p-3 bg-gray-50 rounded">
+                    <h3 className="text-sm font-medium mb-1">Changelog</h3>
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">{updateCheck.changelog}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCheckUpdate}
+                  disabled={checkingUpdate}
+                  className="text-sm text-bioaf-600 hover:text-bioaf-700 disabled:opacity-50"
+                >
+                  {checkingUpdate ? "Checking..." : "Check for updates"}
+                </button>
+              </div>
+            )}
+
+            {/* Upgrade History */}
+            {upgradeHistory.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold mb-2">Upgrade History</h3>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left px-3 py-2 font-medium text-gray-700">From</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-700">To</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-700">Status</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-700">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {upgradeHistory.map((u) => (
+                      <tr key={u.id} className="border-b">
+                        <td className="px-3 py-2 font-mono">{u.from_version}</td>
+                        <td className="px-3 py-2 font-mono">{u.to_version}</td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            u.status === "completed" ? "bg-green-100 text-green-700" :
+                            u.status === "failed" ? "bg-red-100 text-red-700" :
+                            u.status === "rolled_back" ? "bg-yellow-100 text-yellow-700" :
+                            "bg-gray-100 text-gray-700"
+                          }`}>
+                            {u.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">{new Date(u.started_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </main>
       </div>
