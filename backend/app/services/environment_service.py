@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-from sqlalchemy import select, func as sa_func
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.environment import Environment, EnvironmentPackage

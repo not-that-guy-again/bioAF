@@ -5,7 +5,6 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.file import File
-from app.services.audit_service import log_action
 from app.services.file_service import FileService
 
 logger = logging.getLogger("bioaf.upload_service")

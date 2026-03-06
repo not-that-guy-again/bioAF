@@ -162,7 +162,6 @@ class GitOpsService:
         if defaults_dir.exists():
             for f in defaults_dir.iterdir():
                 if f.suffix == ".json":
-                    pipeline_key = f.stem.replace("-", "/", 1) if "nf-core" in f.stem else f.stem
                     dir_name = f.stem
                     files[f"pipelines/{dir_name}/bioaf-defaults.json"] = f.read_text()
 

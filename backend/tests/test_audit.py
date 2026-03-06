@@ -2,7 +2,6 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.audit_log import AuditLog
 from app.services.audit_service import log_action
 
 

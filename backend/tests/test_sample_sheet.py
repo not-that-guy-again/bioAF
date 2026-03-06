@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import MagicMock
 
 from app.services.sample_sheet_service import SampleSheetService

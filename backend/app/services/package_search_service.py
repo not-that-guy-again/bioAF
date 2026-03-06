@@ -51,7 +51,7 @@ class PackageSearchService:
     @staticmethod
     async def _search_conda(client: httpx.AsyncClient, query: str, limit: int) -> list[dict]:
         resp = await client.get(
-            f"https://api.anaconda.org/search",
+            "https://api.anaconda.org/search",
             params={"name": query, "type": "conda"},
         )
         if resp.status_code != 200:

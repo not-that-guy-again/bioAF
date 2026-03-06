@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.experiment import Experiment
-from app.models.pipeline_catalog_entry import PipelineCatalogEntry
 from app.models.pipeline_run import PipelineRun, PipelineRunSample
 from app.models.sample import Sample
 from app.schemas.pipeline_run import PipelineRunLaunchRequest
@@ -77,7 +76,7 @@ class PipelineRunService:
             pipeline_version=pipeline.version,
             parameters_json=merged_params,
             status="pending",
-            work_dir=f"/data/working/nextflow/run-{{id}}",
+            work_dir="/data/working/nextflow/run-{id}",
         )
         if data.resume_from_run_id:
             run.resume_from_run_id = data.resume_from_run_id

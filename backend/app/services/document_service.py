@@ -1,13 +1,12 @@
 import asyncio
 import logging
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.document import Document
 from app.services.audit_service import log_action
-from app.services.file_service import FileService
 
 logger = logging.getLogger("bioaf.document_service")
 

@@ -9,7 +9,6 @@ from app.schemas.document import (
     DocumentSearchResponse,
     DocumentUpdate,
 )
-from app.schemas.experiment import UserSummary
 from app.schemas.file import FileResponse
 from app.services.document_service import DocumentService
 

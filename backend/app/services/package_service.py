@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.environment import Environment, EnvironmentPackage
+from app.models.environment import EnvironmentPackage
 from app.models.environment_change import EnvironmentChange
 from app.services.audit_service import log_action
 from app.services.environment_service import EnvironmentService
