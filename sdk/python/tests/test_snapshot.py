@@ -1,6 +1,6 @@
 """Tests for snapshot function."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -32,7 +32,7 @@ class TestSnapshot:
 
         with patch("bioaf.snapshot._post") as mock_post:
             mock_post.return_value = {"id": 1, "label": "test"}
-            result = snapshot(adata, label="test_snap", experiment_id=42)
+            snapshot(adata, label="test_snap", experiment_id=42)
 
         mock_post.assert_called_once()
         call_args = mock_post.call_args

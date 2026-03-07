@@ -61,7 +61,10 @@ ANNDATA_SNAPSHOTS_EXP1 = [
             "neighbors": {"params": {"n_neighbors": 15, "method": "umap"}},
             "leiden": {"params": {"resolution": 0.8}},
         },
-        "embeddings_json": {"X_pca": {"n_components": 50}, "X_umap": {"n_components": 2}},
+        "embeddings_json": {
+            "X_pca": {"n_components": 50},
+            "X_umap": {"n_components": 2},
+        },
         "clusterings_json": {
             "leiden": {
                 "n_clusters": 14,
@@ -69,7 +72,13 @@ ANNDATA_SNAPSHOTS_EXP1 = [
             }
         },
         "layers_json": ["counts", "log1p"],
-        "metadata_columns_json": ["n_genes", "total_counts", "pct_counts_mt", "batch", "leiden"],
+        "metadata_columns_json": [
+            "n_genes",
+            "total_counts",
+            "pct_counts_mt",
+            "batch",
+            "leiden",
+        ],
     },
     {
         "label": "leiden_0.5_no_correction",
@@ -80,15 +89,34 @@ ANNDATA_SNAPSHOTS_EXP1 = [
             "neighbors": {"params": {"n_neighbors": 15, "method": "umap"}},
             "leiden": {"params": {"resolution": 0.5}},
         },
-        "embeddings_json": {"X_pca": {"n_components": 50}, "X_umap": {"n_components": 2}},
+        "embeddings_json": {
+            "X_pca": {"n_components": 50},
+            "X_umap": {"n_components": 2},
+        },
         "clusterings_json": {
             "leiden": {
                 "n_clusters": 9,
-                "distribution": {"0": 1200, "1": 980, "2": 850, "3": 720, "4": 650, "5": 580, "6": 510, "7": 480, "8": 462},
+                "distribution": {
+                    "0": 1200,
+                    "1": 980,
+                    "2": 850,
+                    "3": 720,
+                    "4": 650,
+                    "5": 580,
+                    "6": 510,
+                    "7": 480,
+                    "8": 462,
+                },
             }
         },
         "layers_json": ["counts", "log1p"],
-        "metadata_columns_json": ["n_genes", "total_counts", "pct_counts_mt", "batch", "leiden"],
+        "metadata_columns_json": [
+            "n_genes",
+            "total_counts",
+            "pct_counts_mt",
+            "batch",
+            "leiden",
+        ],
         "starred": True,
         "notes": "Clean separation of major cell types",
     },
@@ -100,17 +128,38 @@ ANNDATA_SNAPSHOTS_EXP1 = [
         "parameters_json": {
             "neighbors": {"params": {"n_neighbors": 15, "method": "umap"}},
             "leiden": {"params": {"resolution": 0.5}},
-            "rank_genes_groups": {"params": {"method": "wilcoxon", "groupby": "leiden"}},
+            "rank_genes_groups": {
+                "params": {"method": "wilcoxon", "groupby": "leiden"}
+            },
         },
-        "embeddings_json": {"X_pca": {"n_components": 50}, "X_umap": {"n_components": 2}},
+        "embeddings_json": {
+            "X_pca": {"n_components": 50},
+            "X_umap": {"n_components": 2},
+        },
         "clusterings_json": {
             "leiden": {
                 "n_clusters": 9,
-                "distribution": {"0": 1200, "1": 980, "2": 850, "3": 720, "4": 650, "5": 580, "6": 510, "7": 480, "8": 462},
+                "distribution": {
+                    "0": 1200,
+                    "1": 980,
+                    "2": 850,
+                    "3": 720,
+                    "4": 650,
+                    "5": 580,
+                    "6": 510,
+                    "7": 480,
+                    "8": 462,
+                },
             }
         },
         "layers_json": ["counts", "log1p"],
-        "metadata_columns_json": ["n_genes", "total_counts", "pct_counts_mt", "batch", "leiden"],
+        "metadata_columns_json": [
+            "n_genes",
+            "total_counts",
+            "pct_counts_mt",
+            "batch",
+            "leiden",
+        ],
     },
 ]
 
@@ -143,7 +192,15 @@ ANNDATA_SNAPSHOTS_EXP2 = [
         "clusterings_json": {
             "leiden": {
                 "n_clusters": 7,
-                "distribution": {"0": 1100, "1": 950, "2": 900, "3": 800, "4": 750, "5": 530, "6": 450},
+                "distribution": {
+                    "0": 1100,
+                    "1": 950,
+                    "2": 900,
+                    "3": 800,
+                    "4": 750,
+                    "5": 530,
+                    "6": 450,
+                },
             }
         },
         "layers_json": ["counts", "log1p"],
@@ -182,7 +239,9 @@ ANNDATA_SNAPSHOTS_EXP2 = [
             "neighbors": {"params": {"n_neighbors": 20, "method": "umap"}},
             "leiden": {"params": {"resolution": 0.5}},
             "harmony": {"params": {"theta": 2.0}},
-            "rank_genes_groups": {"params": {"method": "wilcoxon", "groupby": "leiden"}},
+            "rank_genes_groups": {
+                "params": {"method": "wilcoxon", "groupby": "leiden"}
+            },
         },
         "embeddings_json": {
             "X_pca": {"n_components": 50},
@@ -192,7 +251,15 @@ ANNDATA_SNAPSHOTS_EXP2 = [
         "clusterings_json": {
             "leiden": {
                 "n_clusters": 7,
-                "distribution": {"0": 1100, "1": 950, "2": 900, "3": 800, "4": 750, "5": 530, "6": 450},
+                "distribution": {
+                    "0": 1100,
+                    "1": 950,
+                    "2": 900,
+                    "3": 800,
+                    "4": 750,
+                    "5": 530,
+                    "6": 450,
+                },
             }
         },
         "layers_json": ["counts", "log1p"],
@@ -209,7 +276,10 @@ SEURAT_SNAPSHOTS_EXP3 = [
         "embeddings_json": {},
         "clusterings_json": {},
         "command_log_json": [
-            {"name": "CreateSeuratObject", "params": {"min.cells": 3, "min.features": 200}},
+            {
+                "name": "CreateSeuratObject",
+                "params": {"min.cells": 3, "min.features": 200},
+            },
         ],
     },
     {
@@ -225,13 +295,28 @@ SEURAT_SNAPSHOTS_EXP3 = [
         "clusterings_json": {
             "seurat_clusters": {
                 "n_clusters": 8,
-                "distribution": {"0": 1400, "1": 1200, "2": 1100, "3": 900, "4": 850, "5": 800, "6": 500, "7": 352},
+                "distribution": {
+                    "0": 1400,
+                    "1": 1200,
+                    "2": 1100,
+                    "3": 900,
+                    "4": 850,
+                    "5": 800,
+                    "6": 500,
+                    "7": 352,
+                },
             }
         },
         "command_log_json": [
-            {"name": "CreateSeuratObject", "params": {"min.cells": 3, "min.features": 200}},
+            {
+                "name": "CreateSeuratObject",
+                "params": {"min.cells": 3, "min.features": 200},
+            },
             {"name": "NormalizeData", "params": {"assay": "RNA"}},
-            {"name": "FindVariableFeatures", "params": {"assay": "RNA", "nfeatures": 2000}},
+            {
+                "name": "FindVariableFeatures",
+                "params": {"assay": "RNA", "nfeatures": 2000},
+            },
             {"name": "ScaleData", "params": {"assay": "RNA"}},
             {"name": "RunPCA", "params": {"assay": "RNA", "npcs": 50}},
             {"name": "FindNeighbors", "params": {"reduction": "pca", "dims": "1:30"}},
@@ -254,13 +339,26 @@ SEURAT_SNAPSHOTS_EXP3 = [
         "clusterings_json": {
             "seurat_clusters": {
                 "n_clusters": 6,
-                "distribution": {"0": 1800, "1": 1600, "2": 1500, "3": 1300, "4": 1100, "5": 802},
+                "distribution": {
+                    "0": 1800,
+                    "1": 1600,
+                    "2": 1500,
+                    "3": 1300,
+                    "4": 1100,
+                    "5": 802,
+                },
             }
         },
         "command_log_json": [
-            {"name": "CreateSeuratObject", "params": {"min.cells": 3, "min.features": 200}},
+            {
+                "name": "CreateSeuratObject",
+                "params": {"min.cells": 3, "min.features": 200},
+            },
             {"name": "NormalizeData", "params": {"assay": "RNA"}},
-            {"name": "FindVariableFeatures", "params": {"assay": "RNA", "nfeatures": 2000}},
+            {
+                "name": "FindVariableFeatures",
+                "params": {"assay": "RNA", "nfeatures": 2000},
+            },
             {"name": "ScaleData", "params": {"assay": "RNA"}},
             {"name": "RunPCA", "params": {"assay": "RNA", "npcs": 50}},
             {"name": "FindNeighbors", "params": {"reduction": "pca", "dims": "1:30"}},
@@ -286,17 +384,36 @@ SEURAT_SNAPSHOTS_EXP3 = [
         "clusterings_json": {
             "seurat_clusters": {
                 "n_clusters": 9,
-                "distribution": {"0": 1200, "1": 1100, "2": 1000, "3": 900, "4": 850, "5": 800, "6": 700, "7": 350, "8": 200},
+                "distribution": {
+                    "0": 1200,
+                    "1": 1100,
+                    "2": 1000,
+                    "3": 900,
+                    "4": 850,
+                    "5": 800,
+                    "6": 700,
+                    "7": 350,
+                    "8": 200,
+                },
             }
         },
         "command_log_json": [
-            {"name": "CreateSeuratObject", "params": {"min.cells": 3, "min.features": 200}},
+            {
+                "name": "CreateSeuratObject",
+                "params": {"min.cells": 3, "min.features": 200},
+            },
             {"name": "NormalizeData", "params": {"assay": "RNA"}},
-            {"name": "FindVariableFeatures", "params": {"assay": "RNA", "nfeatures": 2000}},
+            {
+                "name": "FindVariableFeatures",
+                "params": {"assay": "RNA", "nfeatures": 2000},
+            },
             {"name": "ScaleData", "params": {"assay": "RNA"}},
             {"name": "RunPCA", "params": {"assay": "RNA", "npcs": 50}},
             {"name": "RunHarmony", "params": {"theta": 2.0, "group.by.vars": "batch"}},
-            {"name": "FindNeighbors", "params": {"reduction": "harmony", "dims": "1:30"}},
+            {
+                "name": "FindNeighbors",
+                "params": {"reduction": "harmony", "dims": "1:30"},
+            },
             {"name": "FindClusters", "params": {"resolution": 0.5}},
             {"name": "RunUMAP", "params": {"reduction": "harmony", "dims": "1:30"}},
         ],
@@ -313,7 +430,10 @@ PROJECT_SNAPSHOTS = [
             "neighbors": {"params": {"n_neighbors": 15, "method": "umap"}},
             "leiden": {"params": {"resolution": 0.5}},
         },
-        "embeddings_json": {"X_pca": {"n_components": 50}, "X_umap": {"n_components": 2}},
+        "embeddings_json": {
+            "X_pca": {"n_components": 50},
+            "X_umap": {"n_components": 2},
+        },
         "clusterings_json": {
             "leiden": {
                 "n_clusters": 12,
@@ -331,7 +451,9 @@ PROJECT_SNAPSHOTS = [
         "parameters_json": {
             "neighbors": {"params": {"n_neighbors": 15, "method": "umap"}},
             "leiden": {"params": {"resolution": 0.5}},
-            "scvi": {"params": {"n_latent": 30, "n_layers": 2, "batch_key": "experiment"}},
+            "scvi": {
+                "params": {"n_latent": 30, "n_layers": 2, "batch_key": "experiment"}
+            },
         },
         "embeddings_json": {
             "X_pca": {"n_components": 50},
@@ -359,14 +481,18 @@ async def generate() -> None:
         await session.flush()
 
         # Get user
-        user_result = await session.execute(select(User).where(User.role == "comp_bio").limit(1))
+        user_result = await session.execute(
+            select(User).where(User.role == "comp_bio").limit(1)
+        )
         user = user_result.scalar_one_or_none()
         if not user:
             user_result = await session.execute(select(User).limit(1))
             user = user_result.scalar_one()
 
         # Get experiments
-        exp_result = await session.execute(select(Experiment).order_by(Experiment.id).limit(3))
+        exp_result = await session.execute(
+            select(Experiment).order_by(Experiment.id).limit(3)
+        )
         experiments = exp_result.scalars().all()
         if len(experiments) < 3:
             print(f"Warning: only {len(experiments)} experiments found, need 3")

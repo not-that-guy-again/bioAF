@@ -50,16 +50,12 @@ class SnapshotService:
             raise HTTPException(422, "At least one of experiment_id or project_id is required")
 
         if data.experiment_id:
-            result = await session.execute(
-                select(Experiment).where(Experiment.id == data.experiment_id)
-            )
+            result = await session.execute(select(Experiment).where(Experiment.id == data.experiment_id))
             if not result.scalar_one_or_none():
                 raise HTTPException(404, "Experiment not found")
 
         if data.project_id:
-            result = await session.execute(
-                select(Project).where(Project.id == data.project_id)
-            )
+            result = await session.execute(select(Project).where(Project.id == data.project_id))
             if not result.scalar_one_or_none():
                 raise HTTPException(404, "Project not found")
 
@@ -140,12 +136,8 @@ class SnapshotService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def toggle_star(
-        session: AsyncSession, snapshot_id: int, user_id: int
-    ) -> AnalysisSnapshot | None:
-        result = await session.execute(
-            select(AnalysisSnapshot).where(AnalysisSnapshot.id == snapshot_id)
-        )
+    async def toggle_star(session: AsyncSession, snapshot_id: int, user_id: int) -> AnalysisSnapshot | None:
+        result = await session.execute(select(AnalysisSnapshot).where(AnalysisSnapshot.id == snapshot_id))
         snapshot = result.scalar_one_or_none()
         if not snapshot:
             return None
@@ -165,9 +157,7 @@ class SnapshotService:
         return snapshot
 
     @staticmethod
-    async def compare_snapshots(
-        session: AsyncSession, ids: list[int]
-    ) -> dict:
+    async def compare_snapshots(session: AsyncSession, ids: list[int]) -> dict:
         if len(ids) < 2 or len(ids) > 5:
             raise HTTPException(422, "Must compare between 2 and 5 snapshots")
 
@@ -227,11 +217,13 @@ def _compute_parameter_diff(snapshots: list[AnalysisSnapshot]) -> list[dict]:
             except TypeError:
                 unique_values.add(str(v))
 
-        result.append({
-            "parameter_path": path,
-            "values": values,
-            "changed": len(unique_values) > 1,
-        })
+        result.append(
+            {
+                "parameter_path": path,
+                "values": values,
+                "changed": len(unique_values) > 1,
+            }
+        )
     return result
 
 
@@ -254,11 +246,13 @@ def _compute_embedding_diff(snapshots: list[AnalysisSnapshot]) -> list[dict]:
             else:
                 dimensions[snap.id] = None
 
-        result.append({
-            "embedding_name": name,
-            "dimensions": dimensions,
-            "present_in": present_in,
-        })
+        result.append(
+            {
+                "embedding_name": name,
+                "dimensions": dimensions,
+                "present_in": present_in,
+            }
+        )
     return result
 
 
@@ -297,12 +291,14 @@ def _compute_clustering_diff(snapshots: list[AnalysisSnapshot]) -> list[dict]:
                 n_clusters[snap.id] = 0
                 distributions[snap.id] = {label: 0 for label in sorted(all_labels)}
 
-        result.append({
-            "clustering_name": name,
-            "n_clusters": n_clusters,
-            "distributions": distributions,
-            "present_in": present_in,
-        })
+        result.append(
+            {
+                "clustering_name": name,
+                "n_clusters": n_clusters,
+                "distributions": distributions,
+                "present_in": present_in,
+            }
+        )
     return result
 
 
@@ -343,12 +339,14 @@ def _compute_command_log_diff(snapshots: list[AnalysisSnapshot]) -> list[dict] |
         if len(param_values) > 1:
             params_differ = any(p != param_values[0] for p in param_values[1:])
 
-        result.append({
-            "command_name": cmd_name,
-            "present_in": present_in,
-            "params_differ": params_differ,
-            "params": params if params_differ else None,
-        })
+        result.append(
+            {
+                "command_name": cmd_name,
+                "present_in": present_in,
+                "params_differ": params_differ,
+                "params": params if params_differ else None,
+            }
+        )
     return result
 
 

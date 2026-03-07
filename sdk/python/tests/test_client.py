@@ -3,7 +3,7 @@
 import os
 from unittest.mock import patch
 
-from bioaf.client import _config, _get_config, connect
+from bioaf.client import _get_config, connect
 
 
 class TestConnect:

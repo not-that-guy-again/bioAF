@@ -26,7 +26,11 @@ def _snapshot_to_response(snap) -> dict:
         "project_id": snap.project_id,
         "notebook_session_id": snap.notebook_session_id,
         "user_id": snap.user_id,
-        "user_name": snap.user.name if snap.user and hasattr(snap.user, "name") else snap.user.email if snap.user else "Unknown",
+        "user_name": snap.user.name
+        if snap.user and hasattr(snap.user, "name")
+        else snap.user.email
+        if snap.user
+        else "Unknown",
         "label": snap.label,
         "notes": snap.notes,
         "object_type": snap.object_type,
@@ -45,15 +49,17 @@ def _snapshot_to_detail(snap) -> dict:
     if snap.checkpoint_file and hasattr(snap.checkpoint_file, "gcs_uri"):
         checkpoint_url = snap.checkpoint_file.gcs_uri
 
-    base.update({
-        "parameters_json": snap.parameters_json,
-        "embeddings_json": snap.embeddings_json,
-        "clusterings_json": snap.clusterings_json,
-        "layers_json": snap.layers_json,
-        "metadata_columns_json": snap.metadata_columns_json,
-        "command_log_json": snap.command_log_json,
-        "checkpoint_url": checkpoint_url,
-    })
+    base.update(
+        {
+            "parameters_json": snap.parameters_json,
+            "embeddings_json": snap.embeddings_json,
+            "clusterings_json": snap.clusterings_json,
+            "layers_json": snap.layers_json,
+            "metadata_columns_json": snap.metadata_columns_json,
+            "command_log_json": snap.command_log_json,
+            "checkpoint_url": checkpoint_url,
+        }
+    )
     return base
 
 

@@ -79,7 +79,10 @@ SNAPSHOT_PAYLOAD_A = {
         "X_umap": {"n_components": 2},
     },
     "clusterings_json": {
-        "leiden": {"n_clusters": 9, "distribution": {"0": 1200, "1": 980, "2": 850, "3": 720, "4": 650, "5": 580, "6": 510, "7": 480, "8": 462}},
+        "leiden": {
+            "n_clusters": 9,
+            "distribution": {"0": 1200, "1": 980, "2": 850, "3": 720, "4": 650, "5": 580, "6": 510, "7": 480, "8": 462},
+        },
     },
     "layers_json": ["counts", "log1p"],
     "metadata_columns_json": ["batch", "condition", "leiden", "total_counts"],
@@ -101,7 +104,22 @@ SNAPSHOT_PAYLOAD_B = {
         "X_umap": {"n_components": 2},
     },
     "clusterings_json": {
-        "leiden": {"n_clusters": 11, "distribution": {"0": 890, "1": 970, "2": 850, "3": 680, "4": 650, "5": 580, "6": 510, "7": 480, "8": 462, "9": 340, "10": 210}},
+        "leiden": {
+            "n_clusters": 11,
+            "distribution": {
+                "0": 890,
+                "1": 970,
+                "2": 850,
+                "3": 680,
+                "4": 650,
+                "5": 580,
+                "6": 510,
+                "7": 480,
+                "8": 462,
+                "9": 340,
+                "10": 210,
+            },
+        },
     },
     "layers_json": ["counts", "log1p"],
     "metadata_columns_json": ["batch", "condition", "leiden", "total_counts"],
@@ -121,7 +139,10 @@ SEURAT_PAYLOAD = {
         "umap": {"n_components": 2},
     },
     "clusterings_json": {
-        "seurat_clusters": {"n_clusters": 8, "distribution": {"0": 1400, "1": 1200, "2": 1100, "3": 900, "4": 850, "5": 800, "6": 500, "7": 352}},
+        "seurat_clusters": {
+            "n_clusters": 8,
+            "distribution": {"0": 1400, "1": 1200, "2": 1100, "3": 900, "4": 850, "5": 800, "6": 500, "7": 352},
+        },
     },
     "command_log_json": [
         {"name": "NormalizeData", "params": {"assay": "RNA"}},
@@ -257,9 +278,7 @@ async def test_star_snapshot(client, admin_token, experiment):
 async def test_list_starred_only(client, admin_token, experiment):
     # Create and star first snapshot
     payload_a = {**SNAPSHOT_PAYLOAD_A, "experiment_id": experiment.id}
-    resp_a = await client.post(
-        "/api/snapshots", json=payload_a, headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    resp_a = await client.post("/api/snapshots", json=payload_a, headers={"Authorization": f"Bearer {admin_token}"})
     snap_a_id = resp_a.json()["id"]
     await client.post(f"/api/snapshots/{snap_a_id}/star", headers={"Authorization": f"Bearer {admin_token}"})
 
@@ -307,9 +326,7 @@ async def test_bench_cannot_create(client, bench_token, experiment):
 async def test_viewer_can_read(client, viewer_token, admin_token, experiment):
     # Create snapshot as admin
     payload = {**SNAPSHOT_PAYLOAD_A, "experiment_id": experiment.id}
-    await client.post(
-        "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
 
     # Viewer can list
     resp = await client.get(
@@ -327,9 +344,7 @@ async def test_compare_two_identical_snapshots(client, admin_token, experiment):
     ids = []
     for _ in range(2):
         payload = {**SNAPSHOT_PAYLOAD_A, "experiment_id": experiment.id}
-        resp = await client.post(
-            "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-        )
+        resp = await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
         ids.append(resp.json()["id"])
 
     resp = await client.get(
@@ -348,9 +363,7 @@ async def test_compare_two_different_snapshots(client, admin_token, experiment):
     ids = []
     for payload_base in [SNAPSHOT_PAYLOAD_A, SNAPSHOT_PAYLOAD_B]:
         payload = {**payload_base, "experiment_id": experiment.id}
-        resp = await client.post(
-            "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-        )
+        resp = await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
         ids.append(resp.json()["id"])
 
     resp = await client.get(
@@ -390,9 +403,7 @@ async def test_compare_mixed_anndata_seurat(client, admin_token, experiment):
     ids = []
     for payload_base in [SNAPSHOT_PAYLOAD_A, SEURAT_PAYLOAD]:
         payload = {**payload_base, "experiment_id": experiment.id}
-        resp = await client.post(
-            "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-        )
+        resp = await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
         ids.append(resp.json()["id"])
 
     resp = await client.get(
@@ -421,14 +432,15 @@ async def test_compare_different_clustering_resolutions(client, admin_token, exp
         "experiment_id": experiment.id,
         "label": "high_res",
         "clusterings_json": {
-            "leiden": {"n_clusters": 6, "distribution": {"0": 1500, "1": 1400, "2": 1300, "3": 1200, "4": 1100, "5": 932}},
+            "leiden": {
+                "n_clusters": 6,
+                "distribution": {"0": 1500, "1": 1400, "2": 1300, "3": 1200, "4": 1100, "5": 932},
+            },
         },
     }
     ids = []
     for p in [payload_low, payload_high]:
-        resp = await client.post(
-            "/api/snapshots", json=p, headers={"Authorization": f"Bearer {admin_token}"}
-        )
+        resp = await client.post("/api/snapshots", json=p, headers={"Authorization": f"Bearer {admin_token}"})
         ids.append(resp.json()["id"])
 
     resp = await client.get(
@@ -453,9 +465,7 @@ async def test_compare_different_clustering_resolutions(client, admin_token, exp
 @pytest.mark.asyncio
 async def test_compare_too_few_ids(client, admin_token, experiment):
     payload = {**SNAPSHOT_PAYLOAD_A, "experiment_id": experiment.id}
-    resp = await client.post(
-        "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    resp = await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
     snap_id = resp.json()["id"]
 
     resp = await client.get(
@@ -470,9 +480,7 @@ async def test_compare_too_many_ids(client, admin_token, experiment):
     ids = []
     for i in range(6):
         payload = {**SNAPSHOT_PAYLOAD_A, "experiment_id": experiment.id, "label": f"snap_{i}"}
-        resp = await client.post(
-            "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-        )
+        resp = await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
         ids.append(str(resp.json()["id"]))
 
     resp = await client.get(
@@ -485,9 +493,7 @@ async def test_compare_too_many_ids(client, admin_token, experiment):
 @pytest.mark.asyncio
 async def test_compare_nonexistent_snapshot(client, admin_token, experiment):
     payload = {**SNAPSHOT_PAYLOAD_A, "experiment_id": experiment.id}
-    resp = await client.post(
-        "/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"}
-    )
+    resp = await client.post("/api/snapshots", json=payload, headers={"Authorization": f"Bearer {admin_token}"})
     snap_id = resp.json()["id"]
 
     resp = await client.get(
