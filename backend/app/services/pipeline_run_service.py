@@ -84,6 +84,7 @@ class PipelineRunService:
         run = PipelineRun(
             organization_id=org_id,
             experiment_id=data.experiment_id,
+            project_id=data.project_id,
             submitted_by_user_id=user_id,
             pipeline_name=pipeline.name,
             pipeline_version=pipeline.version,
