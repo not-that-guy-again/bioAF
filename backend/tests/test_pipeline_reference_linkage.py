@@ -28,7 +28,6 @@ async def comp_bio_user(session, admin_user):
 @pytest_asyncio.fixture
 async def reference_and_run(session, admin_user):
     """Create a reference dataset and pipeline run for linkage tests."""
-    from app.models.pipeline_run import PipelineRun
     from app.models.reference_dataset import ReferenceDataset
 
     ref = ReferenceDataset(

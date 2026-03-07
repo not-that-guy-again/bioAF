@@ -2,7 +2,6 @@
 
 from io import BytesIO
 
-import pytest
 from openpyxl import load_workbook
 
 from app.services.geo.excel_generator import generate_geo_workbook

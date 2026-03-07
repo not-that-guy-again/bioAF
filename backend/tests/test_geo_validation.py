@@ -1,7 +1,5 @@
 """Tests for GEO validation engine."""
 
-import pytest
-
 from app.services.geo.validation import validate_experiment_for_geo
 
 

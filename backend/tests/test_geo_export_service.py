@@ -5,8 +5,6 @@ from io import BytesIO
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
-
 from app.services.auth_service import AuthService
 
 

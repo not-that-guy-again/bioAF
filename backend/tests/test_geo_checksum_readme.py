@@ -1,7 +1,5 @@
 """Tests for GEO checksum manifest and README generators."""
 
-import pytest
-
 from app.services.geo.checksum_manifest import generate_checksum_manifest
 from app.services.geo.readme_generator import generate_readme
 from app.services.geo.validation import ValidationReport, ValidationSummary, FileManifestStatus
