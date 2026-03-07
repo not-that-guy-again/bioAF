@@ -1,9 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
 from app.api.dependencies import require_role
-from app.schemas.project import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
+from app.database import get_session
+from app.schemas.project import (
+    ProjectCreate,
+    ProjectDetailResponse,
+    ProjectListResponse,
+    ProjectResponse,
+    ProjectSamplesAdd,
+    ProjectUpdate,
+)
 from app.services.project_service import ProjectService
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -12,23 +19,18 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(
     request: Request,
+    status: str | None = Query(None),
+    owner_user_id: int | None = Query(None),
+    search: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
 ):
     current_user = request.state.current_user
     org_id = int(current_user["org_id"])
 
-    results = await ProjectService.list_projects(session, org_id)
-    projects = [
-        ProjectResponse(
-            id=p.id,
-            name=p.name,
-            description=p.description,
-            experiment_count=count,
-            created_by_name=p.created_by.name if p.created_by else None,
-            created_at=p.created_at,
-        )
-        for p, count in results
-    ]
+    results = await ProjectService.list_projects(
+        session, org_id, status=status, owner_user_id=owner_user_id, search=search
+    )
+    projects = [ProjectResponse(**r) for r in results]
     return ProjectListResponse(projects=projects, total=len(projects))
 
 
@@ -44,17 +46,25 @@ async def create_project(
     project = await ProjectService.create_project(session, org_id, user_id, body)
     await session.commit()
 
+    # Get counts for response
+    sample_count = len(body.sample_ids) if body.sample_ids else 0
     return ProjectResponse(
         id=project.id,
         name=project.name,
         description=project.description,
+        hypothesis=project.hypothesis,
+        status=project.status,
+        owner_user_id=project.owner_user_id,
+        owner_name=None,
+        sample_count=sample_count,
         experiment_count=0,
-        created_by_name=None,
+        pipeline_run_count=0,
+        snapshot_count=0,
         created_at=project.created_at,
     )
 
 
-@router.get("/{project_id}", response_model=ProjectResponse)
+@router.get("/{project_id}", response_model=ProjectDetailResponse)
 async def get_project(
     project_id: int,
     request: Request,
@@ -63,18 +73,11 @@ async def get_project(
     current_user = request.state.current_user
     org_id = int(current_user["org_id"])
 
-    project = await ProjectService.get_project(session, project_id, org_id)
-    if not project:
+    detail = await ProjectService.get_project_detail(session, project_id, org_id)
+    if not detail:
         raise HTTPException(404, "Project not found")
 
-    return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        description=project.description,
-        experiment_count=len(project.experiments) if hasattr(project, "experiments") and project.experiments else 0,
-        created_by_name=None,
-        created_at=project.created_at,
-    )
+    return ProjectDetailResponse(**detail)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -84,18 +87,70 @@ async def update_project(
     current_user: dict = require_role("admin", "comp_bio"),
     session: AsyncSession = Depends(get_session),
 ):
+    org_id = int(current_user["org_id"])
     user_id = int(current_user["sub"])
 
-    project = await ProjectService.update_project(session, project_id, user_id, body)
+    # Verify project exists and belongs to org
+    project = await ProjectService.get_project(session, project_id, org_id)
     if not project:
         raise HTTPException(404, "Project not found")
 
+    updated = await ProjectService.update_project(session, project_id, user_id, body)
     await session.commit()
+
     return ProjectResponse(
-        id=project.id,
-        name=project.name,
-        description=project.description,
+        id=updated.id,
+        name=updated.name,
+        description=updated.description,
+        hypothesis=updated.hypothesis,
+        status=updated.status,
+        owner_user_id=updated.owner_user_id,
+        owner_name=None,
+        sample_count=0,
         experiment_count=0,
-        created_by_name=None,
-        created_at=project.created_at,
+        pipeline_run_count=0,
+        snapshot_count=0,
+        created_at=updated.created_at,
     )
+
+
+@router.post("/{project_id}/samples")
+async def add_samples(
+    project_id: int,
+    body: ProjectSamplesAdd,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+
+    # Verify project exists
+    project = await ProjectService.get_project(session, project_id, org_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    await ProjectService.add_samples(session, project_id, user_id, body)
+    await session.commit()
+
+    return {"status": "ok", "added": len(body.sample_ids)}
+
+
+@router.delete("/{project_id}/samples/{sample_id}")
+async def remove_sample(
+    project_id: int,
+    sample_id: int,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+
+    # Verify project exists
+    project = await ProjectService.get_project(session, project_id, org_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    await ProjectService.remove_sample(session, project_id, sample_id, user_id)
+    await session.commit()
+
+    return {"status": "ok"}
