@@ -118,7 +118,7 @@ export interface ProjectSampleResponse {
   sample_id_external: string | null;
   organism: string | null;
   tissue_type: string | null;
-  qc_status: string | null;
+  qc_status: QCStatus | null;
   added_by: string | null;
   added_at: string | null;
   notes: string | null;

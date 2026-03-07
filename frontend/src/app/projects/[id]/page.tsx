@@ -10,7 +10,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ProvenanceDAGComponent } from "@/components/provenance/ProvenanceDAG";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
-import type { ProjectDetailResponse, ProvenanceDAG } from "@/lib/types";
+import type { ProjectDetailResponse, ProvenanceDAG, QCStatus } from "@/lib/types";
 
 type Tab = "samples" | "runs" | "analysis" | "provenance" | "data";
 
@@ -34,7 +34,7 @@ export default function ProjectDetailPage() {
     experiment_id: number;
     organism: string | null;
     tissue_type: string | null;
-    qc_status: string | null;
+    qc_status: QCStatus | null;
   }>>([]);
   const [selectedSampleIds, setSelectedSampleIds] = useState<Set<number>>(new Set());
   const [sampleSearch, setSampleSearch] = useState("");
@@ -92,7 +92,7 @@ export default function ProjectDetailPage() {
             sample_id_external: string;
             organism: string | null;
             tissue_type: string | null;
-            qc_status: string | null;
+            qc_status: QCStatus | null;
           }>;
         }>;
       }>("/api/datasets/browser");
