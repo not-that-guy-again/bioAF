@@ -168,14 +168,17 @@ def upgrade() -> None:
     op.create_foreign_key("fk_sample_files_file", "sample_files", "files", ["file_id"], ["id"])
     op.create_foreign_key("fk_nsf_file", "notebook_session_files", "files", ["file_id"], ["id"])
 
-    # Grant permissions (may not exist in test/dev)
-    try:
-        op.execute(
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON files, documents, cellxgene_publications, qc_dashboards, plot_archive, storage_stats_cache TO bioaf_app"
-        )
-        op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app")
-    except Exception:
-        pass
+    # Grant permissions (conditionally — bioaf_app role may not exist in dev/POC)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bioaf_app') THEN
+                EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON files, documents, cellxgene_publications, qc_dashboards, plot_archive, storage_stats_cache TO bioaf_app';
+                EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app';
+            END IF;
+        END
+        $$;
+    """)
 
 
 def downgrade() -> None:

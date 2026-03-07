@@ -210,17 +210,17 @@ def upgrade() -> None:
     )
     op.create_index("idx_cost_records_org_date", "cost_records", ["organization_id", "record_date"])
 
-    # Grant permissions
-    try:
-        op.execute(
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON "
-            "notifications, notification_rules, notification_preferences, "
-            "slack_webhooks, notification_delivery_log, upgrade_history, "
-            "access_log, activity_feed, budget_config, cost_records TO bioaf_app"
-        )
-        op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app")
-    except Exception:
-        pass
+    # Grant permissions (conditionally — bioaf_app role may not exist in dev/POC)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bioaf_app') THEN
+                EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON notifications, notification_rules, notification_preferences, slack_webhooks, notification_delivery_log, upgrade_history, access_log, activity_feed, budget_config, cost_records TO bioaf_app';
+                EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app';
+            END IF;
+        END
+        $$;
+    """)
 
 
 def downgrade() -> None:
