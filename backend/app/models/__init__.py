@@ -38,6 +38,7 @@ from app.models.budget_config import BudgetConfig
 from app.models.cost_record import CostRecord
 from app.models.controlled_vocabulary import ControlledVocabulary
 from app.models.pipeline_run_review import PipelineRunReview
+from app.models.reference_dataset import ReferenceDataset, ReferenceDatasetFile, pipeline_run_references
 
 __all__ = [
     "User",
@@ -83,4 +84,7 @@ __all__ = [
     "CostRecord",
     "ControlledVocabulary",
     "PipelineRunReview",
+    "ReferenceDataset",
+    "ReferenceDatasetFile",
+    "pipeline_run_references",
 ]

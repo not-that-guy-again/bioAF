@@ -1,0 +1,331 @@
+{
+  "template_version": "1.0.0",
+  "geo_format_version": "2024-01",
+  "description": "GEO high-throughput sequencing metadata template mapping for bioAF",
+  "sections": {
+    "SERIES": {
+      "sheet_name": "SERIES",
+      "description": "Experiment-level metadata",
+      "fields": [
+        {
+          "geo_column": "Series_title",
+          "bioaf_source": "experiment.name",
+          "required": true,
+          "description": "Title of the experiment"
+        },
+        {
+          "geo_column": "Series_summary",
+          "bioaf_source": "experiment.description+experiment.hypothesis",
+          "required": true,
+          "description": "Summary of the experiment",
+          "derivation": "concatenate"
+        },
+        {
+          "geo_column": "Series_overall_design",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Overall design of the experiment",
+          "derivation": "overall_design"
+        },
+        {
+          "geo_column": "Series_contributor",
+          "bioaf_source": "experiment.owner_user_name",
+          "required": true,
+          "description": "Contributor name(s)"
+        },
+        {
+          "geo_column": "Series_supplementary_file",
+          "bioaf_source": "files.processed_gcs_uris",
+          "required": false,
+          "description": "Supplementary file GCS URIs"
+        }
+      ]
+    },
+    "SAMPLES": {
+      "sheet_name": "SAMPLES",
+      "description": "Sample-level metadata, one row per sample",
+      "fields": [
+        {
+          "geo_column": "Sample_name",
+          "bioaf_source": "sample.sample_id_external",
+          "required": true,
+          "description": "Unique sample identifier"
+        },
+        {
+          "geo_column": "title",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Sample title",
+          "derivation": "sample_title"
+        },
+        {
+          "geo_column": "organism",
+          "bioaf_source": "sample.organism",
+          "required": true,
+          "description": "Source organism",
+          "controlled_vocabulary": [
+            "Homo sapiens",
+            "Mus musculus",
+            "Rattus norvegicus",
+            "Danio rerio",
+            "Drosophila melanogaster",
+            "Caenorhabditis elegans",
+            "Saccharomyces cerevisiae"
+          ]
+        },
+        {
+          "geo_column": "molecule",
+          "bioaf_source": "sample.molecule_type",
+          "required": true,
+          "description": "Type of molecule",
+          "controlled_vocabulary": [
+            "total RNA",
+            "polyA RNA",
+            "cytoplasmic RNA",
+            "nuclear RNA",
+            "genomic DNA",
+            "protein",
+            "other"
+          ]
+        },
+        {
+          "geo_column": "tissue",
+          "bioaf_source": "sample.tissue_type",
+          "required": false,
+          "recommended": true,
+          "description": "Tissue type"
+        },
+        {
+          "geo_column": "cell_type",
+          "bioaf_source": "sample.custom_fields.cell_type",
+          "required": false,
+          "recommended": true,
+          "description": "Cell type"
+        },
+        {
+          "geo_column": "cell_line",
+          "bioaf_source": "sample.custom_fields.cell_line",
+          "required": false,
+          "description": "Cell line name if applicable"
+        },
+        {
+          "geo_column": "treatment_protocol",
+          "bioaf_source": "sample.treatment_condition",
+          "required": false,
+          "recommended": true,
+          "description": "Treatment or condition"
+        },
+        {
+          "geo_column": "genotype",
+          "bioaf_source": "sample.custom_fields.genotype",
+          "required": false,
+          "description": "Genotype information"
+        },
+        {
+          "geo_column": "description",
+          "bioaf_source": "sample.prep_notes",
+          "required": false,
+          "description": "Additional sample description"
+        },
+        {
+          "geo_column": "instrument_model",
+          "bioaf_source": "batch.instrument_model",
+          "required": true,
+          "description": "Sequencing instrument model",
+          "controlled_vocabulary": [
+            "Illumina NovaSeq 6000",
+            "Illumina NovaSeq X",
+            "Illumina NextSeq 500",
+            "Illumina NextSeq 550",
+            "Illumina NextSeq 1000",
+            "Illumina NextSeq 2000",
+            "Illumina HiSeq 2500",
+            "Illumina HiSeq 3000",
+            "Illumina HiSeq 4000",
+            "Illumina MiSeq",
+            "Illumina iSeq 100",
+            "Illumina NovaSeq X Plus",
+            "PacBio Sequel",
+            "PacBio Sequel II",
+            "PacBio Sequel IIe",
+            "PacBio Revio",
+            "Oxford Nanopore MinION",
+            "Oxford Nanopore GridION",
+            "Oxford Nanopore PromethION"
+          ]
+        },
+        {
+          "geo_column": "library_strategy",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Library strategy",
+          "derivation": "library_strategy",
+          "derivation_rules": {
+            "10x Chromium 3' v3.1": "RNA-Seq",
+            "10x Chromium 3' v3": "RNA-Seq",
+            "10x Chromium 3' v2": "RNA-Seq",
+            "10x Chromium 5' v2": "RNA-Seq",
+            "10x Chromium 5' v1.1": "RNA-Seq",
+            "Smart-seq2": "RNA-Seq",
+            "default": "OTHER"
+          },
+          "controlled_vocabulary": [
+            "RNA-Seq",
+            "ChIP-Seq",
+            "ATAC-Seq",
+            "Bisulfite-Seq",
+            "WGS",
+            "OTHER"
+          ]
+        },
+        {
+          "geo_column": "library_source",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Library source",
+          "derivation": "library_source",
+          "derivation_rules": {
+            "total RNA": "TRANSCRIPTOMIC",
+            "polyA RNA": "TRANSCRIPTOMIC",
+            "cytoplasmic RNA": "TRANSCRIPTOMIC",
+            "nuclear RNA": "TRANSCRIPTOMIC",
+            "genomic DNA": "GENOMIC",
+            "protein": "OTHER",
+            "default": "TRANSCRIPTOMIC"
+          },
+          "controlled_vocabulary": [
+            "GENOMIC",
+            "TRANSCRIPTOMIC",
+            "TRANSCRIPTOMIC SINGLE CELL",
+            "METAGENOMIC",
+            "METATRANSCRIPTOMIC",
+            "SYNTHETIC",
+            "VIRAL RNA",
+            "OTHER"
+          ]
+        },
+        {
+          "geo_column": "library_selection",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Library selection method",
+          "derivation": "library_selection",
+          "derivation_rules": {
+            "10x Chromium 3' v3.1": "cDNA",
+            "10x Chromium 3' v3": "cDNA",
+            "10x Chromium 3' v2": "cDNA",
+            "10x Chromium 5' v2": "cDNA",
+            "10x Chromium 5' v1.1": "cDNA",
+            "Smart-seq2": "cDNA",
+            "default": "other"
+          },
+          "controlled_vocabulary": [
+            "cDNA",
+            "cDNA_randomPriming",
+            "cDNA_oligo_dT",
+            "PolyA",
+            "Oligo-dT",
+            "RANDOM",
+            "PCR",
+            "HMPR",
+            "MF",
+            "CF-S",
+            "CF-M",
+            "CF-H",
+            "CF-T",
+            "MDA",
+            "MSLL",
+            "RACE",
+            "MNase",
+            "DNase",
+            "5-methylcytidine antibody",
+            "MBD2 protein methyl-CpG binding domain",
+            "CAGE",
+            "ChIP",
+            "Reduced Representation",
+            "Restriction Digest",
+            "unspecified",
+            "other"
+          ]
+        },
+        {
+          "geo_column": "library_layout",
+          "bioaf_source": "sample.library_layout",
+          "required": true,
+          "description": "Single or paired-end",
+          "controlled_vocabulary": [
+            "single",
+            "paired"
+          ]
+        },
+        {
+          "geo_column": "data_processing",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Data processing pipeline description",
+          "derivation": "data_processing"
+        },
+        {
+          "geo_column": "processed_data_file",
+          "bioaf_source": "files.processed_filenames",
+          "required": false,
+          "recommended": true,
+          "description": "Processed data filenames"
+        },
+        {
+          "geo_column": "raw_file",
+          "bioaf_source": "files.raw_filenames",
+          "required": true,
+          "description": "Raw data filenames (FASTQ)"
+        }
+      ]
+    },
+    "PROTOCOLS": {
+      "sheet_name": "PROTOCOLS",
+      "description": "Protocol information",
+      "fields": [
+        {
+          "geo_column": "Growth_protocol",
+          "bioaf_source": "experiment.custom_fields.growth_protocol",
+          "required": false,
+          "recommended": true,
+          "description": "Growth protocol description"
+        },
+        {
+          "geo_column": "Treatment_protocol",
+          "bioaf_source": "experiment.custom_fields.treatment_protocol",
+          "required": false,
+          "recommended": true,
+          "description": "Treatment protocol description"
+        },
+        {
+          "geo_column": "Extract_protocol",
+          "bioaf_source": "experiment.custom_fields.extract_protocol",
+          "required": false,
+          "recommended": true,
+          "description": "Extraction protocol description"
+        },
+        {
+          "geo_column": "Library_construction_protocol",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Library construction protocol",
+          "derivation": "library_construction"
+        },
+        {
+          "geo_column": "Data_processing_steps",
+          "bioaf_source": "derived",
+          "required": true,
+          "description": "Ordered list of data processing steps",
+          "derivation": "data_processing_steps"
+        },
+        {
+          "geo_column": "Genome_build",
+          "bioaf_source": "pipeline_run.reference_genome",
+          "required": true,
+          "description": "Reference genome build"
+        }
+      ]
+    }
+  }
+}

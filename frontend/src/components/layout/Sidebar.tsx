@@ -16,6 +16,7 @@ const navItems = [
   { label: "Environments", href: "/environments", icon: "layers", active: true, compBioOnly: true },
   { label: "Templates", href: "/notebooks/templates", icon: "notebook", active: true, compBioOnly: true },
   { label: "Results", href: "/results", icon: "chart", active: true },
+  { label: "Reference Data", href: "/references", icon: "archive", active: true },
   { label: "Components", href: "/components", icon: "puzzle", active: true },
   { label: "Activity Feed", href: "/activity", icon: "activity", active: true },
   { label: "Templates", href: "/admin/templates", icon: "template", active: true, adminOnly: true },

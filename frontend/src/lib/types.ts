@@ -904,3 +904,90 @@ export interface PipelineRunReviewListResponse {
   reviews: PipelineRunReview[];
   total: number;
 }
+
+// Reference Data types (Phase 9)
+export interface ReferenceDataset {
+  id: number;
+  organization_id: number;
+  name: string;
+  category: string;
+  scope: string;
+  version: string;
+  source_url: string | null;
+  gcs_prefix: string;
+  total_size_bytes: number | null;
+  file_count: number | null;
+  status: "active" | "deprecated" | "pending_approval";
+  deprecation_note: string | null;
+  superseded_by_id: number | null;
+  created_at: string;
+}
+
+export interface ReferenceDatasetFile {
+  id: number;
+  filename: string;
+  gcs_uri: string;
+  size_bytes: number | null;
+  md5_checksum: string | null;
+  file_type: string | null;
+  created_at: string;
+}
+
+export interface ReferenceDatasetDetail extends ReferenceDataset {
+  files: ReferenceDatasetFile[];
+  uploaded_by: { id: number; name: string | null; email: string } | null;
+  approved_by: { id: number; name: string | null; email: string } | null;
+}
+
+export interface ReferenceDatasetListResponse {
+  references: ReferenceDataset[];
+  total: number;
+}
+
+export interface ImpactPipelineRun {
+  pipeline_run_id: number;
+  pipeline_name: string;
+  pipeline_version: string | null;
+  experiment_id: number | null;
+  experiment_name: string | null;
+  status: string;
+  review_verdict: string | null;
+  completed_at: string | null;
+}
+
+export interface ImpactSummary {
+  reference_dataset_id: number;
+  total_pipeline_runs: number;
+  total_experiments: number;
+  pipeline_runs: ImpactPipelineRun[];
+}
+
+export interface GeoValidationField {
+  geo_column: string;
+  status: "complete" | "populated_unvalidated" | "missing_required" | "missing_recommended";
+  value: string | null;
+  message: string | null;
+}
+
+export interface GeoSampleValidation {
+  sample_id: number;
+  sample_name: string;
+  fields: GeoValidationField[];
+}
+
+export interface GeoValidationSummary {
+  total_fields: number;
+  complete: number;
+  populated_unvalidated: number;
+  missing_required: number;
+  missing_recommended: number;
+}
+
+export interface GeoValidationReport {
+  experiment_id: number;
+  pipeline_run_id: number | null;
+  series_fields: GeoValidationField[];
+  sample_validations: GeoSampleValidation[];
+  protocol_fields: GeoValidationField[];
+  summary: GeoValidationSummary;
+}
