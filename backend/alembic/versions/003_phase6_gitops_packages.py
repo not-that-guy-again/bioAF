@@ -133,16 +133,17 @@ def upgrade() -> None:
     )
     op.create_index("idx_template_notebooks_org", "template_notebooks", ["organization_id"])
 
-    # Grant permissions
-    try:
-        op.execute(
-            "GRANT SELECT, INSERT, UPDATE, DELETE ON "
-            "gitops_repos, environments, environment_packages, "
-            "environment_changes, template_notebooks TO bioaf_app"
-        )
-        op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app")
-    except Exception:
-        pass
+    # Grant permissions (conditionally — bioaf_app role may not exist in dev/POC)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bioaf_app') THEN
+                EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON gitops_repos, environments, environment_packages, environment_changes, template_notebooks TO bioaf_app';
+                EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app';
+            END IF;
+        END
+        $$;
+    """)
 
 
 def downgrade() -> None:
