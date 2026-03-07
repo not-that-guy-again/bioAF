@@ -3,6 +3,8 @@ from app.models.organization import Organization
 from app.models.audit_log import AuditLog
 from app.models.component import ComponentState, TerraformRun, VerificationCode, PlatformConfig
 from app.models.project import Project
+from app.models.project_sample import ProjectSample
+from app.models.analysis_snapshot import AnalysisSnapshot
 from app.models.experiment import Experiment
 from app.models.sample import Sample
 from app.models.batch import Batch
@@ -49,6 +51,8 @@ __all__ = [
     "VerificationCode",
     "PlatformConfig",
     "Project",
+    "ProjectSample",
+    "AnalysisSnapshot",
     "Experiment",
     "Sample",
     "Batch",

@@ -14,6 +14,7 @@ class NotebookSession(Base):
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)
     session_type: Mapped[str] = mapped_column(String(20), nullable=False)
     experiment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("experiments.id"), nullable=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("projects.id"), nullable=True)
     slurm_job_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resource_profile: Mapped[str] = mapped_column(String(50), nullable=False)
     cpu_cores: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -28,3 +29,4 @@ class NotebookSession(Base):
     user = relationship("User")
     organization = relationship("Organization")
     experiment = relationship("Experiment")
+    project = relationship("Project")

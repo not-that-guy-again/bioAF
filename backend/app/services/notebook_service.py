@@ -37,6 +37,7 @@ class NotebookService:
         session_type: str,
         resource_profile: str,
         experiment_id: int | None = None,
+        project_id: int | None = None,
     ) -> NotebookSession:
         # Check quota
         allowed, message = await QuotaService.check_quota(session, user_id, estimated_hours=1.0)
@@ -50,6 +51,7 @@ class NotebookService:
             organization_id=org_id,
             session_type=session_type,
             experiment_id=experiment_id,
+            project_id=project_id,
             resource_profile=resource_profile,
             cpu_cores=cpu_cores,
             memory_gb=memory_gb,
@@ -58,14 +60,20 @@ class NotebookService:
         session.add(notebook_session)
         await session.flush()
 
+        # Build environment prefix for project context
+        env_prefix = ""
+        if project_id:
+            env_prefix = f"export BIOAF_PROJECT_ID={project_id}; "
+
         # Submit SLURM job for the session
         if session_type == "jupyter":
             job_script = (
+                f"{env_prefix}"
                 "jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser "
                 "--NotebookApp.token='' --NotebookApp.allow_origin='*'"
             )
         else:
-            job_script = "rserver --www-port=8787 --www-address=0.0.0.0"
+            job_script = f"{env_prefix}rserver --www-port=8787 --www-address=0.0.0.0"
 
         try:
             slurm_job = await SlurmService.submit_job(
@@ -99,6 +107,7 @@ class NotebookService:
                 "session_type": session_type,
                 "resource_profile": resource_profile,
                 "experiment_id": experiment_id,
+                "project_id": project_id,
                 "status": notebook_session.status,
             },
         )
