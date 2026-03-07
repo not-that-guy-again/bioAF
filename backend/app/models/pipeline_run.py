@@ -30,6 +30,7 @@ class PipelineRun(Base):
     slurm_job_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reference_genome: Mapped[str | None] = mapped_column(String(200), nullable=True)
     alignment_algorithm: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("projects.id"), nullable=True)
     resume_from_run_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("pipeline_runs.id"), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -37,6 +38,7 @@ class PipelineRun(Base):
 
     organization = relationship("Organization")
     experiment = relationship("Experiment")
+    project = relationship("Project", back_populates="pipeline_runs")
     submitted_by = relationship("User")
     resume_from = relationship("PipelineRun", remote_side=[id])
     processes = relationship("PipelineProcess", back_populates="pipeline_run", cascade="all, delete-orphan")

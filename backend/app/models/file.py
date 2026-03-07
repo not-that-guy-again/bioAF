@@ -19,8 +19,10 @@ class File(Base):
     upload_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    project_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("projects.id"), nullable=True)
     tags_json: Mapped[dict] = mapped_column(JSONB, server_default="[]", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     organization = relationship("Organization")
     uploader = relationship("User")
+    project = relationship("Project")

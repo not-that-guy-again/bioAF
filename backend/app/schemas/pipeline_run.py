@@ -47,6 +47,7 @@ class PipelineProcessResponse(BaseModel):
 class PipelineRunLaunchRequest(BaseModel):
     pipeline_key: str
     experiment_id: int
+    project_id: int | None = None
     sample_ids: list[int] | None = None
     parameters: dict = {}
     resume_from_run_id: int | None = None
@@ -60,6 +61,7 @@ class PipelineRunResponse(BaseModel):
     pipeline_name: str
     pipeline_version: str | None = None
     experiment: ExperimentSummary | None = None
+    project_id: int | None = None
     submitted_by: UserSummary | None = None
     status: str
     parameters: dict | None = None

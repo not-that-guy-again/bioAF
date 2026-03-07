@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 const navItems = [
   { label: "Home", href: "/", icon: "home", active: true },
   { label: "Experiments", href: "/experiments", icon: "flask", active: true },
+  { label: "Projects", href: "/projects", icon: "folder", active: true },
   { label: "Data", href: "/data", icon: "database", active: true },
   { label: "Compute", href: "/compute", icon: "server", active: true },
   { label: "Pipeline Catalog", href: "/pipelines", icon: "workflow", active: true, compBioOnly: true },
