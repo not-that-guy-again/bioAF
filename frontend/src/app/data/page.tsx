@@ -13,7 +13,10 @@ import type {
   DocumentResponse,
   DocumentSearchResponse,
   StorageDashboard,
+  Project,
+  ProjectListResponse,
 } from "@/lib/types";
+import { getCurrentUser } from "@/lib/auth";
 
 type Tab = "upload" | "datasets" | "documents" | "storage";
 
@@ -268,6 +271,17 @@ function DatasetBrowserTab() {
   const [organismFilter, setOrganismFilter] = useState("");
   const pageSize = 20;
 
+  // Multi-select and "Add to Project" state
+  const [selectedExperiments, setSelectedExperiments] = useState<Set<number>>(new Set());
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [newProjectName, setNewProjectName] = useState("");
+  const [addingToProject, setAddingToProject] = useState(false);
+
+  const user = getCurrentUser();
+  const canModify = user?.role === "admin" || user?.role === "comp_bio";
+
   const fetchDatasets = useCallback(async () => {
     setLoading(true);
     try {
@@ -293,6 +307,73 @@ function DatasetBrowserTab() {
   useEffect(() => {
     fetchDatasets();
   }, [fetchDatasets]);
+
+  const toggleExperiment = (id: number) => {
+    const next = new Set(selectedExperiments);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedExperiments(next);
+  };
+
+  const openProjectModal = async () => {
+    try {
+      const data = await api.get<ProjectListResponse>("/api/projects");
+      setProjects(data.projects);
+    } catch {
+      // ignore
+    }
+    setShowProjectModal(true);
+  };
+
+  const handleAddToProject = async () => {
+    setAddingToProject(true);
+    try {
+      let projectId: number;
+
+      if (selectedProjectId === "new") {
+        // Create new project
+        const resp = await api.post<{ id: number }>("/api/projects", {
+          name: newProjectName,
+        });
+        projectId = resp.id;
+      } else {
+        projectId = parseInt(selectedProjectId);
+      }
+
+      // Get sample IDs from selected experiments
+      // For simplicity, we add all samples from selected experiments
+      const selectedDs = datasets.filter((ds) => selectedExperiments.has(ds.experiment_id));
+      const sampleIds: number[] = [];
+      for (const ds of selectedDs) {
+        // Fetch samples for each experiment
+        try {
+          const expData = await api.get<{ samples: Array<{ id: number }> }>(
+            `/api/experiments/${ds.experiment_id}`
+          );
+          if (expData.samples) {
+            sampleIds.push(...expData.samples.map((s) => s.id));
+          }
+        } catch {
+          // If we can't get samples, skip
+        }
+      }
+
+      if (sampleIds.length > 0) {
+        await api.post(`/api/projects/${projectId}/samples`, {
+          sample_ids: sampleIds,
+        });
+      }
+
+      setShowProjectModal(false);
+      setSelectedExperiments(new Set());
+      setSelectedProjectId("");
+      setNewProjectName("");
+    } catch {
+      // handled by api client
+    } finally {
+      setAddingToProject(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -329,6 +410,14 @@ function DatasetBrowserTab() {
           <option value="Human">Human</option>
           <option value="Mouse">Mouse</option>
         </select>
+        {canModify && selectedExperiments.size > 0 && (
+          <button
+            onClick={openProjectModal}
+            className="px-4 py-2 bg-bioaf-600 text-white rounded-md text-sm hover:bg-bioaf-700"
+          >
+            Add to Project ({selectedExperiments.size})
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -341,6 +430,9 @@ function DatasetBrowserTab() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  {canModify && (
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8"></th>
+                  )}
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Experiment
                   </th>
@@ -363,7 +455,17 @@ function DatasetBrowserTab() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {datasets.map((ds) => (
-                  <tr key={ds.experiment_id} className="hover:bg-gray-50">
+                  <tr key={ds.experiment_id} className={`hover:bg-gray-50 ${selectedExperiments.has(ds.experiment_id) ? "bg-bioaf-50" : ""}`}>
+                    {canModify && (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedExperiments.has(ds.experiment_id)}
+                          onChange={() => toggleExperiment(ds.experiment_id)}
+                          className="rounded"
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       {ds.experiment_name}
                     </td>
@@ -413,6 +515,68 @@ function DatasetBrowserTab() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Add to Project Modal */}
+      {showProjectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-bold mb-4">Add to Project</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Add samples from {selectedExperiments.size} experiment{selectedExperiments.size !== 1 ? "s" : ""} to a project.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Project</label>
+                <select
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                >
+                  <option value="">Choose a project...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={String(p.id)}>{p.name}</option>
+                  ))}
+                  <option value="new">+ Create New Project</option>
+                </select>
+              </div>
+              {selectedProjectId === "new" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">New Project Name</label>
+                  <input
+                    type="text"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    placeholder="Project name"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowProjectModal(false);
+                  setSelectedProjectId("");
+                  setNewProjectName("");
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddToProject}
+                disabled={
+                  addingToProject ||
+                  (!selectedProjectId || (selectedProjectId === "new" && !newProjectName.trim()))
+                }
+                className="px-4 py-2 bg-bioaf-600 text-white rounded-md text-sm hover:bg-bioaf-700 disabled:opacity-50"
+              >
+                {addingToProject ? "Adding..." : "Add to Project"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
