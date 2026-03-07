@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,14 +15,10 @@ from app.services.audit_service import log_action
 
 class ProjectService:
     @staticmethod
-    async def create_project(
-        session: AsyncSession, org_id: int, user_id: int, data: ProjectCreate
-    ) -> Project:
+    async def create_project(session: AsyncSession, org_id: int, user_id: int, data: ProjectCreate) -> Project:
         # Validate sample_ids if provided
         if data.sample_ids:
-            result = await session.execute(
-                select(Sample.id).where(Sample.id.in_(data.sample_ids))
-            )
+            result = await session.execute(select(Sample.id).where(Sample.id.in_(data.sample_ids)))
             found_ids = {row[0] for row in result.all()}
             missing = set(data.sample_ids) - found_ids
             if missing:
@@ -147,20 +141,22 @@ class ProjectService:
 
         projects = []
         for project, sample_count, experiment_count in rows:
-            projects.append({
-                "id": project.id,
-                "name": project.name,
-                "description": project.description,
-                "hypothesis": project.hypothesis,
-                "status": project.status,
-                "owner_user_id": project.owner_user_id,
-                "owner_name": project.owner.name if project.owner else None,
-                "sample_count": sample_count,
-                "experiment_count": experiment_count,
-                "pipeline_run_count": run_counts.get(project.id, 0),
-                "snapshot_count": snap_counts.get(project.id, 0),
-                "created_at": project.created_at,
-            })
+            projects.append(
+                {
+                    "id": project.id,
+                    "name": project.name,
+                    "description": project.description,
+                    "hypothesis": project.hypothesis,
+                    "status": project.status,
+                    "owner_user_id": project.owner_user_id,
+                    "owner_name": project.owner.name if project.owner else None,
+                    "sample_count": sample_count,
+                    "experiment_count": experiment_count,
+                    "pipeline_run_count": run_counts.get(project.id, 0),
+                    "snapshot_count": snap_counts.get(project.id, 0),
+                    "created_at": project.created_at,
+                }
+            )
         return projects
 
     @staticmethod
@@ -194,9 +190,8 @@ class ProjectService:
         user_names = {}
         if user_ids:
             from app.models.user import User
-            user_result = await session.execute(
-                select(User.id, User.name).where(User.id.in_(user_ids))
-            )
+
+            user_result = await session.execute(select(User.id, User.name).where(User.id.in_(user_ids)))
             user_names = dict(user_result.all())
 
         # Group by experiment
@@ -208,22 +203,22 @@ class ProjectService:
                     "experiment_name": experiment.name,
                     "samples": [],
                 }
-            groups[experiment.id]["samples"].append({
-                "sample_id": sample.id,
-                "sample_id_external": sample.sample_id_external,
-                "organism": sample.organism,
-                "tissue_type": sample.tissue_type,
-                "qc_status": sample.qc_status,
-                "added_by": user_names.get(ps.added_by_user_id),
-                "added_at": ps.added_at,
-                "notes": ps.notes,
-            })
+            groups[experiment.id]["samples"].append(
+                {
+                    "sample_id": sample.id,
+                    "sample_id_external": sample.sample_id_external,
+                    "organism": sample.organism,
+                    "tissue_type": sample.tissue_type,
+                    "qc_status": sample.qc_status,
+                    "added_by": user_names.get(ps.added_by_user_id),
+                    "added_at": ps.added_at,
+                    "notes": ps.notes,
+                }
+            )
 
         # Get pipeline runs
         run_result = await session.execute(
-            select(PipelineRun)
-            .where(PipelineRun.project_id == project_id)
-            .order_by(PipelineRun.created_at.desc())
+            select(PipelineRun).where(PipelineRun.project_id == project_id).order_by(PipelineRun.created_at.desc())
         )
         runs = run_result.scalars().all()
 
@@ -231,8 +226,7 @@ class ProjectService:
         sample_count = len(sample_rows)
         experiment_count = len(groups)
         snap_result = await session.execute(
-            select(func.count(AnalysisSnapshot.id))
-            .where(AnalysisSnapshot.project_id == project_id)
+            select(func.count(AnalysisSnapshot.id)).where(AnalysisSnapshot.project_id == project_id)
         )
         snapshot_count = snap_result.scalar() or 0
 
@@ -270,9 +264,7 @@ class ProjectService:
         data: ProjectSamplesAdd,
     ) -> list[ProjectSample]:
         # Validate all sample_ids exist
-        result = await session.execute(
-            select(Sample.id).where(Sample.id.in_(data.sample_ids))
-        )
+        result = await session.execute(select(Sample.id).where(Sample.id.in_(data.sample_ids)))
         found_ids = {row[0] for row in result.all()}
         missing = set(data.sample_ids) - found_ids
         if missing:

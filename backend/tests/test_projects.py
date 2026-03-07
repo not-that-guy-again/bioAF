@@ -51,9 +51,7 @@ async def bench_user(session, admin_user):
 
 @pytest_asyncio.fixture
 async def bench_token(bench_user) -> str:
-    return AuthService.create_token(
-        bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id
-    )
+    return AuthService.create_token(bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id)
 
 
 @pytest_asyncio.fixture
@@ -76,7 +74,7 @@ async def two_experiments_with_samples(session, admin_user):
     for i in range(4):
         s = Sample(
             experiment_id=exp1.id,
-            sample_id_external=f"TUMOR-{i+1}",
+            sample_id_external=f"TUMOR-{i + 1}",
             organism="Homo sapiens",
             tissue_type="brain",
             status="registered",
@@ -85,7 +83,7 @@ async def two_experiments_with_samples(session, admin_user):
     for i in range(4):
         s = Sample(
             experiment_id=exp2.id,
-            sample_id_external=f"HEALTHY-{i+1}",
+            sample_id_external=f"HEALTHY-{i + 1}",
             organism="Homo sapiens",
             tissue_type="brain",
             status="registered",
@@ -113,16 +111,12 @@ async def test_create_project(client, admin_token, session):
     assert data["sample_count"] == 0
 
     # Verify audit
-    result = await session.execute(
-        text("SELECT * FROM audit_log WHERE entity_type = 'project' AND action = 'created'")
-    )
+    result = await session.execute(text("SELECT * FROM audit_log WHERE entity_type = 'project' AND action = 'created'"))
     assert result.fetchone() is not None
 
 
 @pytest.mark.asyncio
-async def test_create_project_with_initial_samples(
-    client, admin_token, two_experiments_with_samples, session
-):
+async def test_create_project_with_initial_samples(client, admin_token, two_experiments_with_samples, session):
     _, _, samples = two_experiments_with_samples
     sample_ids = [samples[0].id, samples[4].id]  # one from each experiment
 
@@ -222,9 +216,7 @@ async def test_update_project(client, admin_token, session):
     assert response.json()["status"] == "archived"
 
     # Verify audit
-    result = await session.execute(
-        text("SELECT * FROM audit_log WHERE entity_type = 'project' AND action = 'updated'")
-    )
+    result = await session.execute(text("SELECT * FROM audit_log WHERE entity_type = 'project' AND action = 'updated'"))
     assert result.fetchone() is not None
 
 

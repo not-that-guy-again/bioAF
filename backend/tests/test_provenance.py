@@ -6,7 +6,6 @@ from app.models.pipeline_run import PipelineRun
 from app.models.project import Project
 from app.models.project_sample import ProjectSample
 from app.models.sample import Sample
-from app.services.auth_service import AuthService
 
 
 @pytest_asyncio.fixture
@@ -29,7 +28,7 @@ async def provenance_project(session, admin_user):
     for i in range(2):
         s = Sample(
             experiment_id=exp1.id,
-            sample_id_external=f"T-{i+1}",
+            sample_id_external=f"T-{i + 1}",
             organism="Homo sapiens",
             tissue_type="brain",
             status="registered",
@@ -38,7 +37,7 @@ async def provenance_project(session, admin_user):
     for i in range(2):
         s = Sample(
             experiment_id=exp2.id,
-            sample_id_external=f"H-{i+1}",
+            sample_id_external=f"H-{i + 1}",
             organism="Homo sapiens",
             tissue_type="blood",
             status="registered",

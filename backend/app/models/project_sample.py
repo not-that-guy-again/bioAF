@@ -8,9 +8,7 @@ from app.database import Base
 
 class ProjectSample(Base):
     __tablename__ = "project_samples"
-    __table_args__ = (
-        UniqueConstraint("project_id", "sample_id", name="uq_project_samples_project_sample"),
-    )
+    __table_args__ = (UniqueConstraint("project_id", "sample_id", name="uq_project_samples_project_sample"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)

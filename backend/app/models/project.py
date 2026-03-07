@@ -27,7 +27,5 @@ class Project(Base):
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     experiments = relationship("Experiment", back_populates="project")
     project_samples = relationship("ProjectSample", back_populates="project", cascade="all, delete-orphan")
-    pipeline_runs = relationship(
-        "PipelineRun", back_populates="project", foreign_keys="PipelineRun.project_id"
-    )
+    pipeline_runs = relationship("PipelineRun", back_populates="project", foreign_keys="PipelineRun.project_id")
     snapshots = relationship("AnalysisSnapshot", back_populates="project", foreign_keys="AnalysisSnapshot.project_id")
