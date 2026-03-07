@@ -27,7 +27,7 @@ def _snapshot_to_response(snap) -> dict:
         "notebook_session_id": snap.notebook_session_id,
         "user_id": snap.user_id,
         "user_name": snap.user.name
-        if snap.user and hasattr(snap.user, "name")
+        if snap.user and snap.user.name
         else snap.user.email
         if snap.user
         else "Unknown",
