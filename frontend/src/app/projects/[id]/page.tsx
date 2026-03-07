@@ -347,7 +347,7 @@ export default function ProjectDetailPage() {
 
           {/* Analysis Tab */}
           {activeTab === "analysis" && (
-            <SnapshotTimeline projectId={Number(id)} />
+            <SnapshotTimeline projectId={Number(projectId)} />
           )}
 
           {/* Provenance Tab */}
