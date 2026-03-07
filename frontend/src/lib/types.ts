@@ -1045,3 +1045,75 @@ export interface GeoValidationReport {
   protocol_fields: GeoValidationField[];
   summary: GeoValidationSummary;
 }
+
+// Analysis Snapshots
+
+export interface AnalysisSnapshot {
+  id: number;
+  experiment_id: number | null;
+  project_id: number | null;
+  notebook_session_id: number | null;
+  user_id: number;
+  user_name: string;
+  label: string;
+  notes: string | null;
+  object_type: string;
+  cell_count: number | null;
+  gene_count: number | null;
+  cluster_count: number | null;
+  starred: boolean;
+  figure_url: string | null;
+  created_at: string;
+}
+
+export interface AnalysisSnapshotDetail extends AnalysisSnapshot {
+  parameters_json: Record<string, unknown> | null;
+  embeddings_json: Record<string, { n_components: number }> | null;
+  clusterings_json: Record<string, { n_clusters: number; distribution: Record<string, number> }> | null;
+  layers_json: string[] | null;
+  metadata_columns_json: string[] | null;
+  command_log_json: Array<{ name: string; params: Record<string, unknown> }> | null;
+  checkpoint_url: string | null;
+}
+
+export interface ParameterDiff {
+  parameter_path: string;
+  values: Record<number, unknown>;
+  changed: boolean;
+}
+
+export interface EmbeddingDiff {
+  embedding_name: string;
+  dimensions: Record<number, number | null>;
+  present_in: number[];
+}
+
+export interface ClusteringDiff {
+  clustering_name: string;
+  n_clusters: Record<number, number>;
+  distributions: Record<number, Record<string, number>>;
+  present_in: number[];
+}
+
+export interface CommandDiff {
+  command_name: string;
+  present_in: number[];
+  params_differ: boolean;
+  params: Record<number, Record<string, unknown>> | null;
+}
+
+export interface CellCountPoint {
+  snapshot_id: number;
+  label: string;
+  cell_count: number;
+  created_at: string;
+}
+
+export interface SnapshotComparison {
+  snapshots: AnalysisSnapshotDetail[];
+  parameter_diff: ParameterDiff[];
+  embedding_diff: EmbeddingDiff[];
+  clustering_diff: ClusteringDiff[];
+  command_log_diff: CommandDiff[] | null;
+  cell_count_series: CellCountPoint[];
+}

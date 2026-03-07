@@ -10,6 +10,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ProvenanceDAGComponent } from "@/components/provenance/ProvenanceDAG";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
+import SnapshotTimeline from "@/components/SnapshotTimeline";
 import type { ProjectDetailResponse, ProvenanceDAG, QCStatus } from "@/lib/types";
 
 type Tab = "samples" | "runs" | "analysis" | "provenance" | "data";
@@ -344,12 +345,9 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {/* Analysis Tab (placeholder for Phase 10b) */}
+          {/* Analysis Tab */}
           {activeTab === "analysis" && (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400">
-              <p className="text-lg font-medium mb-2">Analysis Snapshots</p>
-              <p>Analysis snapshots will appear here when captured from notebooks.</p>
-            </div>
+            <SnapshotTimeline projectId={Number(projectId)} />
           )}
 
           {/* Provenance Tab */}
