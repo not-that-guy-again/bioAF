@@ -102,14 +102,68 @@ export interface Project {
   id: number;
   name: string;
   description: string | null;
+  hypothesis: string | null;
+  status: string | null;
+  owner_user_id: number | null;
+  owner_name: string | null;
+  sample_count: number;
   experiment_count: number;
-  created_by_name: string | null;
+  pipeline_run_count: number;
+  snapshot_count: number;
   created_at: string;
+}
+
+export interface ProjectSampleResponse {
+  sample_id: number;
+  sample_id_external: string | null;
+  organism: string | null;
+  tissue_type: string | null;
+  qc_status: string | null;
+  added_by: string | null;
+  added_at: string | null;
+  notes: string | null;
+}
+
+export interface ProjectSampleGroup {
+  experiment_id: number;
+  experiment_name: string;
+  samples: ProjectSampleResponse[];
+}
+
+export interface PipelineRunSummary {
+  id: number;
+  pipeline_name: string;
+  pipeline_version: string | null;
+  status: string;
+  created_at: string | null;
+}
+
+export interface ProjectDetailResponse extends Project {
+  samples: ProjectSampleGroup[];
+  pipeline_runs: PipelineRunSummary[];
 }
 
 export interface ProjectListResponse {
   projects: Project[];
   total: number;
+}
+
+export interface ProvenanceNode {
+  id: string;
+  type: "experiment" | "sample" | "pipeline_run" | "snapshot" | "reference" | "file" | "project";
+  label: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ProvenanceEdge {
+  source: string;
+  target: string;
+  relationship: string;
+}
+
+export interface ProvenanceDAG {
+  nodes: ProvenanceNode[];
+  edges: ProvenanceEdge[];
 }
 
 export interface Experiment {
