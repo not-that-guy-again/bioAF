@@ -11,7 +11,9 @@ from app.schemas.project import (
     ProjectSamplesAdd,
     ProjectUpdate,
 )
+from app.schemas.provenance import ProvenanceDAG
 from app.services.project_service import ProjectService
+from app.services.provenance_service import ProvenanceService
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -154,3 +156,19 @@ async def remove_sample(
     await session.commit()
 
     return {"status": "ok"}
+
+
+@router.get("/{project_id}/provenance", response_model=ProvenanceDAG)
+async def get_project_provenance(
+    project_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    current_user = request.state.current_user
+    org_id = int(current_user["org_id"])
+
+    project = await ProjectService.get_project(session, project_id, org_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    return await ProvenanceService.build_project_provenance(session, project_id)
