@@ -13,6 +13,9 @@ class Project(Base):
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str | None] = mapped_column(String(50), server_default="active", nullable=True)
+    hypothesis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -20,5 +23,11 @@ class Project(Base):
     )
 
     organization = relationship("Organization")
-    created_by = relationship("User")
+    owner = relationship("User", foreign_keys=[owner_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
     experiments = relationship("Experiment", back_populates="project")
+    project_samples = relationship("ProjectSample", back_populates="project", cascade="all, delete-orphan")
+    pipeline_runs = relationship(
+        "PipelineRun", back_populates="project", foreign_keys="PipelineRun.project_id"
+    )
+    snapshots = relationship("AnalysisSnapshot", back_populates="project", foreign_keys="AnalysisSnapshot.project_id")
