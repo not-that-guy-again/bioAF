@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { SampleQCBadge } from "@/components/experiments/SampleQCBadge";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { ProvenanceDAGComponent } from "@/components/provenance/ProvenanceDAG";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 import type { ProjectDetailResponse, ProvenanceDAG } from "@/lib/types";
@@ -363,11 +364,8 @@ export default function ProjectDetailPage() {
                   <h3 className="text-sm font-semibold text-gray-700 mb-4">
                     Provenance DAG — {provenance.nodes.length} nodes, {provenance.edges.length} edges
                   </h3>
-                  <div id="provenance-dag-container" className="min-h-[400px]">
-                    {/* ProvenanceDAG component will be mounted here in Step 11 */}
-                    <div className="text-gray-400 text-center py-8">
-                      DAG visualization loading...
-                    </div>
+                  <div className="min-h-[400px]">
+                    <ProvenanceDAGComponent data={provenance} />
                   </div>
                 </div>
               ) : (
