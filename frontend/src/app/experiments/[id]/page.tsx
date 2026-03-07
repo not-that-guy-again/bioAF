@@ -11,6 +11,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { VocabularySelect } from "@/components/shared/VocabularySelect";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
+import SnapshotTimeline from "@/components/SnapshotTimeline";
 import type {
   ExperimentDetail,
   Sample,
@@ -494,6 +495,8 @@ export default function ExperimentDetailPage() {
                   </table>
                 </div>
               )}
+
+              <SnapshotTimeline experimentId={Number(id)} />
             </div>
           )}
 

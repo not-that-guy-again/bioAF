@@ -19,6 +19,7 @@ build/
 # Node
 .next/
 node_modules/
+*.tsbuildinfo
 
 # Terraform
 *.tfvars
