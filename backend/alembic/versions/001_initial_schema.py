@@ -458,16 +458,21 @@ def upgrade() -> None:
     # ---------------------------------------------------------------
     # Audit log role enforcement (ADR-009)
     # ---------------------------------------------------------------
-    # Wrapped in try/except since the bioaf_app role may not exist
-    # in test environments or local dev setups.
-    try:
-        op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO bioaf_app")
-        op.execute("REVOKE UPDATE, DELETE ON audit_log FROM bioaf_app")
-        op.execute("REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC")
-        op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app")
-    except Exception:
-        # Role may not exist in test/dev environments - that's OK
-        pass
+    # Use a DO block to conditionally grant permissions only if the
+    # bioaf_app role exists. A try/except doesn't work with asyncpg
+    # because a failed statement poisons the entire transaction.
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bioaf_app') THEN
+                EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO bioaf_app';
+                EXECUTE 'REVOKE UPDATE, DELETE ON audit_log FROM bioaf_app';
+                EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO bioaf_app';
+            END IF;
+        END
+        $$;
+    """)
+    op.execute("REVOKE UPDATE, DELETE ON audit_log FROM PUBLIC")
 
 
 def downgrade() -> None:
