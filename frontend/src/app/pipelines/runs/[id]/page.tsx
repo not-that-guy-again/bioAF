@@ -6,10 +6,11 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { ReviewPanel } from "@/components/experiments/ReviewPanel";
+import { ReferenceStatusBadge } from "@/components/references/ReferenceStatusBadge";
 import { isAuthenticated } from "@/lib/auth";
 import { getToken } from "@/lib/auth";
 import { api } from "@/lib/api";
-import type { PipelineRunDetail, PipelineRunStatus, PipelineProcessStatus } from "@/lib/types";
+import type { PipelineRunDetail, PipelineRunStatus, PipelineProcessStatus, ReferenceDataset } from "@/lib/types";
 
 const STATUS_COLORS: Record<PipelineRunStatus | PipelineProcessStatus, string> = {
   pending: "bg-gray-100 text-gray-700",
@@ -45,6 +46,7 @@ export default function PipelineRunDetailPage() {
   const [logs, setLogs] = useState<{ stdout: string; stderr: string }>({ stdout: "", stderr: "" });
   const [selectedProcess, setSelectedProcess] = useState<string>("");
   const [provenance, setProvenance] = useState<Record<string, unknown> | null>(null);
+  const [references, setReferences] = useState<ReferenceDataset[]>([]);
 
   const loadRun = useCallback(async () => {
     try {
@@ -56,6 +58,8 @@ export default function PipelineRunDetailPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     loadRun();
+    loadReferences();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router, loadRun]);
 
   // Auto-refresh while active
@@ -105,6 +109,13 @@ export default function PipelineRunDetailPage() {
     try {
       const data = await api.get<Record<string, unknown>>(`/api/pipeline-runs/${runId}/provenance`);
       setProvenance(data);
+    } catch {}
+  }
+
+  async function loadReferences() {
+    try {
+      const data = await api.get<ReferenceDataset[]>(`/api/pipeline-runs/${runId}/references`);
+      setReferences(data);
     } catch {}
   }
 
@@ -249,17 +260,64 @@ export default function PipelineRunDetailPage() {
 
           {/* Provenance tab */}
           {activeTab === "provenance" && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Provenance</h2>
-                <div className="flex gap-2">
-                  <a href={`/api/pipeline-runs/${runId}/provenance?format=json`} target="_blank" className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50">Export JSON</a>
-                  <a href={`/api/pipeline-runs/${runId}/provenance?format=yaml`} target="_blank" className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50">Export YAML</a>
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold">Provenance</h2>
+                  <div className="flex gap-2">
+                    <a href={`/api/pipeline-runs/${runId}/provenance?format=json`} target="_blank" className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50">Export JSON</a>
+                    <a href={`/api/pipeline-runs/${runId}/provenance?format=yaml`} target="_blank" className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50">Export YAML</a>
+                  </div>
                 </div>
+                {provenance ? (
+                  <pre className="text-sm bg-gray-50 p-4 rounded overflow-auto max-h-96">
+                    {JSON.stringify(
+                      references.length > 0
+                        ? {
+                            ...provenance,
+                            reference_datasets: references.map((ref) => ({
+                              name: ref.name,
+                              version: ref.version,
+                              status: ref.status,
+                              ...(ref.status === "deprecated"
+                                ? {
+                                    warning: "This reference dataset has been deprecated.",
+                                    ...(ref.deprecation_note ? { deprecation_note: ref.deprecation_note } : {}),
+                                    ...(ref.superseded_by_id ? { superseded_by_id: ref.superseded_by_id } : {}),
+                                  }
+                                : {}),
+                            })),
+                          }
+                        : provenance,
+                      null,
+                      2,
+                    )}
+                  </pre>
+                ) : <LoadingSpinner size="sm" />}
               </div>
-              {provenance ? (
-                <pre className="text-sm bg-gray-50 p-4 rounded overflow-auto max-h-96">{JSON.stringify(provenance, null, 2)}</pre>
-              ) : <LoadingSpinner size="sm" />}
+
+              {/* Reference datasets in provenance view */}
+              {references.length > 0 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h3 className="text-md font-semibold mb-3">Reference Datasets</h3>
+                  <div className="space-y-2">
+                    {references.map((ref) => (
+                      <div key={ref.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-md">
+                        <div className="flex-1">
+                          <span className="font-medium text-sm">{ref.name}</span>
+                          <span className="text-gray-500 text-sm ml-2">v{ref.version}</span>
+                        </div>
+                        <ReferenceStatusBadge status={ref.status} />
+                        {ref.status === "deprecated" && (
+                          <span className="text-amber-600 text-xs">
+                            Deprecated{ref.deprecation_note ? `: ${ref.deprecation_note}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -301,6 +359,45 @@ export default function PipelineRunDetailPage() {
           {/* Review tab */}
           {activeTab === "review" && (
             <ReviewPanel pipelineRunId={run.id} userRole={getUserRole()} onReviewSubmitted={loadRun} />
+          )}
+
+          {/* References Used section — shown below active tab content */}
+          {references.length > 0 && (
+            <div className="bg-white rounded-lg shadow mt-6">
+              <div className="p-6 border-b">
+                <h2 className="text-lg font-semibold">References Used</h2>
+              </div>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Version</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {references.map((ref) => (
+                    <tr key={ref.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm font-medium">{ref.name}</td>
+                      <td className="px-4 py-3 text-sm">{ref.version}</td>
+                      <td className="px-4 py-3">
+                        <ReferenceStatusBadge status={ref.status} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {ref.status === "deprecated" && (
+                          <span className="text-amber-600">
+                            This reference dataset has been deprecated.
+                            {ref.deprecation_note ? ` ${ref.deprecation_note}` : ""}
+                            {ref.superseded_by_id ? ` Superseded by reference #${ref.superseded_by_id}.` : ""}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </main>
       </div>

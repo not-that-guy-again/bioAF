@@ -242,3 +242,17 @@ async def compare_runs(
         runs=[_run_response(r) for r in result["runs"]],
         parameter_diffs=result["parameter_diffs"],
     )
+
+
+@router.get("/{run_id}/references")
+async def get_run_references(
+    run_id: int,
+    current_user: dict = require_role("admin", "comp_bio", "bench", "viewer"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get reference datasets used by a pipeline run."""
+    from app.schemas.reference_dataset import ReferenceDatasetResponse
+    from app.services.reference_data_service import ReferenceDataService
+
+    refs = await ReferenceDataService.get_pipeline_run_references(session, run_id)
+    return {"references": [ReferenceDatasetResponse.model_validate(r) for r in refs]}

@@ -6,9 +6,10 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ExperimentStatusBadge } from "@/components/experiments/ExperimentStatusBadge";
 import { SampleQCBadge } from "@/components/experiments/SampleQCBadge";
+import { GeoExportModal } from "@/components/experiments/GeoExportModal";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { VocabularySelect } from "@/components/shared/VocabularySelect";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 import type {
   ExperimentDetail,
@@ -50,6 +51,7 @@ export default function ExperimentDetailPage() {
   const [notebookSessions, setNotebookSessions] = useState<NotebookSession[]>([]);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
 
+  const [showGeoExport, setShowGeoExport] = useState(false);
   const [showSampleForm, setShowSampleForm] = useState(false);
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [sampleForm, setSampleForm] = useState<SampleCreateRequest>({});
@@ -221,6 +223,18 @@ export default function ExperimentDetailPage() {
             </button>
             <h1 className="text-2xl font-bold">{experiment.name}</h1>
             <ExperimentStatusBadge status={experiment.status} />
+            {(() => {
+              const user = getCurrentUser();
+              const role = (user?.role as string) || "viewer";
+              return ["admin", "comp_bio"].includes(role) ? (
+                <button
+                  onClick={() => setShowGeoExport(true)}
+                  className="ml-auto bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700"
+                >
+                  Export to GEO
+                </button>
+              ) : null;
+            })()}
           </div>
 
           <div className="border-b border-gray-200 mb-6">
@@ -608,6 +622,15 @@ export default function ExperimentDetailPage() {
               </div>
             </div>
           )}
+          <GeoExportModal
+            experimentId={Number(id)}
+            isOpen={showGeoExport}
+            onClose={() => setShowGeoExport(false)}
+            userRole={(() => {
+              const user = getCurrentUser();
+              return (user?.role as string) || "viewer";
+            })()}
+          />
         </main>
       </div>
     </div>
