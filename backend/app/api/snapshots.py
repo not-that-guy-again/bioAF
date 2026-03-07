@@ -26,11 +26,7 @@ def _snapshot_to_response(snap) -> dict:
         "project_id": snap.project_id,
         "notebook_session_id": snap.notebook_session_id,
         "user_id": snap.user_id,
-        "user_name": snap.user.name
-        if snap.user and snap.user.name
-        else snap.user.email
-        if snap.user
-        else "Unknown",
+        "user_name": snap.user.name if snap.user and snap.user.name else snap.user.email if snap.user else "Unknown",
         "label": snap.label,
         "notes": snap.notes,
         "object_type": snap.object_type,
