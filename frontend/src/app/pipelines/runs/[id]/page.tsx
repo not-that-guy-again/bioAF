@@ -91,7 +91,7 @@ export default function PipelineRunDetailPage() {
 
   async function loadReport() {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/pipeline-runs/${runId}/report`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/pipeline-runs/${runId}/report`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("bioaf_token")}` },
       });
       setReport(await res.text());
