@@ -101,10 +101,10 @@ class GeoExportService:
         qc_status_filter: str,
     ) -> tuple[dict, list[dict], dict | None, dict | None]:
         """Gather all data needed for GEO export in efficient queries."""
-        # 1. Experiment (with owner for Series_contributor)
+        # 1. Experiment (with owner for Series_contributor, custom_fields for protocols)
         exp_result = await session.execute(
             select(Experiment)
-            .options(selectinload(Experiment.owner))
+            .options(selectinload(Experiment.owner), selectinload(Experiment.custom_fields))
             .where(
                 Experiment.id == experiment_id,
                 Experiment.organization_id == org_id,
@@ -143,6 +143,32 @@ class GeoExportService:
         )
         files = list(files_result.scalars().all())
 
+        # Load custom fields for protocol info
+        custom_fields_dict: dict[str, str] = {}
+        if experiment.custom_fields:
+            for cf in experiment.custom_fields:
+                if cf.field_value:
+                    custom_fields_dict[cf.field_name] = cf.field_value
+
+        # Auto-generate protocol descriptions if not set
+        if "extract_protocol" not in custom_fields_dict and samples:
+            preps = {s.library_prep_method for s in samples if s.library_prep_method}
+            molecules = {s.molecule_type for s in samples if s.molecule_type}
+            if preps or molecules:
+                parts = []
+                if molecules:
+                    parts.append(f"Molecule type: {', '.join(sorted(molecules))}")
+                if preps:
+                    parts.append(f"Library preparation: {', '.join(sorted(preps))}")
+                custom_fields_dict["extract_protocol"] = ". ".join(parts) + "."
+
+        if "treatment_protocol" not in custom_fields_dict and samples:
+            treatments = {s.treatment_condition for s in samples if s.treatment_condition}
+            if treatments:
+                custom_fields_dict["treatment_protocol"] = (
+                    f"Treatment conditions: {', '.join(sorted(treatments))}."
+                )
+
         # Assemble data dicts
         experiment_data = {
             "id": experiment.id,
@@ -150,6 +176,7 @@ class GeoExportService:
             "description": experiment.description,
             "hypothesis": getattr(experiment, "hypothesis", None),
             "owner_user_name": experiment.owner.name if experiment.owner else None,
+            "custom_fields": custom_fields_dict,
             "samples": [{"organism": s.organism, "tissue_type": s.tissue_type} for s in samples],
         }
 
