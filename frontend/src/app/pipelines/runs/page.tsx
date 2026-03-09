@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { isAuthenticated } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { ReviewBadge } from "@/components/experiments/ReviewBadge";
 import type { PipelineRun, PipelineRunListResponse, PipelineRunStatus } from "@/lib/types";
 
 const STATUS_COLORS: Record<PipelineRunStatus, string> = {
@@ -82,6 +83,7 @@ export default function PipelineRunsPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pipeline</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Experiment</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Review</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitter</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
@@ -96,6 +98,9 @@ export default function PipelineRunsPage() {
                     <td className="px-4 py-3 text-sm">{r.experiment?.name || "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 text-xs rounded-full ${STATUS_COLORS[r.status]}`}>{r.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.review_verdict ? <ReviewBadge verdict={r.review_verdict} /> : <span className="text-xs text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       {r.progress ? (
@@ -113,7 +118,7 @@ export default function PipelineRunsPage() {
                   </tr>
                 ))}
                 {runs.length === 0 && (
-                  <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">No pipeline runs</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400">No pipeline runs</td></tr>
                 )}
               </tbody>
             </table>
