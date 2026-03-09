@@ -25,6 +25,8 @@ export default function PipelineRunsPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [sortField, setSortField] = useState<"id" | "status" | "pipeline_name">("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -53,6 +55,25 @@ export default function PipelineRunsPage() {
     return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
   }
 
+  function toggleSort(field: "id" | "status" | "pipeline_name") {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("desc");
+    }
+  }
+
+  const sortedRuns = [...runs].sort((a, b) => {
+    let cmp = 0;
+    if (sortField === "id") cmp = a.id - b.id;
+    else if (sortField === "status") cmp = a.status.localeCompare(b.status);
+    else if (sortField === "pipeline_name") cmp = a.pipeline_name.localeCompare(b.pipeline_name);
+    return sortDir === "desc" ? -cmp : cmp;
+  });
+
+  const sortIcon = (field: string) => sortField === field ? (sortDir === "desc" ? " ↓" : " ↑") : "";
+
   if (loading) {
     return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
@@ -79,10 +100,10 @@ export default function PipelineRunsPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Run</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pipeline</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => toggleSort("id")}>Run{sortIcon("id")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => toggleSort("pipeline_name")}>Pipeline{sortIcon("pipeline_name")}</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Experiment</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700" onClick={() => toggleSort("status")}>Status{sortIcon("status")}</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Review</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitter</th>
@@ -91,7 +112,7 @@ export default function PipelineRunsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {runs.map((r) => (
+                {sortedRuns.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/pipelines/runs/${r.id}`)}>
                     <td className="px-4 py-3 text-sm font-mono">#{r.id}</td>
                     <td className="px-4 py-3 text-sm">{r.pipeline_name}</td>
