@@ -47,6 +47,7 @@ from app.models.experiment import Experiment  # noqa: E402
 from app.models.file import File  # noqa: E402
 from app.models.notebook_session import NotebookSession  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
+from app.models.qc_dashboard import QCDashboard  # noqa: E402
 from app.models.pipeline_run import PipelineRun, PipelineRunSample  # noqa: E402
 from app.models.pipeline_run_review import PipelineRunReview  # noqa: E402
 from app.models.project import Project  # noqa: E402
@@ -163,6 +164,9 @@ async def cleanup(session: AsyncSession) -> None:
                         pipeline_run_references.c.pipeline_run_id == run.id
                     )
                 )
+            await session.execute(
+                delete(QCDashboard).where(QCDashboard.experiment_id == exp.id)
+            )
             await session.execute(
                 delete(PipelineRun).where(PipelineRun.experiment_id == exp.id)
             )
@@ -1104,6 +1108,116 @@ async def create_activity_feed(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# QC Dashboards
+# ═══════════════════════════════════════════════════════════════════════════
+async def create_qc_dashboards(
+    session: AsyncSession,
+    runs: list[PipelineRun],
+    experiments: list[Experiment],
+    org_id: int,
+) -> list[QCDashboard]:
+    """Create QC dashboard records for completed pipeline runs with varied quality."""
+    # Quality profiles keyed by run index
+    profiles = [
+        {  # Run 0: excellent — matches "approved" review
+            "cell_count": 4312,
+            "median_genes_per_cell": 3200,
+            "median_umi_per_cell": 12500,
+            "median_mito_pct": 3.2,
+            "median_reads_per_cell": 45000,
+            "doublet_score": 0.04,
+            "saturation": 0.72,
+        },
+        {  # Run 1: good — matches "approved_with_caveats" review
+            "cell_count": 3850,
+            "median_genes_per_cell": 2800,
+            "median_umi_per_cell": 10200,
+            "median_mito_pct": 6.1,
+            "median_reads_per_cell": 38000,
+            "doublet_score": 0.06,
+            "saturation": 0.65,
+        },
+        {  # Run 2: poor — matches "rejected" review
+            "cell_count": 1200,
+            "median_genes_per_cell": 1100,
+            "median_umi_per_cell": 3800,
+            "median_mito_pct": 14.5,
+            "median_reads_per_cell": 18000,
+            "doublet_score": 0.15,
+            "saturation": 0.41,
+        },
+        {  # Run 3: moderate
+            "cell_count": 5620,
+            "median_genes_per_cell": 2500,
+            "median_umi_per_cell": 9400,
+            "median_mito_pct": 4.8,
+            "median_reads_per_cell": 35000,
+            "doublet_score": 0.05,
+            "saturation": 0.68,
+        },
+        {  # Run 4: good
+            "cell_count": 8102,
+            "median_genes_per_cell": 3500,
+            "median_umi_per_cell": 14200,
+            "median_mito_pct": 2.9,
+            "median_reads_per_cell": 52000,
+            "doublet_score": 0.03,
+            "saturation": 0.78,
+        },
+        {  # Run 5: acceptable — matches "revision_requested" review
+            "cell_count": 2900,
+            "median_genes_per_cell": 2100,
+            "median_umi_per_cell": 7600,
+            "median_mito_pct": 8.3,
+            "median_reads_per_cell": 28000,
+            "doublet_score": 0.09,
+            "saturation": 0.55,
+        },
+    ]
+
+    summaries = [
+        "Excellent quality. 4312 cells recovered with median 3200 genes/cell. Low doublet rate and mitochondrial content.",
+        "Good quality with minor concerns. 3850 cells, but elevated mitochondrial reads (6.1%) suggest some stressed cells.",
+        "Poor quality. Only 1200 cells recovered with high mitochondrial content (14.5%). Recommend repeating library prep.",
+        "Moderate quality. 5620 cells recovered. Metrics within acceptable range for downstream analysis.",
+        "Very good quality. 8102 cells with excellent gene detection (3500 genes/cell) and low mito content.",
+        "Acceptable but marginal. 2900 cells with elevated mito% (8.3%). Consider filtering stringently before analysis.",
+    ]
+
+    plots_template = [
+        {"name": "knee_plot", "title": "Barcode Rank Plot", "type": "line"},
+        {"name": "violin_genes", "title": "Genes per Cell", "type": "violin"},
+        {"name": "scatter_mito", "title": "Mito % vs UMI", "type": "scatter"},
+        {"name": "violin_umi", "title": "UMI per Cell", "type": "violin"},
+        {"name": "doublet_score", "title": "Doublet Score Distribution", "type": "histogram"},
+    ]
+
+    dashboards = []
+    for i, run in enumerate(runs):
+        if run.status != "completed":
+            continue
+        profile_idx = i if i < len(profiles) else i % len(profiles)
+        # Determine experiment_id for this run
+        exp_id = run.experiment_id
+        dashboard = QCDashboard(
+            organization_id=org_id,
+            pipeline_run_id=run.id,
+            experiment_id=exp_id,
+            metrics_json=profiles[profile_idx],
+            summary_text=summaries[profile_idx],
+            plots_json=plots_template,
+            status="complete",
+            generated_at=run.completed_at or NOW - timedelta(days=7 - i),
+        )
+        session.add(dashboard)
+        dashboards.append(dashboard)
+
+    await session.flush()
+    print(f"Created {len(dashboards)} QC dashboard records.")
+    return dashboards
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 async def main() -> None:
@@ -1143,6 +1257,8 @@ async def main() -> None:
                     )
                 )
             await session.flush()
+
+        await create_qc_dashboards(session, runs, experiments, org_id)
 
         await create_geo_files(session, experiments, samples, org_id)
 
