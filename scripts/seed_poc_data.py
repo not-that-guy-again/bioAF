@@ -92,16 +92,37 @@ def fake_md5(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-async def _safe_sql(session: AsyncSession, sql: str) -> None:
-    """Execute raw SQL inside a SAVEPOINT so missing-table errors are non-fatal."""
+_FK_QUERY = text("""
+    SELECT kcu.table_name, kcu.column_name
+    FROM information_schema.referential_constraints rc
+    JOIN information_schema.key_column_usage kcu
+        ON  kcu.constraint_name   = rc.constraint_name
+        AND kcu.constraint_schema = rc.constraint_schema
+    JOIN information_schema.key_column_usage pku
+        ON  pku.constraint_name   = rc.unique_constraint_name
+        AND pku.constraint_schema = rc.unique_constraint_schema
+    WHERE pku.table_name  = :parent_table
+      AND pku.column_name = :parent_col
+      AND kcu.table_schema = 'public'
+""")
+
+
+async def _safe_sql(session: AsyncSession, sql: str) -> list:
+    """Execute raw SQL inside a SAVEPOINT.
+
+    Returns result rows on SELECT, empty list on DML or if table missing.
+    """
     await session.execute(text("SAVEPOINT _sd"))
     try:
-        await session.execute(text(sql))
+        result = await session.execute(text(sql))
+        rows = result.all() if result.returns_rows else []
         await session.execute(text("RELEASE SAVEPOINT _sd"))
+        return rows
     except Exception as exc:
         await session.execute(text("ROLLBACK TO SAVEPOINT _sd"))
         if "UndefinedTable" not in str(exc):
             raise
+        return []
 
 
 async def _nuke_fk_children(
@@ -109,71 +130,43 @@ async def _nuke_fk_children(
     parent_table: str,
     parent_col: str,
     id_values: list[int],
+    _visited: set | None = None,
 ) -> None:
-    """Dynamically find and delete all rows in tables that FK-reference
-    *parent_table*.*parent_col* for the given *id_values*.
+    """Recursively delete all rows that FK-reference the given IDs.
 
-    Queries ``information_schema`` so we never miss a table — no matter
-    what migrations have run.
+    Walks the full FK tree to arbitrary depth via ``information_schema``,
+    so no table is ever missed regardless of how many migrations exist.
     """
     if not id_values:
         return
+    if _visited is None:
+        _visited = set()
+
+    # Cycle guard (self-referential FKs are NULLed before we get here)
+    visit_key = (parent_table, parent_col)
+    if visit_key in _visited:
+        return
+    _visited.add(visit_key)
 
     id_csv = ",".join(str(v) for v in id_values)
 
     # Discover every FK that points at parent_table.parent_col
-    fk_query = text("""
-        SELECT
-            kcu.table_name   AS child_table,
-            kcu.column_name  AS child_column
-        FROM information_schema.referential_constraints rc
-        JOIN information_schema.key_column_usage kcu
-            ON kcu.constraint_name = rc.constraint_name
-            AND kcu.constraint_schema = rc.constraint_schema
-        JOIN information_schema.key_column_usage pku
-            ON pku.constraint_name = rc.unique_constraint_name
-            AND pku.constraint_schema = rc.unique_constraint_schema
-        WHERE pku.table_name  = :parent_table
-          AND pku.column_name = :parent_col
-          AND kcu.table_schema = 'public'
-    """)
-    rows = (await session.execute(
-        fk_query, {"parent_table": parent_table, "parent_col": parent_col}
+    children = (await session.execute(
+        _FK_QUERY, {"parent_table": parent_table, "parent_col": parent_col}
     )).all()
 
-    # First pass: recursively clear grandchild FKs (e.g. notification_delivery_log → notifications → users)
-    for child_table, child_col in rows:
-        child_ids_sql = f"SELECT {child_col} FROM {child_table} WHERE {child_col} IN ({id_csv})"
-        # Find tables that FK-reference the child table's PK
-        grandchild_query = text("""
-            SELECT
-                kcu.table_name   AS gc_table,
-                kcu.column_name  AS gc_column,
-                pku.column_name  AS gc_parent_col
-            FROM information_schema.referential_constraints rc
-            JOIN information_schema.key_column_usage kcu
-                ON kcu.constraint_name = rc.constraint_name
-                AND kcu.constraint_schema = rc.constraint_schema
-            JOIN information_schema.key_column_usage pku
-                ON pku.constraint_name = rc.unique_constraint_name
-                AND pku.constraint_schema = rc.unique_constraint_schema
-            WHERE pku.table_name  = :child_table
-              AND pku.column_name = 'id'
-              AND kcu.table_schema = 'public'
-        """)
-        gc_rows = (await session.execute(
-            grandchild_query, {"child_table": child_table}
-        )).all()
-        for gc_table, gc_column, _ in gc_rows:
-            await _safe_sql(session,
-                f"DELETE FROM {gc_table} WHERE {gc_column} IN "
-                f"(SELECT id FROM {child_table} WHERE {child_col} IN ({id_csv}))")
+    for child_table, child_col in children:
+        # Collect IDs of the child rows we're about to delete
+        child_row_ids = await _safe_sql(session,
+            f"SELECT id FROM {child_table} WHERE {child_col} IN ({id_csv})")
+        child_ids = [r[0] for r in child_row_ids]
 
-    # Second pass: SET NULL for non-FK columns that reference the parent (e.g. component_states.last_terraform_run_id)
-    # (handled implicitly — if the column is nullable, the FK won't block parent deletion once child rows are gone)
+        # Recurse: delete everything that FK-references *these* child rows
+        if child_ids:
+            await _nuke_fk_children(
+                session, child_table, "id", child_ids, _visited)
 
-    # Third pass: delete from the child tables themselves
-    for child_table, child_col in rows:
+        # Now safe to delete the child rows themselves
         await _safe_sql(session,
             f"DELETE FROM {child_table} WHERE {child_col} IN ({id_csv})")
 
