@@ -92,7 +92,7 @@ def fake_md5(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-_FK_QUERY = text("""
+_FK_CHILDREN_QUERY = text("""
     SELECT kcu.table_name, kcu.column_name
     FROM information_schema.referential_constraints rc
     JOIN information_schema.key_column_usage kcu
@@ -106,11 +106,22 @@ _FK_QUERY = text("""
       AND kcu.table_schema = 'public'
 """)
 
+_PK_QUERY = text("""
+    SELECT kcu.column_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+        ON  kcu.constraint_name   = tc.constraint_name
+        AND kcu.constraint_schema = tc.constraint_schema
+    WHERE tc.table_name       = :table_name
+      AND tc.constraint_type  = 'PRIMARY KEY'
+      AND tc.table_schema     = 'public'
+""")
+
 
 async def _safe_sql(session: AsyncSession, sql: str) -> list:
     """Execute raw SQL inside a SAVEPOINT.
 
-    Returns result rows on SELECT, empty list on DML or if table missing.
+    Returns result rows on SELECT, empty list on DML or if table/column missing.
     """
     await session.execute(text("SAVEPOINT _sd"))
     try:
@@ -120,9 +131,9 @@ async def _safe_sql(session: AsyncSession, sql: str) -> list:
         return rows
     except Exception as exc:
         await session.execute(text("ROLLBACK TO SAVEPOINT _sd"))
-        if "UndefinedTable" not in str(exc):
-            raise
-        return []
+        if "UndefinedTable" in str(exc) or "UndefinedColumn" in str(exc):
+            return []
+        raise
 
 
 async def _nuke_fk_children(
@@ -136,6 +147,9 @@ async def _nuke_fk_children(
 
     Walks the full FK tree to arbitrary depth via ``information_schema``,
     so no table is ever missed regardless of how many migrations exist.
+
+    Handles junction tables (composite PKs, no ``id`` column) as leaf
+    nodes — they are deleted directly without recursion.
     """
     if not id_values:
         return
@@ -152,19 +166,27 @@ async def _nuke_fk_children(
 
     # Discover every FK that points at parent_table.parent_col
     children = (await session.execute(
-        _FK_QUERY, {"parent_table": parent_table, "parent_col": parent_col}
+        _FK_CHILDREN_QUERY, {"parent_table": parent_table, "parent_col": parent_col}
     )).all()
 
     for child_table, child_col in children:
-        # Collect IDs of the child rows we're about to delete
-        child_row_ids = await _safe_sql(session,
-            f"SELECT id FROM {child_table} WHERE {child_col} IN ({id_csv})")
-        child_ids = [r[0] for r in child_row_ids]
+        # Look up the child table's PK to see if we can recurse
+        pk_rows = (await session.execute(
+            _PK_QUERY, {"table_name": child_table}
+        )).all()
+        pk_cols = [r[0] for r in pk_rows]
 
-        # Recurse: delete everything that FK-references *these* child rows
-        if child_ids:
-            await _nuke_fk_children(
-                session, child_table, "id", child_ids, _visited)
+        # Only recurse if the table has a single-column PK we can select.
+        # Junction tables (composite PK, no "id") are leaf nodes — just delete.
+        if len(pk_cols) == 1:
+            pk_col = pk_cols[0]
+            child_row_ids = await _safe_sql(session,
+                f"SELECT {pk_col} FROM {child_table} WHERE {child_col} IN ({id_csv})")
+            child_ids = [r[0] for r in child_row_ids]
+
+            if child_ids:
+                await _nuke_fk_children(
+                    session, child_table, pk_col, child_ids, _visited)
 
         # Now safe to delete the child rows themselves
         await _safe_sql(session,
