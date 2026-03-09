@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 from app.database import async_session_factory  # noqa: E402
 from app.models.activity_feed import ActivityFeedEntry  # noqa: E402
 from app.models.analysis_snapshot import AnalysisSnapshot  # noqa: E402
+from app.models.audit_log import AuditLog  # noqa: E402
 from app.models.batch import Batch  # noqa: E402
 from app.models.experiment import Experiment  # noqa: E402
 from app.models.file import File  # noqa: E402
@@ -108,6 +109,16 @@ async def cleanup(session: AsyncSession) -> None:
 
     if demo_org:
         org_id = demo_org.id
+
+        # Audit log entries for demo users
+        demo_user_result = await session.execute(
+            select(User.id).where(User.organization_id == org_id)
+        )
+        demo_user_ids = [row[0] for row in demo_user_result.all()]
+        if demo_user_ids:
+            await session.execute(
+                delete(AuditLog).where(AuditLog.user_id.in_(demo_user_ids))
+            )
 
         await session.execute(
             delete(SlurmJob).where(SlurmJob.organization_id == org_id)
@@ -1218,6 +1229,71 @@ async def create_qc_dashboards(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Audit Trail Entries
+# ═══════════════════════════════════════════════════════════════════════════
+async def create_audit_entries(
+    session: AsyncSession,
+    experiments: list[Experiment],
+    samples: dict[int, list[Sample]],
+    runs: list[PipelineRun],
+    admin: User,
+    comp_bio: User,
+) -> None:
+    """Generate audit log entries for experiment lifecycle events."""
+    entries = []
+
+    for exp in experiments:
+        base_time = exp.created_at or NOW - timedelta(days=14)
+
+        # Experiment registered
+        entries.append(AuditLog(
+            user_id=admin.id,
+            entity_type="experiment",
+            entity_id=exp.id,
+            action="created",
+            details_json={"name": exp.name, "status": "registered"},
+        ))
+
+        # Samples added
+        exp_samples = samples.get(exp.id, [])
+        if exp_samples:
+            entries.append(AuditLog(
+                user_id=admin.id,
+                entity_type="experiment",
+                entity_id=exp.id,
+                action="samples_added",
+                details_json={"count": len(exp_samples)},
+            ))
+
+    # Pipeline run events
+    for run in runs:
+        entries.append(AuditLog(
+            user_id=comp_bio.id,
+            entity_type="pipeline_run",
+            entity_id=run.id,
+            action="created",
+            details_json={
+                "pipeline_name": run.pipeline_name,
+                "experiment_id": run.experiment_id,
+            },
+        ))
+        if run.status == "completed":
+            entries.append(AuditLog(
+                user_id=comp_bio.id,
+                entity_type="pipeline_run",
+                entity_id=run.id,
+                action="status_change",
+                details_json={"status": "completed"},
+                previous_value_json={"status": "running"},
+            ))
+
+    for entry in entries:
+        session.add(entry)
+    await session.flush()
+    print(f"Created {len(entries)} audit log entries.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 async def main() -> None:
@@ -1310,6 +1386,10 @@ async def main() -> None:
 
         await create_activity_feed(
             session, experiments, project, org_id, users
+        )
+
+        await create_audit_entries(
+            session, experiments, samples, runs, admin, comp_bio
         )
 
         await session.commit()
