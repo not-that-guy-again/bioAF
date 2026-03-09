@@ -116,10 +116,14 @@ export default function ReferenceDetailPage() {
   async function openDeprecateModal() {
     setShowDeprecateModal(true);
     try {
-      const data = await api.get<ReferenceDatasetListResponse>("/api/references?status=active");
-      setActiveRefs(data.references.filter((r) => r.id !== Number(id)));
+      const [refsData, impactData] = await Promise.all([
+        api.get<ReferenceDatasetListResponse>("/api/references?status=active"),
+        api.get<ImpactSummary>(`/api/references/${id}/impact`),
+      ]);
+      setActiveRefs(refsData.references.filter((r) => r.id !== Number(id)));
+      setImpact(impactData);
     } catch {
-      // ignore
+      // ignore — modal still works without impact preview
     }
   }
 
@@ -163,7 +167,7 @@ export default function ReferenceDetailPage() {
               &larr; Back
             </button>
             <h1 className="text-2xl font-bold">{reference.name}</h1>
-            <span className="text-sm text-gray-500">v{reference.version}</span>
+            <span className="text-sm text-gray-500">{reference.version?.startsWith("v") ? reference.version : `v${reference.version}`}</span>
             <ReferenceStatusBadge status={reference.status} size="md" />
           </div>
 
@@ -414,6 +418,13 @@ export default function ReferenceDetailPage() {
                 <p className="text-sm text-gray-500 mb-4">
                   This will mark &quot;{reference.name}&quot; as pending deprecation approval.
                 </p>
+                {impact && impact.total_pipeline_runs > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+                    <p className="text-sm text-amber-800 font-medium">
+                      ⚠ {impact.total_pipeline_runs} pipeline run{impact.total_pipeline_runs !== 1 ? "s" : ""} across {impact.total_experiments} experiment{impact.total_experiments !== 1 ? "s" : ""} use this reference and will be impacted.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

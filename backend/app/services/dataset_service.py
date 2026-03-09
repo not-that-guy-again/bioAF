@@ -74,11 +74,13 @@ class DatasetService:
             if chemistry and not any(s.chemistry_version == chemistry for s in samples):
                 continue
 
-            # Get file count and size
+            # Get file count and size via sample_files junction table (LEFT JOIN
+            # so that experiments with 0 linked files return 0 instead of crashing)
             file_result = await session.execute(
                 select(func.count(File.id), func.coalesce(func.sum(File.size_bytes), 0))
-                .join(text("sample_files ON sample_files.file_id = files.id"))
-                .join(Sample, Sample.id == text("sample_files.sample_id"))
+                .select_from(Sample)
+                .outerjoin(text("sample_files ON sample_files.sample_id = samples.id"))
+                .outerjoin(File, File.id == text("sample_files.file_id"))
                 .where(Sample.experiment_id == exp.id)
             )
             file_row = file_result.first()

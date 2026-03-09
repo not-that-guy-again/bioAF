@@ -75,6 +75,7 @@ class PipelineRunResponse(BaseModel):
     reference_genome: str | None = None
     alignment_algorithm: str | None = None
     resume_from_run_id: int | None = None
+    review_verdict: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime | None = None

@@ -1,10 +1,12 @@
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.api.dependencies import require_role
+from app.models.pipeline_run_review import PipelineRunReview
 from app.schemas.pipeline_run import (
     ExperimentSummary,
     PipelineProgress,
@@ -106,8 +108,27 @@ async def list_runs(
         status=status,
         submitted_by_user_id=submitted_by_user_id,
     )
+    # Batch-fetch active review verdicts for listed runs
+    run_ids = [r.id for r in runs]
+    verdict_map: dict[int, str] = {}
+    if run_ids:
+        review_result = await session.execute(
+            select(PipelineRunReview.pipeline_run_id, PipelineRunReview.verdict).where(
+                PipelineRunReview.pipeline_run_id.in_(run_ids),
+                PipelineRunReview.superseded_by_id.is_(None),
+            )
+        )
+        for row in review_result.all():
+            verdict_map[row[0]] = row[1]
+
+    run_responses = []
+    for r in runs:
+        resp = _run_response(r)
+        resp.review_verdict = verdict_map.get(r.id)
+        run_responses.append(resp)
+
     return PipelineRunListResponse(
-        runs=[_run_response(r) for r in runs],
+        runs=run_responses,
         total=total,
         page=page,
         page_size=page_size,
