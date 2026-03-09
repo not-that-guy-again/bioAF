@@ -188,6 +188,17 @@ class GeoExportService:
         raw_files = [f for f in files if f.file_type in ("fastq", "fastq.gz", "fq.gz")]
         processed_files = [f for f in files if f.file_type not in ("fastq", "fastq.gz", "fq.gz")]
 
+        # Build per-sample file data by matching filename prefix to sample external ID
+        for sd in samples_data:
+            ext_id = sd["sample_id_external"]
+            s_raw = [f for f in raw_files if f.filename.startswith(ext_id)]
+            s_proc = [f for f in processed_files if f.filename.startswith(ext_id)]
+            sd["files"] = {
+                "raw_filenames": ", ".join(f.filename for f in s_raw),
+                "processed_filenames": ", ".join(f.filename for f in s_proc),
+                "processed_gcs_uris": ", ".join(f.gcs_uri for f in s_proc),
+            }
+
         files_data: dict | None = None
         if files:
             files_data = {

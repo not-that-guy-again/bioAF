@@ -223,7 +223,11 @@ def _get_source_value(
     elif parts[0] == "pipeline_run":
         obj = pipeline_data or {}
     elif parts[0] == "files":
-        obj = files_data or {}
+        # Prefer per-sample file data when resolving in a sample context
+        if sample_data and "files" in sample_data:
+            obj = sample_data["files"]
+        else:
+            obj = files_data or {}
     else:
         return None
 
