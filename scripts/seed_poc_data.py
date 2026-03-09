@@ -141,26 +141,22 @@ async def _nuke_fk_children(
     parent_table: str,
     parent_col: str,
     id_values: list[int],
-    _visited: set | None = None,
+    _depth: int = 0,
 ) -> None:
     """Recursively delete all rows that FK-reference the given IDs.
 
     Walks the full FK tree to arbitrary depth via ``information_schema``,
     so no table is ever missed regardless of how many migrations exist.
 
-    Handles junction tables (composite PKs, no ``id`` column) as leaf
-    nodes — they are deleted directly without recursion.
-    """
-    if not id_values:
-        return
-    if _visited is None:
-        _visited = set()
+    Handles junction tables (composite PKs) as leaf nodes — deleted
+    directly without recursion.
 
-    # Cycle guard (self-referential FKs are NULLed before we get here)
-    visit_key = (parent_table, parent_col)
-    if visit_key in _visited:
+    Self-referential FKs must be NULLed before calling this function
+    (see step 1 of cleanup).  A depth limit guards against any
+    unforeseen cycles.
+    """
+    if not id_values or _depth > 15:
         return
-    _visited.add(visit_key)
 
     id_csv = ",".join(str(v) for v in id_values)
 
@@ -170,6 +166,10 @@ async def _nuke_fk_children(
     )).all()
 
     for child_table, child_col in children:
+        # Skip self-referential FKs (already NULLed in step 1)
+        if child_table == parent_table:
+            continue
+
         # Look up the child table's PK to see if we can recurse
         pk_rows = (await session.execute(
             _PK_QUERY, {"table_name": child_table}
@@ -177,7 +177,7 @@ async def _nuke_fk_children(
         pk_cols = [r[0] for r in pk_rows]
 
         # Only recurse if the table has a single-column PK we can select.
-        # Junction tables (composite PK, no "id") are leaf nodes — just delete.
+        # Junction tables (composite PK) are leaf nodes — just delete.
         if len(pk_cols) == 1:
             pk_col = pk_cols[0]
             child_row_ids = await _safe_sql(session,
@@ -186,7 +186,7 @@ async def _nuke_fk_children(
 
             if child_ids:
                 await _nuke_fk_children(
-                    session, child_table, pk_col, child_ids, _visited)
+                    session, child_table, pk_col, child_ids, _depth + 1)
 
         # Now safe to delete the child rows themselves
         await _safe_sql(session,
