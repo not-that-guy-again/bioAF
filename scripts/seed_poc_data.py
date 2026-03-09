@@ -1243,8 +1243,9 @@ async def main() -> None:
         )
         refs = await create_reference_datasets(session, org_id, admin)
 
-        # Link some pipeline runs to references
+        # Link pipeline runs to references
         if len(runs) >= 2 and len(refs) >= 4:
+            # Human PBMC runs (0,1) → GRCh38 v44 + STARsolo index
             for run in runs[:2]:
                 await session.execute(
                     pipeline_run_references.insert().values(
@@ -1256,7 +1257,27 @@ async def main() -> None:
                         pipeline_run_id=run.id, reference_dataset_id=refs[3].id
                     )
                 )
+            # Mouse experiment runs (2,3) → GRCm39 M33
+            for run in runs[2:4]:
+                await session.execute(
+                    pipeline_run_references.insert().values(
+                        pipeline_run_id=run.id, reference_dataset_id=refs[2].id
+                    )
+                )
+            # Tumor experiment runs (4,5) → GRCh38 v43 + STARsolo index
+            for run in runs[4:6]:
+                await session.execute(
+                    pipeline_run_references.insert().values(
+                        pipeline_run_id=run.id, reference_dataset_id=refs[0].id
+                    )
+                )
+                await session.execute(
+                    pipeline_run_references.insert().values(
+                        pipeline_run_id=run.id, reference_dataset_id=refs[3].id
+                    )
+                )
             await session.flush()
+            print("Linked all pipeline runs to appropriate references.")
 
         await create_qc_dashboards(session, runs, experiments, org_id)
 
