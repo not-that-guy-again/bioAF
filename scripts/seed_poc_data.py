@@ -36,7 +36,7 @@ from decimal import Decimal
 
 sys.path.insert(0, "backend")
 
-from sqlalchemy import delete, select  # noqa: E402
+from sqlalchemy import delete, select, text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from app.database import async_session_factory  # noqa: E402
@@ -221,6 +221,80 @@ async def cleanup(session: AsyncSession) -> None:
             await session.execute(
                 delete(ReferenceDataset).where(ReferenceDataset.id == ref.id)
             )
+
+        # ── Tables referencing users (must delete before users) ──
+        if demo_user_ids:
+            uid_list = ",".join(str(uid) for uid in demo_user_ids)
+            # notification_delivery_log → notifications (FK chain)
+            await session.execute(text(
+                f"DELETE FROM notification_delivery_log WHERE notification_id IN "
+                f"(SELECT id FROM notifications WHERE user_id IN ({uid_list}))"
+            ))
+            await session.execute(text(
+                f"DELETE FROM notifications WHERE user_id IN ({uid_list})"
+            ))
+            await session.execute(text(
+                f"DELETE FROM notification_preferences WHERE user_id IN ({uid_list})"
+            ))
+            await session.execute(text(
+                f"DELETE FROM access_log WHERE user_id IN ({uid_list})"
+            ))
+            await session.execute(text(
+                f"DELETE FROM verification_codes WHERE user_id IN ({uid_list})"
+            ))
+            # terraform_runs → users; component_states → terraform_runs
+            await session.execute(text(
+                f"UPDATE component_states SET last_terraform_run_id = NULL "
+                f"WHERE last_terraform_run_id IN "
+                f"(SELECT id FROM terraform_runs WHERE triggered_by_user_id IN ({uid_list}))"
+            ))
+            await session.execute(text(
+                f"DELETE FROM terraform_runs WHERE triggered_by_user_id IN ({uid_list})"
+            ))
+
+        # ── Tables referencing organization (must delete before org) ──
+        await session.execute(text(
+            f"DELETE FROM notification_rules WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM slack_webhooks WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM budget_configs WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM cost_records WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM storage_stats WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM environment_changes WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM environments WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM gitops_repos WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM pipeline_catalog_entries WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM cellxgene_publications WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM documents WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM plot_archive_entries WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM experiment_templates WHERE organization_id = {org_id}"
+        ))
+        await session.execute(text(
+            f"DELETE FROM upgrade_history WHERE organization_id = {org_id}"
+        ))
 
         # Users & org
         await session.execute(delete(User).where(User.organization_id == org_id))
