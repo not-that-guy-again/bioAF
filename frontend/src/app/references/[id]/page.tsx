@@ -167,7 +167,7 @@ export default function ReferenceDetailPage() {
               &larr; Back
             </button>
             <h1 className="text-2xl font-bold">{reference.name}</h1>
-            <span className="text-sm text-gray-500">v{reference.version}</span>
+            <span className="text-sm text-gray-500">{reference.version?.startsWith("v") ? reference.version : `v${reference.version}`}</span>
             <ReferenceStatusBadge status={reference.status} size="md" />
           </div>
 
