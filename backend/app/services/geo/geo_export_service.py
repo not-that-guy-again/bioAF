@@ -101,9 +101,11 @@ class GeoExportService:
         qc_status_filter: str,
     ) -> tuple[dict, list[dict], dict | None, dict | None]:
         """Gather all data needed for GEO export in efficient queries."""
-        # 1. Experiment
+        # 1. Experiment (with owner for Series_contributor)
         exp_result = await session.execute(
-            select(Experiment).where(
+            select(Experiment)
+            .options(selectinload(Experiment.owner))
+            .where(
                 Experiment.id == experiment_id,
                 Experiment.organization_id == org_id,
             )
@@ -147,7 +149,7 @@ class GeoExportService:
             "name": experiment.name,
             "description": experiment.description,
             "hypothesis": getattr(experiment, "hypothesis", None),
-            "owner_user_name": None,  # Would need user join
+            "owner_user_name": experiment.owner.name if experiment.owner else None,
             "samples": [{"organism": s.organism, "tissue_type": s.tissue_type} for s in samples],
         }
 
