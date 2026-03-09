@@ -542,6 +542,7 @@ export interface PipelineRun {
   reference_genome: string | null;
   alignment_algorithm: string | null;
   resume_from_run_id: number | null;
+  review_verdict: ReviewVerdict | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string | null;

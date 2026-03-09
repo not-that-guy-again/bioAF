@@ -355,6 +355,8 @@ export default function ExperimentDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Organism</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tissue</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Molecule</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Treatment</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Prep</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Layout</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QC</th>
@@ -368,6 +370,8 @@ export default function ExperimentDetailPage() {
                         <td className="px-4 py-3 text-sm">{s.organism || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.tissue_type || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.molecule_type || "—"}</td>
+                        <td className="px-4 py-3 text-sm">{s.treatment_condition || "—"}</td>
+                        <td className="px-4 py-3 text-sm">{s.library_prep_method || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.library_layout || "—"}</td>
                         <td className="px-4 py-3 text-sm">{s.batch?.name || "—"}</td>
                         <td className="px-4 py-3">
@@ -386,7 +390,7 @@ export default function ExperimentDetailPage() {
                       </tr>
                     ))}
                     {samples.length === 0 && (
-                      <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
+                      <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
                     )}
                   </tbody>
                 </table>

@@ -36,17 +36,19 @@ from decimal import Decimal
 
 sys.path.insert(0, "backend")
 
-from sqlalchemy import delete, select  # noqa: E402
+from sqlalchemy import delete, select, text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from app.database import async_session_factory  # noqa: E402
 from app.models.activity_feed import ActivityFeedEntry  # noqa: E402
 from app.models.analysis_snapshot import AnalysisSnapshot  # noqa: E402
+from app.models.audit_log import AuditLog  # noqa: E402
 from app.models.batch import Batch  # noqa: E402
 from app.models.experiment import Experiment  # noqa: E402
 from app.models.file import File  # noqa: E402
 from app.models.notebook_session import NotebookSession  # noqa: E402
 from app.models.organization import Organization  # noqa: E402
+from app.models.qc_dashboard import QCDashboard  # noqa: E402
 from app.models.pipeline_run import PipelineRun, PipelineRunSample  # noqa: E402
 from app.models.pipeline_run_review import PipelineRunReview  # noqa: E402
 from app.models.project import Project  # noqa: E402
@@ -88,130 +90,162 @@ def fake_md5(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 # Cleanup
 # ═══════════════════════════════════════════════════════════════════════════
-async def cleanup(session: AsyncSession) -> None:
-    """Remove all POC demo data so the script is idempotent."""
-    # Activity feed
-    await session.execute(
-        delete(ActivityFeedEntry).where(
-            ActivityFeedEntry.summary.like(f"%{DEMO_PREFIX}%")
-        )
-    )
 
-    # Notebook sessions & SLURM jobs (by user email lookup later — nuke all
-    # for the demo org instead)
+
+_FK_CHILDREN_QUERY = text("""
+    SELECT kcu.table_name, kcu.column_name
+    FROM information_schema.referential_constraints rc
+    JOIN information_schema.key_column_usage kcu
+        ON  kcu.constraint_name   = rc.constraint_name
+        AND kcu.constraint_schema = rc.constraint_schema
+    JOIN information_schema.key_column_usage pku
+        ON  pku.constraint_name   = rc.unique_constraint_name
+        AND pku.constraint_schema = rc.unique_constraint_schema
+    WHERE pku.table_name  = :parent_table
+      AND pku.column_name = :parent_col
+      AND kcu.table_schema = 'public'
+""")
+
+_PK_QUERY = text("""
+    SELECT kcu.column_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+        ON  kcu.constraint_name   = tc.constraint_name
+        AND kcu.constraint_schema = tc.constraint_schema
+    WHERE tc.table_name       = :table_name
+      AND tc.constraint_type  = 'PRIMARY KEY'
+      AND tc.table_schema     = 'public'
+""")
+
+
+async def _safe_sql(session: AsyncSession, sql: str) -> list:
+    """Execute raw SQL inside a SAVEPOINT.
+
+    Returns result rows on SELECT, empty list on DML or if table/column missing.
+    """
+    await session.execute(text("SAVEPOINT _sd"))
+    try:
+        result = await session.execute(text(sql))
+        rows = result.all() if result.returns_rows else []
+        await session.execute(text("RELEASE SAVEPOINT _sd"))
+        return rows
+    except Exception as exc:
+        await session.execute(text("ROLLBACK TO SAVEPOINT _sd"))
+        if "UndefinedTable" in str(exc) or "UndefinedColumn" in str(exc):
+            return []
+        raise
+
+
+async def _nuke_fk_children(
+    session: AsyncSession,
+    parent_table: str,
+    parent_col: str,
+    id_values: list[int],
+    _depth: int = 0,
+) -> None:
+    """Recursively delete all rows that FK-reference the given IDs.
+
+    Walks the full FK tree to arbitrary depth via ``information_schema``,
+    so no table is ever missed regardless of how many migrations exist.
+
+    Handles junction tables (composite PKs) as leaf nodes — deleted
+    directly without recursion.
+
+    Self-referential FKs must be NULLed before calling this function
+    (see step 1 of cleanup).  A depth limit guards against any
+    unforeseen cycles.
+    """
+    if not id_values or _depth > 15:
+        return
+
+    id_csv = ",".join(str(v) for v in id_values)
+
+    # Discover every FK that points at parent_table.parent_col
+    children = (await session.execute(
+        _FK_CHILDREN_QUERY, {"parent_table": parent_table, "parent_col": parent_col}
+    )).all()
+
+    for child_table, child_col in children:
+        # Skip self-referential FKs (already NULLed in step 1)
+        if child_table == parent_table:
+            continue
+
+        # Look up the child table's PK to see if we can recurse
+        pk_rows = (await session.execute(
+            _PK_QUERY, {"table_name": child_table}
+        )).all()
+        pk_cols = [r[0] for r in pk_rows]
+
+        # Only recurse if the table has a single-column PK we can select.
+        # Junction tables (composite PK) are leaf nodes — just delete.
+        if len(pk_cols) == 1:
+            pk_col = pk_cols[0]
+            child_row_ids = await _safe_sql(session,
+                f"SELECT {pk_col} FROM {child_table} WHERE {child_col} IN ({id_csv})")
+            child_ids = [r[0] for r in child_row_ids]
+
+            if child_ids:
+                await _nuke_fk_children(
+                    session, child_table, pk_col, child_ids, _depth + 1)
+
+        # Now safe to delete the child rows themselves
+        await _safe_sql(session,
+            f"DELETE FROM {child_table} WHERE {child_col} IN ({id_csv})")
+
+
+async def cleanup(session: AsyncSession) -> None:
+    """Remove all POC demo data so the script is idempotent.
+
+    Uses information_schema to dynamically discover FK dependencies,
+    so new tables added by future migrations are handled automatically.
+    """
     demo_org = (
         await session.execute(
             select(Organization).where(Organization.name == f"{DEMO_PREFIX} Lab")
         )
     ).scalar_one_or_none()
 
-    if demo_org:
-        org_id = demo_org.id
+    if not demo_org:
+        print("No demo org found — nothing to clean up.")
+        return
 
-        await session.execute(
-            delete(SlurmJob).where(SlurmJob.organization_id == org_id)
-        )
-        await session.execute(
-            delete(NotebookSession).where(NotebookSession.organization_id == org_id)
-        )
-        await session.execute(
-            delete(TemplateNotebook).where(TemplateNotebook.organization_id == org_id)
-        )
-        await session.execute(
-            delete(AnalysisSnapshot).where(AnalysisSnapshot.organization_id == org_id)
-        )
-        await session.execute(
-            delete(UserQuota).where(UserQuota.organization_id == org_id)
-        )
+    org_id = demo_org.id
 
-        # Projects (and project_samples)
-        proj_result = await session.execute(
-            select(Project).where(Project.organization_id == org_id)
-        )
-        for proj in proj_result.scalars().all():
-            await session.execute(
-                delete(ProjectSample).where(ProjectSample.project_id == proj.id)
-            )
-            await session.execute(
-                delete(PipelineRun).where(PipelineRun.project_id == proj.id)
-            )
-        await session.execute(
-            delete(Project).where(Project.organization_id == org_id)
-        )
+    # Collect demo user IDs
+    demo_user_result = await session.execute(
+        select(User.id).where(User.organization_id == org_id)
+    )
+    demo_user_ids = [row[0] for row in demo_user_result.all()]
 
-        # Experiments cascade
-        exp_result = await session.execute(
-            select(Experiment).where(Experiment.organization_id == org_id)
-        )
-        for exp in exp_result.scalars().all():
-            runs_result = await session.execute(
-                select(PipelineRun).where(PipelineRun.experiment_id == exp.id)
-            )
-            for run in runs_result.scalars().all():
-                await session.execute(
-                    delete(PipelineRunReview).where(
-                        PipelineRunReview.pipeline_run_id == run.id
-                    )
-                )
-                await session.execute(
-                    delete(PipelineRunSample).where(
-                        PipelineRunSample.pipeline_run_id == run.id
-                    )
-                )
-                await session.execute(
-                    pipeline_run_references.delete().where(
-                        pipeline_run_references.c.pipeline_run_id == run.id
-                    )
-                )
-            await session.execute(
-                delete(PipelineRun).where(PipelineRun.experiment_id == exp.id)
-            )
-            await session.execute(
-                delete(File).where(
-                    File.gcs_uri.contains(f"/experiments/{exp.id}/")
-                )
-            )
-            await session.execute(
-                delete(Sample).where(Sample.experiment_id == exp.id)
-            )
-            await session.execute(
-                delete(Batch).where(Batch.experiment_id == exp.id)
-            )
-        await session.execute(
-            delete(Experiment).where(Experiment.organization_id == org_id)
-        )
+    # ── 1. Clear self-referential FKs that would block deletion ──
+    # reference_datasets.superseded_by_id → reference_datasets.id
+    await _safe_sql(session,
+        f"UPDATE reference_datasets SET superseded_by_id = NULL "
+        f"WHERE organization_id = {org_id}")
+    # pipeline_runs.resume_from_run_id → pipeline_runs.id
+    await _safe_sql(session,
+        f"UPDATE pipeline_runs SET resume_from_run_id = NULL "
+        f"WHERE organization_id = {org_id}")
+    # component_states.last_terraform_run_id → terraform_runs
+    if demo_user_ids:
+        uid_csv = ",".join(str(uid) for uid in demo_user_ids)
+        await _safe_sql(session,
+            f"UPDATE component_states SET last_terraform_run_id = NULL "
+            f"WHERE last_terraform_run_id IN "
+            f"(SELECT id FROM terraform_runs WHERE triggered_by_user_id IN ({uid_csv}))")
+    await session.flush()
 
-        # Reference datasets
-        ref_result = await session.execute(
-            select(ReferenceDataset).where(
-                ReferenceDataset.organization_id == org_id
-            )
-        )
-        demo_refs = list(ref_result.scalars().all())
-        for ref in demo_refs:
-            await session.execute(
-                pipeline_run_references.delete().where(
-                    pipeline_run_references.c.reference_dataset_id == ref.id
-                )
-            )
-            await session.execute(
-                delete(ReferenceDatasetFile).where(
-                    ReferenceDatasetFile.reference_dataset_id == ref.id
-                )
-            )
-        for ref in demo_refs:
-            ref.superseded_by_id = None
-        await session.flush()
-        for ref in demo_refs:
-            await session.execute(
-                delete(ReferenceDataset).where(ReferenceDataset.id == ref.id)
-            )
+    # ── 2. Dynamically delete everything that FK-references demo users ──
+    await _nuke_fk_children(session, "users", "id", demo_user_ids)
 
-        # Users & org
-        await session.execute(delete(User).where(User.organization_id == org_id))
-        await session.execute(
-            delete(Organization).where(Organization.id == org_id)
-        )
+    # ── 3. Dynamically delete everything that FK-references the demo org ──
+    await _nuke_fk_children(session, "organizations", "id", [org_id])
+
+    # ── 4. Delete users and org themselves ──
+    await session.execute(delete(User).where(User.organization_id == org_id))
+    await session.execute(
+        delete(Organization).where(Organization.id == org_id)
+    )
 
     await session.flush()
     print("Cleanup complete.")
@@ -1104,6 +1138,181 @@ async def create_activity_feed(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# QC Dashboards
+# ═══════════════════════════════════════════════════════════════════════════
+async def create_qc_dashboards(
+    session: AsyncSession,
+    runs: list[PipelineRun],
+    experiments: list[Experiment],
+    org_id: int,
+) -> list[QCDashboard]:
+    """Create QC dashboard records for completed pipeline runs with varied quality."""
+    # Quality profiles keyed by run index
+    profiles = [
+        {  # Run 0: excellent — matches "approved" review
+            "cell_count": 4312,
+            "median_genes_per_cell": 3200,
+            "median_umi_per_cell": 12500,
+            "median_mito_pct": 3.2,
+            "median_reads_per_cell": 45000,
+            "doublet_score": 0.04,
+            "saturation": 0.72,
+        },
+        {  # Run 1: good — matches "approved_with_caveats" review
+            "cell_count": 3850,
+            "median_genes_per_cell": 2800,
+            "median_umi_per_cell": 10200,
+            "median_mito_pct": 6.1,
+            "median_reads_per_cell": 38000,
+            "doublet_score": 0.06,
+            "saturation": 0.65,
+        },
+        {  # Run 2: poor — matches "rejected" review
+            "cell_count": 1200,
+            "median_genes_per_cell": 1100,
+            "median_umi_per_cell": 3800,
+            "median_mito_pct": 14.5,
+            "median_reads_per_cell": 18000,
+            "doublet_score": 0.15,
+            "saturation": 0.41,
+        },
+        {  # Run 3: moderate
+            "cell_count": 5620,
+            "median_genes_per_cell": 2500,
+            "median_umi_per_cell": 9400,
+            "median_mito_pct": 4.8,
+            "median_reads_per_cell": 35000,
+            "doublet_score": 0.05,
+            "saturation": 0.68,
+        },
+        {  # Run 4: good
+            "cell_count": 8102,
+            "median_genes_per_cell": 3500,
+            "median_umi_per_cell": 14200,
+            "median_mito_pct": 2.9,
+            "median_reads_per_cell": 52000,
+            "doublet_score": 0.03,
+            "saturation": 0.78,
+        },
+        {  # Run 5: acceptable — matches "revision_requested" review
+            "cell_count": 2900,
+            "median_genes_per_cell": 2100,
+            "median_umi_per_cell": 7600,
+            "median_mito_pct": 8.3,
+            "median_reads_per_cell": 28000,
+            "doublet_score": 0.09,
+            "saturation": 0.55,
+        },
+    ]
+
+    summaries = [
+        "Excellent quality. 4312 cells recovered with median 3200 genes/cell. Low doublet rate and mitochondrial content.",
+        "Good quality with minor concerns. 3850 cells, but elevated mitochondrial reads (6.1%) suggest some stressed cells.",
+        "Poor quality. Only 1200 cells recovered with high mitochondrial content (14.5%). Recommend repeating library prep.",
+        "Moderate quality. 5620 cells recovered. Metrics within acceptable range for downstream analysis.",
+        "Very good quality. 8102 cells with excellent gene detection (3500 genes/cell) and low mito content.",
+        "Acceptable but marginal. 2900 cells with elevated mito% (8.3%). Consider filtering stringently before analysis.",
+    ]
+
+    plots_template = [
+        {"name": "knee_plot", "title": "Barcode Rank Plot", "type": "line"},
+        {"name": "violin_genes", "title": "Genes per Cell", "type": "violin"},
+        {"name": "scatter_mito", "title": "Mito % vs UMI", "type": "scatter"},
+        {"name": "violin_umi", "title": "UMI per Cell", "type": "violin"},
+        {"name": "doublet_score", "title": "Doublet Score Distribution", "type": "histogram"},
+    ]
+
+    dashboards = []
+    for i, run in enumerate(runs):
+        if run.status != "completed":
+            continue
+        profile_idx = i if i < len(profiles) else i % len(profiles)
+        # Determine experiment_id for this run
+        exp_id = run.experiment_id
+        dashboard = QCDashboard(
+            organization_id=org_id,
+            pipeline_run_id=run.id,
+            experiment_id=exp_id,
+            metrics_json=profiles[profile_idx],
+            summary_text=summaries[profile_idx],
+            plots_json=plots_template,
+            status="complete",
+            generated_at=run.completed_at or NOW - timedelta(days=7 - i),
+        )
+        session.add(dashboard)
+        dashboards.append(dashboard)
+
+    await session.flush()
+    print(f"Created {len(dashboards)} QC dashboard records.")
+    return dashboards
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Audit Trail Entries
+# ═══════════════════════════════════════════════════════════════════════════
+async def create_audit_entries(
+    session: AsyncSession,
+    experiments: list[Experiment],
+    samples: dict[int, list[Sample]],
+    runs: list[PipelineRun],
+    admin: User,
+    comp_bio: User,
+) -> None:
+    """Generate audit log entries for experiment lifecycle events."""
+    entries = []
+
+    for exp in experiments:
+        base_time = exp.created_at or NOW - timedelta(days=14)
+
+        # Experiment registered
+        entries.append(AuditLog(
+            user_id=admin.id,
+            entity_type="experiment",
+            entity_id=exp.id,
+            action="created",
+            details_json={"name": exp.name, "status": "registered"},
+        ))
+
+        # Samples added
+        exp_samples = samples.get(exp.id, [])
+        if exp_samples:
+            entries.append(AuditLog(
+                user_id=admin.id,
+                entity_type="experiment",
+                entity_id=exp.id,
+                action="samples_added",
+                details_json={"count": len(exp_samples)},
+            ))
+
+    # Pipeline run events
+    for run in runs:
+        entries.append(AuditLog(
+            user_id=comp_bio.id,
+            entity_type="pipeline_run",
+            entity_id=run.id,
+            action="created",
+            details_json={
+                "pipeline_name": run.pipeline_name,
+                "experiment_id": run.experiment_id,
+            },
+        ))
+        if run.status == "completed":
+            entries.append(AuditLog(
+                user_id=comp_bio.id,
+                entity_type="pipeline_run",
+                entity_id=run.id,
+                action="status_change",
+                details_json={"status": "completed"},
+                previous_value_json={"status": "running"},
+            ))
+
+    for entry in entries:
+        session.add(entry)
+    await session.flush()
+    print(f"Created {len(entries)} audit log entries.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 async def main() -> None:
@@ -1129,8 +1338,9 @@ async def main() -> None:
         )
         refs = await create_reference_datasets(session, org_id, admin)
 
-        # Link some pipeline runs to references
+        # Link pipeline runs to references
         if len(runs) >= 2 and len(refs) >= 4:
+            # Human PBMC runs (0,1) → GRCh38 v44 + STARsolo index
             for run in runs[:2]:
                 await session.execute(
                     pipeline_run_references.insert().values(
@@ -1142,13 +1352,42 @@ async def main() -> None:
                         pipeline_run_id=run.id, reference_dataset_id=refs[3].id
                     )
                 )
+            # Mouse experiment runs (2,3) → GRCm39 M33
+            for run in runs[2:4]:
+                await session.execute(
+                    pipeline_run_references.insert().values(
+                        pipeline_run_id=run.id, reference_dataset_id=refs[2].id
+                    )
+                )
+            # Tumor experiment runs (4,5) → GRCh38 v43 + STARsolo index
+            for run in runs[4:6]:
+                await session.execute(
+                    pipeline_run_references.insert().values(
+                        pipeline_run_id=run.id, reference_dataset_id=refs[0].id
+                    )
+                )
+                await session.execute(
+                    pipeline_run_references.insert().values(
+                        pipeline_run_id=run.id, reference_dataset_id=refs[3].id
+                    )
+                )
             await session.flush()
+            print("Linked all pipeline runs to appropriate references.")
+
+        await create_qc_dashboards(session, runs, experiments, org_id)
 
         await create_geo_files(session, experiments, samples, org_id)
 
         project = await create_project(
             session, experiments, samples, org_id, comp_bio
         )
+
+        # Link pipeline runs from experiments 1 and 2 to the project (SEEDER-001)
+        if len(runs) >= 4:
+            for run in runs[:4]:
+                run.project_id = project.id
+            await session.flush()
+            print(f"Linked {min(len(runs), 4)} pipeline runs to project '{project.name}'.")
 
         notebook_sessions = await create_notebook_sessions(
             session, experiments, project, org_id, comp_bio, admin
@@ -1166,6 +1405,10 @@ async def main() -> None:
 
         await create_activity_feed(
             session, experiments, project, org_id, users
+        )
+
+        await create_audit_entries(
+            session, experiments, samples, runs, admin, comp_bio
         )
 
         await session.commit()

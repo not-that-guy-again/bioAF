@@ -131,7 +131,14 @@ class PipelineReviewService:
                     entity_type="experiment",
                     entity_id=experiment.id,
                     action="status_change",
-                    details={"status": "reviewed", "via": "pipeline_review"},
+                    details={
+                        "status": "reviewed",
+                        "via": "pipeline_review",
+                        "pipeline_run_id": pipeline_run_id,
+                        "reviewer_user_id": reviewer_user_id,
+                        "verdict": verdict,
+                        "notes": notes,
+                    },
                     previous_value={"status": old_status},
                 )
 

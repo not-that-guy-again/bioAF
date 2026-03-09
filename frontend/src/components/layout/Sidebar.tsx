@@ -44,7 +44,7 @@ export function Sidebar() {
         <p className="text-xs text-gray-400 mt-1">Computational Biology Platform</p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           if (item.adminOnly && !isAdmin) return null;
           if ((item as Record<string, unknown>).compBioOnly && !canSeePipelines) return null;
