@@ -124,13 +124,13 @@ async def cleanup(session: AsyncSession) -> None:
             delete(SlurmJob).where(SlurmJob.organization_id == org_id)
         )
         await session.execute(
+            delete(AnalysisSnapshot).where(AnalysisSnapshot.organization_id == org_id)
+        )
+        await session.execute(
             delete(NotebookSession).where(NotebookSession.organization_id == org_id)
         )
         await session.execute(
             delete(TemplateNotebook).where(TemplateNotebook.organization_id == org_id)
-        )
-        await session.execute(
-            delete(AnalysisSnapshot).where(AnalysisSnapshot.organization_id == org_id)
         )
         await session.execute(
             delete(UserQuota).where(UserQuota.organization_id == org_id)
