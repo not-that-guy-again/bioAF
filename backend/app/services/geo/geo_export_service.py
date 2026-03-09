@@ -165,9 +165,7 @@ class GeoExportService:
         if "treatment_protocol" not in custom_fields_dict and samples:
             treatments = {s.treatment_condition for s in samples if s.treatment_condition}
             if treatments:
-                custom_fields_dict["treatment_protocol"] = (
-                    f"Treatment conditions: {', '.join(sorted(treatments))}."
-                )
+                custom_fields_dict["treatment_protocol"] = f"Treatment conditions: {', '.join(sorted(treatments))}."
 
         # Assemble data dicts
         experiment_data = {
