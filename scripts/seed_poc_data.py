@@ -1266,6 +1266,13 @@ async def main() -> None:
             session, experiments, samples, org_id, comp_bio
         )
 
+        # Link pipeline runs from experiments 1 and 2 to the project (SEEDER-001)
+        if len(runs) >= 4:
+            for run in runs[:4]:
+                run.project_id = project.id
+            await session.flush()
+            print(f"Linked {min(len(runs), 4)} pipeline runs to project '{project.name}'.")
+
         notebook_sessions = await create_notebook_sessions(
             session, experiments, project, org_id, comp_bio, admin
         )
