@@ -92,248 +92,145 @@ def fake_md5(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-async def _safe_delete(session: AsyncSession, sql: str) -> None:
-    """Execute a raw SQL DELETE/UPDATE, silently skipping if the table doesn't exist.
-
-    After a ProgrammingError the connection is in a broken transaction state,
-    so we issue a SAVEPOINT/ROLLBACK TO around the attempt.
-    """
-    await session.execute(text("SAVEPOINT _safe_del"))
+async def _safe_sql(session: AsyncSession, sql: str) -> None:
+    """Execute raw SQL inside a SAVEPOINT so missing-table errors are non-fatal."""
+    await session.execute(text("SAVEPOINT _sd"))
     try:
         await session.execute(text(sql))
-        await session.execute(text("RELEASE SAVEPOINT _safe_del"))
+        await session.execute(text("RELEASE SAVEPOINT _sd"))
     except Exception as exc:
-        if "UndefinedTable" in str(exc):
-            await session.execute(text("ROLLBACK TO SAVEPOINT _safe_del"))
-        else:
-            await session.execute(text("ROLLBACK TO SAVEPOINT _safe_del"))
+        await session.execute(text("ROLLBACK TO SAVEPOINT _sd"))
+        if "UndefinedTable" not in str(exc):
             raise
+
+
+async def _nuke_fk_children(
+    session: AsyncSession,
+    parent_table: str,
+    parent_col: str,
+    id_values: list[int],
+) -> None:
+    """Dynamically find and delete all rows in tables that FK-reference
+    *parent_table*.*parent_col* for the given *id_values*.
+
+    Queries ``information_schema`` so we never miss a table — no matter
+    what migrations have run.
+    """
+    if not id_values:
+        return
+
+    id_csv = ",".join(str(v) for v in id_values)
+
+    # Discover every FK that points at parent_table.parent_col
+    fk_query = text("""
+        SELECT
+            kcu.table_name   AS child_table,
+            kcu.column_name  AS child_column
+        FROM information_schema.referential_constraints rc
+        JOIN information_schema.key_column_usage kcu
+            ON kcu.constraint_name = rc.constraint_name
+            AND kcu.constraint_schema = rc.constraint_schema
+        JOIN information_schema.key_column_usage pku
+            ON pku.constraint_name = rc.unique_constraint_name
+            AND pku.constraint_schema = rc.unique_constraint_schema
+        WHERE pku.table_name  = :parent_table
+          AND pku.column_name = :parent_col
+          AND kcu.table_schema = 'public'
+    """)
+    rows = (await session.execute(
+        fk_query, {"parent_table": parent_table, "parent_col": parent_col}
+    )).all()
+
+    # First pass: recursively clear grandchild FKs (e.g. notification_delivery_log → notifications → users)
+    for child_table, child_col in rows:
+        child_ids_sql = f"SELECT {child_col} FROM {child_table} WHERE {child_col} IN ({id_csv})"
+        # Find tables that FK-reference the child table's PK
+        grandchild_query = text("""
+            SELECT
+                kcu.table_name   AS gc_table,
+                kcu.column_name  AS gc_column,
+                pku.column_name  AS gc_parent_col
+            FROM information_schema.referential_constraints rc
+            JOIN information_schema.key_column_usage kcu
+                ON kcu.constraint_name = rc.constraint_name
+                AND kcu.constraint_schema = rc.constraint_schema
+            JOIN information_schema.key_column_usage pku
+                ON pku.constraint_name = rc.unique_constraint_name
+                AND pku.constraint_schema = rc.unique_constraint_schema
+            WHERE pku.table_name  = :child_table
+              AND pku.column_name = 'id'
+              AND kcu.table_schema = 'public'
+        """)
+        gc_rows = (await session.execute(
+            grandchild_query, {"child_table": child_table}
+        )).all()
+        for gc_table, gc_column, _ in gc_rows:
+            await _safe_sql(session,
+                f"DELETE FROM {gc_table} WHERE {gc_column} IN "
+                f"(SELECT id FROM {child_table} WHERE {child_col} IN ({id_csv}))")
+
+    # Second pass: SET NULL for non-FK columns that reference the parent (e.g. component_states.last_terraform_run_id)
+    # (handled implicitly — if the column is nullable, the FK won't block parent deletion once child rows are gone)
+
+    # Third pass: delete from the child tables themselves
+    for child_table, child_col in rows:
+        await _safe_sql(session,
+            f"DELETE FROM {child_table} WHERE {child_col} IN ({id_csv})")
 
 
 async def cleanup(session: AsyncSession) -> None:
     """Remove all POC demo data so the script is idempotent.
 
-    Deletion order is dictated by foreign-key constraints.  Every table
-    that references ``users`` or ``organizations`` (directly or transitively)
-    must be emptied **before** the parent row is removed.
+    Uses information_schema to dynamically discover FK dependencies,
+    so new tables added by future migrations are handled automatically.
     """
-    # ── Activity feed (matched by prefix, not org) ──
-    await session.execute(
-        delete(ActivityFeedEntry).where(
-            ActivityFeedEntry.summary.like(f"%{DEMO_PREFIX}%")
-        )
-    )
-
     demo_org = (
         await session.execute(
             select(Organization).where(Organization.name == f"{DEMO_PREFIX} Lab")
         )
     ).scalar_one_or_none()
 
-    if demo_org:
-        org_id = demo_org.id
+    if not demo_org:
+        print("No demo org found — nothing to clean up.")
+        return
 
-        # Collect demo user IDs (needed for user-FK tables later)
-        demo_user_result = await session.execute(
-            select(User.id).where(User.organization_id == org_id)
-        )
-        demo_user_ids = [row[0] for row in demo_user_result.all()]
+    org_id = demo_org.id
 
-        # ── 1. Audit log (user FK) ──
-        if demo_user_ids:
-            await session.execute(
-                delete(AuditLog).where(AuditLog.user_id.in_(demo_user_ids))
-            )
+    # Collect demo user IDs
+    demo_user_result = await session.execute(
+        select(User.id).where(User.organization_id == org_id)
+    )
+    demo_user_ids = [row[0] for row in demo_user_result.all()]
 
-        # ── 2. SLURM jobs ──
-        await session.execute(
-            delete(SlurmJob).where(SlurmJob.organization_id == org_id)
-        )
+    # ── 1. Clear self-referential FKs that would block deletion ──
+    # reference_datasets.superseded_by_id → reference_datasets.id
+    await _safe_sql(session,
+        f"UPDATE reference_datasets SET superseded_by_id = NULL "
+        f"WHERE organization_id = {org_id}")
+    # pipeline_runs.resume_from_run_id → pipeline_runs.id
+    await _safe_sql(session,
+        f"UPDATE pipeline_runs SET resume_from_run_id = NULL "
+        f"WHERE organization_id = {org_id}")
+    # component_states.last_terraform_run_id → terraform_runs
+    if demo_user_ids:
+        uid_csv = ",".join(str(uid) for uid in demo_user_ids)
+        await _safe_sql(session,
+            f"UPDATE component_states SET last_terraform_run_id = NULL "
+            f"WHERE last_terraform_run_id IN "
+            f"(SELECT id FROM terraform_runs WHERE triggered_by_user_id IN ({uid_csv}))")
+    await session.flush()
 
-        # ── 3. Notebook tree:  notebook_session_files → analysis_snapshots → notebook_sessions ──
-        await _safe_delete(session,
-            f"DELETE FROM notebook_session_files WHERE session_id IN "
-            f"(SELECT id FROM notebook_sessions WHERE organization_id = {org_id})")
-        await session.execute(
-            delete(AnalysisSnapshot).where(AnalysisSnapshot.organization_id == org_id)
-        )
-        await session.execute(
-            delete(NotebookSession).where(NotebookSession.organization_id == org_id)
-        )
+    # ── 2. Dynamically delete everything that FK-references demo users ──
+    await _nuke_fk_children(session, "users", "id", demo_user_ids)
 
-        # ── 4. Template notebooks ──
-        await session.execute(
-            delete(TemplateNotebook).where(TemplateNotebook.organization_id == org_id)
-        )
+    # ── 3. Dynamically delete everything that FK-references the demo org ──
+    await _nuke_fk_children(session, "organizations", "id", [org_id])
 
-        # ── 5. User quotas ──
-        await session.execute(
-            delete(UserQuota).where(UserQuota.organization_id == org_id)
-        )
-
-        # ── 6. Projects (project_samples → projects) ──
-        proj_result = await session.execute(
-            select(Project).where(Project.organization_id == org_id)
-        )
-        for proj in proj_result.scalars().all():
-            await session.execute(
-                delete(ProjectSample).where(ProjectSample.project_id == proj.id)
-            )
-            # Unlink pipeline runs from project (they'll be deleted with experiments)
-            await session.execute(
-                delete(PipelineRun).where(PipelineRun.project_id == proj.id)
-            )
-        await session.execute(
-            delete(Project).where(Project.organization_id == org_id)
-        )
-
-        # ── 7. Experiment cascade ──
-        #   pipeline_processes → pipeline_run_reviews → pipeline_run_samples
-        #   → pipeline_run_references → qc_dashboards → pipeline_runs
-        #   → sample_files → files → samples → experiment_custom_fields
-        #   → batches → experiments
-        exp_result = await session.execute(
-            select(Experiment).where(Experiment.organization_id == org_id)
-        )
-        for exp in exp_result.scalars().all():
-            runs_result = await session.execute(
-                select(PipelineRun).where(PipelineRun.experiment_id == exp.id)
-            )
-            for run in runs_result.scalars().all():
-                # pipeline_processes (child of pipeline_runs)
-                await _safe_delete(session,
-                    f"DELETE FROM pipeline_processes WHERE pipeline_run_id = {run.id}")
-                await session.execute(
-                    delete(PipelineRunReview).where(
-                        PipelineRunReview.pipeline_run_id == run.id
-                    )
-                )
-                await session.execute(
-                    delete(PipelineRunSample).where(
-                        PipelineRunSample.pipeline_run_id == run.id
-                    )
-                )
-                await session.execute(
-                    pipeline_run_references.delete().where(
-                        pipeline_run_references.c.pipeline_run_id == run.id
-                    )
-                )
-            await session.execute(
-                delete(QCDashboard).where(QCDashboard.experiment_id == exp.id)
-            )
-            await session.execute(
-                delete(PipelineRun).where(PipelineRun.experiment_id == exp.id)
-            )
-            # sample_files (child of samples)
-            await _safe_delete(session,
-                f"DELETE FROM sample_files WHERE sample_id IN "
-                f"(SELECT id FROM samples WHERE experiment_id = {exp.id})")
-            await session.execute(
-                delete(File).where(
-                    File.gcs_uri.contains(f"/experiments/{exp.id}/")
-                )
-            )
-            await session.execute(
-                delete(Sample).where(Sample.experiment_id == exp.id)
-            )
-            # experiment_custom_fields (child of experiments)
-            await _safe_delete(session,
-                f"DELETE FROM experiment_custom_fields WHERE experiment_id = {exp.id}")
-            await session.execute(
-                delete(Batch).where(Batch.experiment_id == exp.id)
-            )
-        await session.execute(
-            delete(Experiment).where(Experiment.organization_id == org_id)
-        )
-
-        # ── 8. Reference datasets ──
-        ref_result = await session.execute(
-            select(ReferenceDataset).where(
-                ReferenceDataset.organization_id == org_id
-            )
-        )
-        demo_refs = list(ref_result.scalars().all())
-        for ref in demo_refs:
-            await session.execute(
-                pipeline_run_references.delete().where(
-                    pipeline_run_references.c.reference_dataset_id == ref.id
-                )
-            )
-            await session.execute(
-                delete(ReferenceDatasetFile).where(
-                    ReferenceDatasetFile.reference_dataset_id == ref.id
-                )
-            )
-        for ref in demo_refs:
-            ref.superseded_by_id = None
-        await session.flush()
-        for ref in demo_refs:
-            await session.execute(
-                delete(ReferenceDataset).where(ReferenceDataset.id == ref.id)
-            )
-
-        # ── 9. Tables referencing users (must delete before users) ──
-        if demo_user_ids:
-            uid_list = ",".join(str(uid) for uid in demo_user_ids)
-            # notification_delivery_log → notifications (FK chain)
-            await _safe_delete(session,
-                f"DELETE FROM notification_delivery_log WHERE notification_id IN "
-                f"(SELECT id FROM notifications WHERE user_id IN ({uid_list}))")
-            await _safe_delete(session,
-                f"DELETE FROM notifications WHERE user_id IN ({uid_list})")
-            await _safe_delete(session,
-                f"DELETE FROM notification_preferences WHERE user_id IN ({uid_list})")
-            await _safe_delete(session,
-                f"DELETE FROM access_log WHERE user_id IN ({uid_list})")
-            await _safe_delete(session,
-                f"DELETE FROM verification_codes WHERE user_id IN ({uid_list})")
-            # component_states.last_terraform_run_id → terraform_runs → users
-            await _safe_delete(session,
-                f"UPDATE component_states SET last_terraform_run_id = NULL "
-                f"WHERE last_terraform_run_id IN "
-                f"(SELECT id FROM terraform_runs WHERE triggered_by_user_id IN ({uid_list}))")
-            await _safe_delete(session,
-                f"DELETE FROM terraform_runs WHERE triggered_by_user_id IN ({uid_list})")
-
-        # ── 10. Tables referencing organization (must delete before org) ──
-        # Order matters: children before parents (environment_packages → environments, etc.)
-        await _safe_delete(session,
-            f"DELETE FROM notification_rules WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM slack_webhooks WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM budget_config WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM cost_records WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM storage_stats_cache WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM environment_packages WHERE environment_id IN "
-            f"(SELECT id FROM environments WHERE organization_id = {org_id})")
-        await _safe_delete(session,
-            f"DELETE FROM environment_changes WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM environments WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM gitops_repos WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM pipeline_catalog WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM cellxgene_publications WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM documents WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM plot_archive WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM experiment_templates WHERE organization_id = {org_id}")
-        await _safe_delete(session,
-            f"DELETE FROM upgrade_history WHERE organization_id = {org_id}")
-
-        # ── 11. Users & org ──
-        await session.execute(delete(User).where(User.organization_id == org_id))
-        await session.execute(
-            delete(Organization).where(Organization.id == org_id)
-        )
+    # ── 4. Delete users and org themselves ──
+    await session.execute(delete(User).where(User.organization_id == org_id))
+    await session.execute(
+        delete(Organization).where(Organization.id == org_id)
+    )
 
     await session.flush()
     print("Cleanup complete.")
