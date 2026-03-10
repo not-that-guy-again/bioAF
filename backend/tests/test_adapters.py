@@ -15,15 +15,15 @@ from app.adapters import registry
 class TestAbstractBaseClasses:
     def test_compute_provider_cannot_be_instantiated(self):
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            ComputeProvider()
+            ComputeProvider()  # type: ignore[abstract]
 
     def test_storage_provider_cannot_be_instantiated(self):
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            StorageProvider()
+            StorageProvider()  # type: ignore[abstract]
 
     def test_notebook_provider_cannot_be_instantiated(self):
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            NotebookProvider()
+            NotebookProvider()  # type: ignore[abstract]
 
 
 # -- SLURM/NFS stub tests --
