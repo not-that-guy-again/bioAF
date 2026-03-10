@@ -18,6 +18,7 @@ Creates:
   - 15 SLURM jobs (completed, running, pending)
   - Activity feed entries spanning the last 2 weeks
   - User quotas
+  - Platform config: compute_stack = kubernetes
 
 Usage (from project root, with DATABASE_URL configured):
     python scripts/seed_poc_data.py
@@ -1313,6 +1314,24 @@ async def create_audit_entries(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Platform Config — compute_stack
+# ═══════════════════════════════════════════════════════════════════════════
+async def seed_compute_stack(session: AsyncSession) -> None:
+    """Ensure compute_stack is set to kubernetes in platform_config."""
+    result = await session.execute(
+        text("SELECT value FROM platform_config WHERE key = 'compute_stack'")
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        await session.execute(
+            text("INSERT INTO platform_config (key, value) VALUES ('compute_stack', 'kubernetes')")
+        )
+        print("Set compute_stack = kubernetes in platform_config.")
+    else:
+        print(f"compute_stack already set to '{row}', skipping.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 async def main() -> None:
@@ -1325,6 +1344,8 @@ async def main() -> None:
         session: AsyncSession
 
         await cleanup(session)
+
+        await seed_compute_stack(session)
 
         org_id, users = await create_org_and_users(session)
         admin = users["admin"]
