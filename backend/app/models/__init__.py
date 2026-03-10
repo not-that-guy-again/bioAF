@@ -44,6 +44,9 @@ from app.models.reference_dataset import ReferenceDataset, ReferenceDatasetFile,
 from app.models.naming_profile import NamingProfile
 from app.models.file_parse_result import FileParseResult
 from app.models.ingest_event import IngestEvent
+from app.models.pipeline_trigger import PipelineTrigger
+from app.models.trigger_evaluation import TriggerEvaluation
+from app.models.pipeline_cost_history import PipelineCostHistory
 
 __all__ = [
     "User",
@@ -97,4 +100,7 @@ __all__ = [
     "NamingProfile",
     "FileParseResult",
     "IngestEvent",
+    "PipelineTrigger",
+    "TriggerEvaluation",
+    "PipelineCostHistory",
 ]
