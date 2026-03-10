@@ -5,7 +5,7 @@ A turnkey computational biology platform for small biotech companies (5-50 resea
 ## Features
 
 - **Experiment Tracking** - MINSEQE-compliant metadata, sample management, batch processing, project organization
-- **Compute Orchestration** - SLURM HPC cluster, JupyterHub/RStudio notebooks, auto-scaling, quota management
+- **Compute Orchestration** - Kubernetes (GKE) or SLURM compute via the BioAF Adapter Layer, JupyterHub/RStudio notebooks, auto-scaling, quota management
 - **Pipeline Engine** - Nextflow and Snakemake integration, pipeline catalog, run monitoring, parameter management
 - **Data Management** - File upload/download, dataset browser, GCS storage integration, GEO export
 - **Results & Visualization** - QC dashboards, cellxgene single-cell viewer, plot archive, search
@@ -22,11 +22,15 @@ A turnkey computational biology platform for small biotech companies (5-50 resea
 ```text
 Frontend (Next.js 14)  -->  Backend (FastAPI)  -->  Cloud SQL PostgreSQL 16
                                 |
+                    BioAF Adapter Layer (BAL)
+                       /              \
+              Kubernetes + GCS     SLURM + NFS
+              (recommended)        (coming soon)
+                                |
                          Terraform Runner
                                 |
                     GCP Infrastructure
-                    (GKE Autopilot, SLURM, Filestore,
-                     GCS, Secret Manager, Cloud NAT)
+                    (GKE, GCS, Secret Manager, Cloud NAT)
 ```
 
 **Key design decisions:**
@@ -39,6 +43,9 @@ Frontend (Next.js 14)  -->  Backend (FastAPI)  -->  Cloud SQL PostgreSQL 16
 - Immutable audit log ([ADR-009](decisions/ADR-009-immutable-audit-log.md))
 - Event-driven notifications ([ADR-010](decisions/ADR-010-notification-system.md))
 - Data portability guarantees ([ADR-012](decisions/ADR-012-data-portability.md))
+- BioAF Adapter Layer for compute/storage abstraction ([ADR-020](decisions/ADR-020-bioaf-adapter-layer.md))
+- Kubernetes compute backend ([ADR-021](decisions/ADR-021-kubernetes-compute-backend.md))
+- GCS storage backend ([ADR-022](decisions/ADR-022-gcs-storage-backend.md))
 
 See all ADRs in [docs/adr-index.md](docs/adr-index.md).
 
@@ -120,17 +127,19 @@ cd backend && python -m pytest tests/ -v
 
 bioAF manages these infrastructure components through its UI:
 
-| Component | Category | Dependencies |
-|-----------|----------|-------------|
-| SLURM HPC Cluster | Compute | None |
-| Filestore NFS | Storage | SLURM |
-| JupyterHub | Notebooks | SLURM, Filestore |
-| RStudio Server | Notebooks | SLURM, Filestore |
-| Nextflow | Pipelines | SLURM |
-| Snakemake | Pipelines | SLURM |
-| cellxgene | Visualization | None |
-| QC Dashboard | Visualization | None |
-| Meilisearch | Search | None |
+| Component | Category | Compute Stack | Dependencies |
+|-----------|----------|---------------|-------------|
+| GKE Cluster | Compute | Kubernetes | None |
+| GCS Buckets | Storage | Kubernetes | GKE |
+| SLURM HPC Cluster | Compute | SLURM (coming soon) | None |
+| Filestore NFS | Storage | SLURM (coming soon) | SLURM |
+| JupyterHub | Notebooks | Both | Compute, Storage |
+| RStudio Server | Notebooks | Both | Compute, Storage |
+| Nextflow | Pipelines | Both | Compute |
+| Snakemake | Pipelines | Both | Compute |
+| cellxgene | Visualization | Any | None |
+| QC Dashboard | Visualization | Any | None |
+| Meilisearch | Search | Any | None |
 
 ## Project Structure
 
