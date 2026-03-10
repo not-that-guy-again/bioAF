@@ -1,4 +1,9 @@
-# bioAF - Bioinformatics Application Framework
+<p align="center">
+  <img src="assets/mascot.png" alt="bioAF" width="200" />
+</p>
+
+<h1 align="center">bioAF</h1>
+<p align="center"><strong>Bioinformatics Application Framework</strong></p>
 
 A turnkey computational biology platform for small biotech companies (5-50 researchers), deployed on Google Cloud Platform. bioAF provides a web-based control plane for managing HPC clusters, notebook environments, pipeline engines, and data visualization tools -- all provisioned through UI-driven Terraform.
 
