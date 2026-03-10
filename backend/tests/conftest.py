@@ -5,12 +5,24 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.adapters import registry as adapter_registry
 from app.services.auth_service import AuthService
+
+# Ensure adapters run in local/mock mode for all tests
+os.environ.setdefault("BIOAF_COMPUTE_MODE", "local")
 
 TEST_DATABASE_URL = os.environ.get(
     "BIOAF_TEST_DATABASE_URL",
     "postgresql+asyncpg://bioaf_app:devpassword@localhost:5432/bioaf_test",
 )
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _init_adapter_registry():
+    """Initialize the BAL adapter registry for all tests (local/mock mode)."""
+    adapter_registry.initialize_adapters_sync("kubernetes")
+    yield
+    adapter_registry.reset_registry()
 
 
 @pytest_asyncio.fixture

@@ -93,14 +93,14 @@ COMPLETED_TRACE = """task_id\thash\tnative_id\tprocess\ttag\tname\tstatus\texit\
 @pytest.mark.asyncio
 async def test_sync_detects_completion(session, running_pipeline_run):
     """Monitor detects when all processes are completed."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {"status": "running"}
+    mock_compute.get_job_logs.return_value = COMPLETED_TRACE
+
     with (
         patch(
-            "app.services.slurm_service.SlurmService._run_ssh_command",
-            new_callable=AsyncMock,
-            side_effect=[
-                COMPLETED_TRACE,  # trace file read
-                "",  # output file listing
-            ],
+            "app.services.pipeline_monitor_service.get_compute_adapter",
+            return_value=mock_compute,
         ),
         patch(
             "app.services.experiment_service.ExperimentService.update_status",
@@ -131,14 +131,14 @@ FAILED_TRACE = """task_id\thash\tnative_id\tprocess\ttag\tname\tstatus\texit\tsu
 @pytest.mark.asyncio
 async def test_sync_detects_failure(session, running_pipeline_run):
     """Monitor detects when a process has failed."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {"status": "running"}
+    mock_compute.get_job_logs.return_value = FAILED_TRACE
+
     with (
         patch(
-            "app.services.slurm_service.SlurmService._run_ssh_command",
-            new_callable=AsyncMock,
-            side_effect=[
-                FAILED_TRACE,
-                "",
-            ],
+            "app.services.pipeline_monitor_service.get_compute_adapter",
+            return_value=mock_compute,
         ),
         patch(
             "app.services.experiment_service.ExperimentService.update_status",
@@ -159,14 +159,14 @@ async def test_sync_detects_failure(session, running_pipeline_run):
 @pytest.mark.asyncio
 async def test_sync_creates_process_records(session, running_pipeline_run):
     """Monitor creates PipelineProcess records from trace."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {"status": "running"}
+    mock_compute.get_job_logs.return_value = COMPLETED_TRACE
+
     with (
         patch(
-            "app.services.slurm_service.SlurmService._run_ssh_command",
-            new_callable=AsyncMock,
-            side_effect=[
-                COMPLETED_TRACE,
-                "",
-            ],
+            "app.services.pipeline_monitor_service.get_compute_adapter",
+            return_value=mock_compute,
         ),
         patch(
             "app.services.experiment_service.ExperimentService.update_status",
