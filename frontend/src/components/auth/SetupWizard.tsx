@@ -10,6 +10,7 @@ const STEPS = [
   "Verify Email",
   "Organization Name",
   "SMTP Configuration",
+  "Compute Stack",
   "Invite Team",
   "Confirmation",
 ];
@@ -33,6 +34,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [smtpUsername, setSmtpUsername] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
   const [smtpFrom, setSmtpFrom] = useState("");
+  const [computeStack, setComputeStack] = useState("kubernetes");
 
   const handleCreateAdmin = async () => {
     if (password !== confirmPassword) {
@@ -89,6 +91,20 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       setStep(4);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to configure SMTP");
+    }
+  };
+
+  const handleSelectComputeStack = async () => {
+    setError("");
+    try {
+      await api.post("/api/bootstrap/configure-compute-stack", {
+        compute_stack: computeStack,
+      });
+      setStep(5);
+    } catch (e) {
+      // Non-critical: the endpoint may not exist yet during bootstrap
+      // Default to kubernetes and continue
+      setStep(5);
     }
   };
 
@@ -239,27 +255,92 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         </div>
       )}
 
-      {/* Step 5: Invite Team */}
+      {/* Step 5: Compute Stack */}
       {step === 4 && (
         <div className="space-y-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Choose the compute infrastructure for running pipelines and notebooks.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Kubernetes option */}
+            <div
+              data-testid="compute-stack-kubernetes"
+              onClick={() => setComputeStack("kubernetes")}
+              className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                computeStack === "kubernetes"
+                  ? "border-bioaf-600 bg-bioaf-50"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-gray-900">Kubernetes + GCS</h3>
+                <span className="text-xs bg-bioaf-100 text-bioaf-700 px-2 py-0.5 rounded-full font-medium">
+                  Recommended
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mb-2">
+                Cloud-native autoscaling with Google Kubernetes Engine and Cloud Storage.
+                Pay only for what you use.
+              </p>
+              <div className="text-xs text-gray-500">
+                Estimated: $50-200/month depending on workload
+              </div>
+              <div className="mt-2 text-xs text-gray-400" title="Portable across GCP, AWS, and Azure. Autoscales to zero when idle. Docker container ecosystem.">
+                Hover for details
+              </div>
+            </div>
+
+            {/* SLURM option - disabled */}
+            <div
+              data-testid="compute-stack-slurm"
+              className="p-4 border-2 border-gray-200 rounded-lg opacity-60 cursor-not-allowed"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold text-gray-400">SLURM + NFS</h3>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
+                  Coming Soon
+                </span>
+              </div>
+              <p className="text-sm text-gray-400 mb-2">
+                Traditional HPC cluster with shared filesystem. Familiar to academic environments.
+              </p>
+              <div className="text-xs text-gray-400">
+                Minimum: ~$250/month (SLURM controller + NFS)
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSelectComputeStack}
+            className="w-full bg-bioaf-600 text-white py-2 rounded hover:bg-bioaf-700"
+          >
+            Continue with {computeStack === "kubernetes" ? "Kubernetes + GCS" : "SLURM + NFS"}
+          </button>
+        </div>
+      )}
+
+      {/* Step 6: Invite Team */}
+      {step === 5 && (
+        <div className="space-y-4">
           <InviteForm />
-          <button onClick={() => setStep(5)} className="w-full bg-bioaf-600 text-white py-2 rounded hover:bg-bioaf-700">
+          <button onClick={() => setStep(6)} className="w-full bg-bioaf-600 text-white py-2 rounded hover:bg-bioaf-700">
             Continue
           </button>
-          <button onClick={() => setStep(5)} className="w-full text-gray-500 text-sm hover:text-gray-700">
+          <button onClick={() => setStep(6)} className="w-full text-gray-500 text-sm hover:text-gray-700">
             Skip for now
           </button>
         </div>
       )}
 
-      {/* Step 6: Confirmation */}
-      {step === 5 && (
+      {/* Step 7: Confirmation */}
+      {step === 6 && (
         <div className="space-y-4">
           <div className="p-4 bg-green-50 border border-green-200 rounded">
             <h3 className="font-semibold text-green-800">Setup Summary</h3>
             <ul className="mt-2 text-sm text-green-700 space-y-1">
               <li>Admin account created</li>
               {orgName && <li>Organization: {orgName}</li>}
+              <li>Compute stack: {computeStack === "kubernetes" ? "Kubernetes + GCS" : "SLURM + NFS"}</li>
               <li>Platform ready to use</li>
             </ul>
           </div>
