@@ -1,0 +1,64 @@
+# bioAF scRNA-seq base image
+#
+# Provides a reproducible environment for single-cell RNA-seq pipelines
+# running on Kubernetes. Includes Nextflow, Scanpy, and common bioinformatics
+# tools pre-installed for pipeline execution on GKE node pools.
+#
+# Build:
+#   docker build -f docker/Dockerfile.bioaf-scrna -t bioaf-scrna:latest .
+#
+# Usage:
+#   Used as the base image for pipeline Jobs submitted by the BAL compute adapter.
+#   The KubernetesComputeProvider references this image when constructing Job specs.
+
+FROM python:3.11-slim AS base
+
+LABEL maintainer="bioAF <team@bioaf.io>"
+LABEL description="bioAF scRNA-seq pipeline base image"
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8
+
+# System dependencies for bioinformatics tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    git \
+    procps \
+    openjdk-17-jre-headless \
+    libhdf5-dev \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Nextflow
+ENV NXF_VER=24.04.0
+RUN curl -fsSL https://get.nextflow.io | bash \
+    && mv nextflow /usr/local/bin/ \
+    && chmod +x /usr/local/bin/nextflow
+
+# Python scientific stack for scRNA-seq
+RUN pip install --no-cache-dir \
+    scanpy==1.10.* \
+    anndata==0.10.* \
+    leidenalg==0.10.* \
+    scrublet==0.2.* \
+    scvi-tools==1.1.* \
+    cellxgene==1.1.* \
+    pandas>=2.0 \
+    numpy>=1.24 \
+    scipy>=1.11 \
+    matplotlib>=3.7 \
+    seaborn>=0.12 \
+    h5py>=3.9
+
+# Working directory for pipeline execution
+WORKDIR /pipeline
+
+# Non-root user for pipeline execution
+RUN groupadd -r bioaf && useradd -r -g bioaf -d /pipeline bioaf \
+    && chown -R bioaf:bioaf /pipeline
+USER bioaf
+
+ENTRYPOINT ["nextflow"]
+CMD ["run", "--help"]
