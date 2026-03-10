@@ -23,17 +23,20 @@ Implement a three-mode pipeline triggering system: manual (existing), event-driv
 ### Trigger Modes
 
 **Manual (existing):**
+
 - User selects pipeline, configures parameters, picks input files, clicks "Run"
 - No changes to existing behavior
 - Budget pre-flight check shows estimated cost and remaining budget before submission
 
 **Event-driven:**
+
 - Triggered when new files are ingested (ADR-024) that match the pipeline's input criteria
 - Configurable per pipeline: which file types, which projects/experiments, which naming patterns
 - Optional batching window: "Wait N minutes after the last matching file arrives before triggering." This prevents launching a pipeline for every individual file in a multi-file delivery. Default: 15 minutes.
 - When the batching window expires, the trigger collects all matching files that arrived during the window and submits a single pipeline run with all of them as inputs
 
 **Scheduled:**
+
 - Triggered on a configurable cron schedule
 - At each scheduled time, the system checks for unprocessed files matching the pipeline's input criteria
 - If matching files exist, a pipeline run is submitted
@@ -100,13 +103,13 @@ Before any pipeline run is submitted (regardless of trigger mode), the system pe
 | Estimated cost will exceed budget | Show warning, require acknowledgment | Queue as "pending budget review", notify admins and comp_bio users |
 | Budget already exhausted | Show warning, require admin override | Queue as "pending budget review", notify admins |
 
-4. **Queue processing when budget is constrained:** Queued runs are processed in order of submission. The system runs jobs sequentially until the next job's estimated cost would exceed the remaining budget. Remaining jobs stay queued with status "pending budget review." Notifications are sent listing: number of jobs that will run, number held, estimated budget shortfall.
+1. **Queue processing when budget is constrained:** Queued runs are processed in order of submission. The system runs jobs sequentially until the next job's estimated cost would exceed the remaining budget. Remaining jobs stay queued with status "pending budget review." Notifications are sent listing: number of jobs that will run, number held, estimated budget shortfall.
 
-5. **Estimate accuracy tracking:** After each run completes, the actual cost is compared to the estimate. Over time, the system adjusts its estimation model per pipeline to improve accuracy.
+2. **Estimate accuracy tracking:** After each run completes, the actual cost is compared to the estimate. Over time, the system adjusts its estimation model per pipeline to improve accuracy.
 
 ### Pipeline Run Lifecycle with Triggers
 
-```
+```text
 File ingested (ADR-024)
        │
        ▼
@@ -211,6 +214,7 @@ A new page under the Pipelines nav section:
 ## Consequences
 
 **Positive:**
+
 - Eliminates the manual bottleneck for routine pipeline execution
 - Bench scientists and CROs can continuously deliver data without waiting for bioinformaticians to trigger runs
 - Budget-aware pre-flight prevents runaway costs from automated triggers
@@ -219,12 +223,14 @@ A new page under the Pipelines nav section:
 - All three trigger modes use the same submission path, ensuring consistent provenance, auditing, and monitoring
 
 **Negative:**
+
 - Automated triggers can produce a high volume of pipeline runs, increasing compute costs if budget guardrails are set too high
 - The batching window adds latency between file arrival and pipeline start
 - Misconfigured triggers (wrong file type filter, wrong project filter) can submit incorrect pipeline runs — the trigger test feature mitigates this but doesn't eliminate it
 - Budget estimation is inherently approximate; edge cases may still result in runs exceeding budget
 
 **Neutral:**
+
 - Manual pipeline launching is unchanged — existing workflows continue to work
 - The trigger configuration is stored per-pipeline, not globally, so different pipelines can have different trigger strategies
 

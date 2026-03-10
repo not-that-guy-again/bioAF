@@ -178,6 +178,7 @@ The naming profile management page (accessible under Settings or Data & Files) p
 ## Consequences
 
 **Positive:**
+
 - Incoming data is automatically parsed and cataloged without manual intervention
 - CRO naming conventions are captured as configuration, not code — no engineering effort to support a new CRO
 - Multiple CROs can be supported simultaneously with different active profiles
@@ -185,12 +186,14 @@ The naming profile management page (accessible under Settings or Data & Files) p
 - Unmapped codes auto-create entities rather than silently failing, ensuring no data is lost
 
 **Negative:**
+
 - Naming profiles add configuration complexity for administrators
 - Ambiguous filenames (matching multiple profiles) require manual resolution
 - Profiles are only as good as the CRO's adherence to their own convention — inconsistent naming from the CRO will produce parse failures
 - The assumption that filenames are the primary identifier may not hold for all data delivery methods (e.g., CROs that deliver via API or structured manifests)
 
 **Neutral:**
+
 - The readme.txt that CROs sometimes include with deliveries is not parsed automatically, but can be uploaded as a document and linked to the batch
 
 ---

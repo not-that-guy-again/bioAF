@@ -20,7 +20,7 @@ Introduce the **BioAF Adapter Layer (BAL)** — a set of interface contracts tha
 
 ### Provider Categories and Interface Contracts
 
-**Compute Provider**
+### Compute Provider
 
 The compute provider interface defines operations for running batch workloads (pipeline jobs) and managing the compute cluster.
 
@@ -35,7 +35,7 @@ The compute provider interface defines operations for running batch workloads (p
 | `get_cluster_metrics()` | Get real-time resource metrics | Normalized metrics (CPU, memory, cost rate) |
 | `get_cost_estimate(job_spec)` | Estimate cost for a job before submission | Cost estimate with confidence interval |
 
-**Storage Provider**
+### Storage Provider
 
 The storage provider interface defines operations for managing data files used by pipelines and analysis.
 
@@ -47,7 +47,7 @@ The storage provider interface defines operations for managing data files used b
 | `collect_outputs(working_dir, pipeline_run)` | Move outputs to permanent storage and register in metadata DB | List of file records |
 | `get_storage_metrics()` | Get storage usage and cost | Normalized metrics (used, cost, breakdown by tier) |
 
-**Notebook Provider**
+### Notebook Provider
 
 The notebook provider interface defines operations for launching and managing interactive analysis sessions.
 
@@ -86,7 +86,7 @@ The UI renders dashboard components based on the normalized model. Provider-spec
 
 ### Implementation Structure
 
-```
+```text
 backend/
   adapters/
     __init__.py
@@ -121,18 +121,21 @@ The existing pattern of separate `.tf` files per optional component (ADR-007) ex
 ## Consequences
 
 **Positive:**
+
 - Teams can choose the infrastructure stack that fits their experience and budget
 - The recommended path (K8s + GCS) is significantly cheaper to operate
 - Future adapters (AWS EKS, Azure AKS, alternative storage backends) plug into the same interface without changing application logic or UI
 - UI components are simpler — they render normalized data without provider-specific conditionals scattered throughout
 
 **Negative:**
+
 - The abstraction layer adds indirection; debugging may require understanding both the normalized model and the provider-specific behavior
 - Two implementations of each interface must be maintained (though SLURM is stubbed for now)
 - Some provider-specific features (e.g., SLURM's partition-level accounting, K8s pod affinities) are harder to expose through a normalized interface
 - The initial implementation only delivers the K8s adapters; SLURM users cannot migrate to bioAF until the SLURM adapters are built
 
 **Neutral:**
+
 - No changes to the data model — the BAL sits between the service layer and infrastructure, not between the service layer and the database
 - Pipeline definitions (Nextflow, Snakemake) already support both K8s and SLURM executors, so pipeline authors are unaffected
 

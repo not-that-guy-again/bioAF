@@ -28,7 +28,7 @@ Replace the architecture-oriented navigation with a workflow-oriented hierarchy.
 
 ### Navigation Hierarchy
 
-```
+```text
 Dashboard
 Results
   ├── QC Dashboards
@@ -141,6 +141,7 @@ In each case, the left sidebar highlights which section the user is in, and brea
 ## Consequences
 
 **Positive:**
+
 - Navigation reflects user workflows, not platform architecture
 - Fewer clicks to reach commonly used pages
 - Clear contextual data access — users understand why they see filtered vs. unfiltered data
@@ -148,11 +149,13 @@ In each case, the left sidebar highlights which section the user is in, and brea
 - New features (Pipeline Scheduling, Reference Data) have clear homes in the hierarchy
 
 **Negative:**
+
 - Existing users need to relearn where pages are — muscle memory from the old nav breaks
 - Some pages have arguable placement (e.g., Compute under Infrastructure vs. under Pipelines) — any hierarchy is a compromise
 - The sidebar is still relatively long (9 top-level items); on small screens it may require scrolling
 
 **Mitigations:**
+
 - The restructure happens alongside other significant feature additions (auto-ingest, pipeline triggers, K8s migration), so users are already adapting to new workflows
 - The breadcrumb trail provides orientation for users who land on a page via search or direct link
 
