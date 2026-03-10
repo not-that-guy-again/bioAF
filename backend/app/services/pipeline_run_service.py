@@ -1,4 +1,3 @@
-import json
 import logging
 from datetime import datetime, timezone
 
@@ -16,7 +15,7 @@ from app.services.event_types import PIPELINE_FAILED
 from app.services.pipeline_catalog_service import PipelineCatalogService
 from app.services.quota_service import QuotaService
 from app.services.sample_sheet_service import SampleSheetService
-from app.services.slurm_service import SlurmService
+from app.adapters.registry import get_compute_adapter
 from app.services.vocabulary_validator import VocabularyValidator
 
 logger = logging.getLogger("bioaf.pipeline_runs")
@@ -115,49 +114,25 @@ class PipelineRunService:
             merged_params,
         )
 
-        # 9. Build the Nextflow command
-        outdir = f"/data/results/experiments/{data.experiment_id}/runs/{run.id}"
-        resume_flag = ""
-        if data.resume_from_run_id:
-            # Get the original run's work dir for resume
-            orig_result = await session.execute(
-                select(PipelineRun.work_dir).where(PipelineRun.id == data.resume_from_run_id)
-            )
-            orig_work_dir = orig_result.scalar_one_or_none()
-            if orig_work_dir:
-                resume_flag = f"-resume -w {orig_work_dir}"
-
-        nf_command = (
-            f"nextflow run {pipeline.source_url} -r {pipeline.version} "
-            f"-profile bioaf_slurm "
-            f"-c /etc/bioaf/pipelines/nextflow.config "
-            f"-params-file /tmp/bioaf-run-{run.id}-params.json "
-            f"--input /tmp/bioaf-run-{run.id}-samplesheet.csv "
-            f"--outdir {outdir} "
-            f"-w {run.work_dir} "
-            f"-with-trace -with-report -with-timeline "
-            f"{resume_flag}"
-        ).strip()
-
-        # 10. SSH to login node: write params file, sample sheet, submit
+        # 9. Submit job via the compute adapter (BAL)
         try:
-            params_json = json.dumps(merged_params, indent=2)
-            await SlurmService._run_ssh_command(
-                f"cat > /tmp/bioaf-run-{run.id}-params.json << 'PARAMSEOF'\n{params_json}\nPARAMSEOF"
-            )
-            await SlurmService._run_ssh_command(
-                f"cat > /tmp/bioaf-run-{run.id}-samplesheet.csv << 'SHEETEOF'\n{sample_sheet_csv}\nSHEETEOF"
-            )
-
-            # Submit via nohup, capture PID
-            output = await SlurmService._run_ssh_command(
-                f"nohup {nf_command} > /tmp/bioaf-run-{run.id}.log 2>&1 & echo $!"
-            )
-            pid = output.strip()
+            compute_adapter = get_compute_adapter()
+            job_spec = {
+                "run_id": run.id,
+                "pipeline_source": pipeline.source_url,
+                "pipeline_version": pipeline.version,
+                "parameters": merged_params,
+                "sample_sheet": sample_sheet_csv,
+                "experiment_id": data.experiment_id,
+                "work_dir": run.work_dir,
+                "resume_from_run_id": data.resume_from_run_id,
+                "input_files": [s.sample_id_external or str(s.id) for s in samples],
+            }
+            job_result = await compute_adapter.submit_job(job_spec)
 
             run.status = "running"
             run.started_at = datetime.now(timezone.utc)
-            run.slurm_job_id = pid  # Store the process ID
+            run.slurm_job_id = job_result.get("job_id", "")
 
         except Exception as e:
             run.status = "failed"
@@ -314,12 +289,11 @@ class PipelineRunService:
 
         old_status = run.status
 
-        # Cancel via SSH
+        # Cancel via the compute adapter
         if run.slurm_job_id:
             try:
-                await SlurmService._run_ssh_command(
-                    f"kill {run.slurm_job_id} 2>/dev/null; scancel --name=bioaf-run-{run.id} 2>/dev/null || true"
-                )
+                compute_adapter = get_compute_adapter()
+                await compute_adapter.cancel_job(run.slurm_job_id)
             except Exception as e:
                 logger.warning("Failed to cancel run %d: %s", run_id, e)
 

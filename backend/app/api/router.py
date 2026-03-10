@@ -40,6 +40,7 @@ from app.api.pipeline_run_reviews import router as pipeline_run_reviews_router
 from app.api.references import router as references_router
 from app.api.geo_export import router as geo_export_router
 from app.api.snapshots import router as snapshots_router
+from app.api.infrastructure import router as infrastructure_router
 
 api_router = APIRouter()
 
@@ -83,3 +84,4 @@ api_router.include_router(pipeline_run_reviews_router)
 api_router.include_router(references_router)
 api_router.include_router(geo_export_router)
 api_router.include_router(snapshots_router)
+api_router.include_router(infrastructure_router)
