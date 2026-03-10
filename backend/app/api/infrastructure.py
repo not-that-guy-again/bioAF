@@ -111,8 +111,6 @@ async def get_compute_stack(
     session: AsyncSession = Depends(get_session),
 ):
     """Returns the current compute stack selection."""
-    result = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'compute_stack'")
-    )
+    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'compute_stack'"))
     row = result.first()
     return ComputeStackResponse(compute_stack=row[0] if row else "kubernetes")

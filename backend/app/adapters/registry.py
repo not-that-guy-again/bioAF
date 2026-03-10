@@ -53,9 +53,7 @@ async def initialize_adapters(session: AsyncSession) -> None:
     """Read compute_stack from platform_config and initialize adapters."""
     global _compute_adapter, _storage_adapter, _notebook_adapter, _initialized
 
-    result = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'compute_stack'")
-    )
+    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'compute_stack'"))
     row = result.first()
     compute_stack = row[0] if row else "kubernetes"
 

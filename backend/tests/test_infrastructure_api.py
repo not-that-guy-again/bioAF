@@ -117,7 +117,9 @@ class TestComputeStackEndpoint:
     async def test_returns_compute_stack(self, client, admin_token, session):
         # Insert the platform_config row
         await session.execute(
-            text("INSERT INTO platform_config (key, value) VALUES ('compute_stack', 'kubernetes') ON CONFLICT (key) DO NOTHING")
+            text(
+                "INSERT INTO platform_config (key, value) VALUES ('compute_stack', 'kubernetes') ON CONFLICT (key) DO NOTHING"
+            )
         )
         await session.commit()
 

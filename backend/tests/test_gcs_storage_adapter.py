@@ -77,6 +77,7 @@ class TestGcsCollectOutputs:
         monkeypatch.setenv("BIOAF_LOCAL_DATA_ROOT", temp_dir)
         # Need to reimport to pick up env var change
         from app.adapters.storage import gcs
+
         original_root = gcs.LOCAL_DATA_ROOT
         gcs.LOCAL_DATA_ROOT = temp_dir
 
@@ -106,6 +107,7 @@ class TestGcsCollectOutputs:
     @pytest.mark.asyncio
     async def test_collect_outputs_empty_dir(self, adapter, temp_dir, monkeypatch):
         from app.adapters.storage import gcs
+
         original_root = gcs.LOCAL_DATA_ROOT
         gcs.LOCAL_DATA_ROOT = temp_dir
 

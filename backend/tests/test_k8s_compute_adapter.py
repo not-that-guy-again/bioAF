@@ -1,6 +1,5 @@
 """Tests for the Kubernetes compute adapter in local mode."""
 
-
 import pytest
 
 from app.adapters.compute.kubernetes import KubernetesComputeProvider

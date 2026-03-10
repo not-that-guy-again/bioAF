@@ -19,8 +19,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute(
-        "INSERT INTO platform_config (key, value) VALUES ('compute_stack', 'kubernetes') "
-        "ON CONFLICT (key) DO NOTHING"
+        "INSERT INTO platform_config (key, value) VALUES ('compute_stack', 'kubernetes') ON CONFLICT (key) DO NOTHING"
     )
 
 

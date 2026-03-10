@@ -1,6 +1,5 @@
 """Tests verifying that refactored services call through the BAL adapter interfaces."""
 
-
 import pytest
 
 from app.adapters import registry
@@ -26,6 +25,7 @@ class TestPipelineRunServiceUsesAdapter:
 
         # Verify the module references the adapter, not SlurmService directly
         import inspect
+
         source = inspect.getsource(PipelineRunService.launch_run)
         assert "get_compute_adapter" in source
         assert "SlurmService._run_ssh_command" not in source
@@ -36,6 +36,7 @@ class TestPipelineRunServiceUsesAdapter:
         from app.services.pipeline_run_service import PipelineRunService
 
         import inspect
+
         source = inspect.getsource(PipelineRunService.cancel_run)
         assert "get_compute_adapter" in source
         assert "SlurmService._run_ssh_command" not in source
@@ -48,6 +49,7 @@ class TestPipelineMonitorServiceUsesAdapter:
         from app.services.pipeline_monitor_service import PipelineMonitorService
 
         import inspect
+
         source = inspect.getsource(PipelineMonitorService._sync_single_run)
         assert "get_compute_adapter" in source
 
@@ -56,6 +58,7 @@ class TestPipelineMonitorServiceUsesAdapter:
         from app.services.pipeline_monitor_service import PipelineMonitorService
 
         import inspect
+
         source = inspect.getsource(PipelineMonitorService.get_run_logs)
         assert "get_compute_adapter" in source
 
@@ -64,6 +67,7 @@ class TestPipelineMonitorServiceUsesAdapter:
         from app.services.pipeline_monitor_service import PipelineMonitorService
 
         import inspect
+
         source = inspect.getsource(PipelineMonitorService._handle_completion)
         assert "get_storage_adapter" in source
 
@@ -75,6 +79,7 @@ class TestNotebookServiceUsesAdapter:
         from app.services.notebook_service import NotebookService
 
         import inspect
+
         source = inspect.getsource(NotebookService.launch_session)
         assert "get_notebook_adapter" in source
         assert "SlurmService" not in source
@@ -84,6 +89,7 @@ class TestNotebookServiceUsesAdapter:
         from app.services.notebook_service import NotebookService
 
         import inspect
+
         source = inspect.getsource(NotebookService.stop_session)
         assert "get_notebook_adapter" in source
 
@@ -92,6 +98,7 @@ class TestNotebookServiceUsesAdapter:
         from app.services.notebook_service import NotebookService
 
         import inspect
+
         source = inspect.getsource(NotebookService.check_idle_sessions)
         assert "get_notebook_adapter" in source
         assert "SlurmService" not in source
@@ -104,6 +111,7 @@ class TestComputeApiUsesAdapter:
         from app.api.compute import get_cluster_status
 
         import inspect
+
         source = inspect.getsource(get_cluster_status)
         assert "get_compute_adapter" in source
 
@@ -112,6 +120,7 @@ class TestComputeApiUsesAdapter:
         from app.api.compute import get_budget
 
         import inspect
+
         source = inspect.getsource(get_budget)
         assert "get_compute_adapter" in source
 
