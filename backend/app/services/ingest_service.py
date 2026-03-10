@@ -1,0 +1,453 @@
+"""Auto-ingest service for cataloging files and auto-creating entities.
+
+Processes file arrival events (from GCS Pub/Sub or local simulate),
+parses filenames against naming profiles, resolves or auto-creates
+entities, and catalogs files in the database.
+"""
+
+import asyncio
+from pathlib import PurePosixPath
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.experiment import Experiment
+from app.models.file import File
+from app.models.file_parse_result import FileParseResult
+from app.models.ingest_event import IngestEvent
+from app.models.naming_profile import NamingProfile
+from app.models.project import Project
+from app.models.sample import Sample
+from app.services.audit_service import log_action
+from app.services.event_bus import event_bus
+from app.services.event_types import DATA_UPLOADED
+from app.services.naming_profile_parser import match_filename, resolve_entities
+from app.services.naming_profile_service import NamingProfileService
+
+# File type mapping by extension
+FILE_TYPE_MAP = {
+    ".fastq": "fastq",
+    ".fq": "fastq",
+    ".bam": "bam",
+    ".sam": "bam",
+    ".cram": "bam",
+    ".h5ad": "h5ad",
+    ".csv": "count_matrix",
+    ".tsv": "count_matrix",
+    ".mtx": "count_matrix",
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".svg": "image",
+    ".tif": "image",
+    ".tiff": "image",
+    ".pdf": "document",
+    ".doc": "document",
+    ".docx": "document",
+    ".txt": "document",
+    ".md": "document",
+}
+
+# Extensions that imply compression - check inner extension too
+COMPRESSED_EXTS = {".gz", ".bz2", ".xz", ".zip"}
+
+
+def detect_file_type(filename: str) -> str:
+    """Map filename extension to file type category."""
+    p = PurePosixPath(filename)
+    ext = p.suffix.lower()
+
+    # Check for compressed double extensions like .fastq.gz
+    if ext in COMPRESSED_EXTS:
+        inner_ext = PurePosixPath(p.stem).suffix.lower()
+        if inner_ext in FILE_TYPE_MAP:
+            return FILE_TYPE_MAP[inner_ext]
+
+    return FILE_TYPE_MAP.get(ext, "other")
+
+
+async def check_duplicate(md5_checksum: str | None, org_id: int, db: AsyncSession) -> File | None:
+    """Check if a file with the same MD5 already exists."""
+    if not md5_checksum:
+        return None
+    result = await db.execute(
+        select(File).where(File.md5_checksum == md5_checksum, File.organization_id == org_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def resolve_or_create_project(
+    project_code: str | None,
+    project_id: int | None,
+    org_id: int,
+    user_id: int | None,
+    db: AsyncSession,
+) -> int | None:
+    """Resolve an existing project or auto-create an unclaimed one."""
+    if project_id:
+        return project_id
+    if not project_code:
+        return None
+
+    # Try to find by name
+    result = await db.execute(
+        select(Project).where(Project.name == project_code, Project.organization_id == org_id)
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing.id
+
+    # Auto-create unclaimed project
+    project = Project(
+        organization_id=org_id,
+        name=project_code,
+        status="active",
+        is_unclaimed=True,
+        owner_user_id=None,
+    )
+    db.add(project)
+    await db.flush()
+
+    await log_action(
+        db,
+        user_id=user_id,
+        entity_type="project",
+        entity_id=project.id,
+        action="auto_create",
+        details={"name": project_code, "is_unclaimed": True, "source": "auto_ingest"},
+    )
+    return project.id
+
+
+async def resolve_or_create_experiment(
+    experiment_code: str | None,
+    experiment_id: int | None,
+    project_id: int | None,
+    org_id: int,
+    user_id: int | None,
+    db: AsyncSession,
+) -> int | None:
+    """Resolve an existing experiment or auto-create an unclaimed one."""
+    if experiment_id:
+        return experiment_id
+    if not experiment_code:
+        return None
+
+    result = await db.execute(
+        select(Experiment).where(Experiment.name == experiment_code, Experiment.organization_id == org_id)
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing.id
+
+    experiment = Experiment(
+        organization_id=org_id,
+        name=experiment_code,
+        project_id=project_id,
+        status="registered",
+        is_unclaimed=True,
+        owner_user_id=None,
+    )
+    db.add(experiment)
+    await db.flush()
+
+    await log_action(
+        db,
+        user_id=user_id,
+        entity_type="experiment",
+        entity_id=experiment.id,
+        action="auto_create",
+        details={"name": experiment_code, "project_id": project_id, "is_unclaimed": True},
+    )
+    return experiment.id
+
+
+async def resolve_or_create_sample(
+    sample_id_external: str | None,
+    experiment_id: int | None,
+    org_id: int,
+    user_id: int | None,
+    db: AsyncSession,
+) -> int | None:
+    """Resolve an existing sample or auto-create an unclaimed one."""
+    if not sample_id_external:
+        return None
+    if not experiment_id:
+        return None
+
+    result = await db.execute(
+        select(Sample).where(
+            Sample.sample_id_external == sample_id_external,
+            Sample.experiment_id == experiment_id,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing.id
+
+    sample = Sample(
+        experiment_id=experiment_id,
+        sample_id_external=sample_id_external,
+        status="registered",
+        is_unclaimed=True,
+    )
+    db.add(sample)
+    await db.flush()
+
+    await log_action(
+        db,
+        user_id=user_id,
+        entity_type="sample",
+        entity_id=sample.id,
+        action="auto_create",
+        details={"sample_id_external": sample_id_external, "experiment_id": experiment_id, "is_unclaimed": True},
+    )
+    return sample.id
+
+
+async def process_ingest_event(
+    filename: str,
+    source_bucket: str,
+    source_path: str,
+    org_id: int,
+    db: AsyncSession,
+    user_id: int | None = None,
+    file_size_bytes: int | None = None,
+    content_md5: str | None = None,
+) -> IngestEvent:
+    """Main ingest pipeline orchestrator.
+
+    Steps:
+    1. Parse filename against active naming profiles
+    2. Resolve entities (project, experiment, sample)
+    3. Duplicate detection
+    4. File type detection
+    5. Create file record
+    6. Create file_parse_result
+    7. Create ingest_event record
+    8. Update experiment status if applicable
+    9. Emit events for pipeline triggers
+    """
+    auto_created = {"projects": [], "experiments": [], "samples": []}
+
+    # Step 1: Parse filename
+    profiles = await NamingProfileService.list_profiles(db, org_id, status_filter="active")
+    match_result = match_filename(filename, profiles)
+
+    parsed_project_code = None
+    parsed_experiment_code = None
+    parsed_sample_id = None
+    naming_profile_id = None
+    resolved_project_id = None
+    resolved_experiment_id = None
+    resolved_sample_id = None
+
+    if match_result.status == "matched" and match_result.parse_result:
+        parse = match_result.parse_result
+        naming_profile_id = parse.profile_id
+        parsed_project_code = parse.segments.get("project_code")
+        parsed_experiment_code = parse.segments.get("experiment_code")
+        parsed_sample_id = parse.segments.get("sample_id")
+
+        # Step 2: Resolve entities
+        profile = await NamingProfileService.get_profile(db, naming_profile_id) if naming_profile_id else None
+        if profile:
+            resolution = await resolve_entities(parse, profile, org_id, db)
+
+            # Track original IDs before auto-creation
+            orig_project_id = resolution.project_id
+            orig_experiment_id = resolution.experiment_id
+            orig_sample_id = resolution.sample_id
+
+            resolved_project_id = await resolve_or_create_project(
+                parsed_project_code, resolution.project_id, org_id, user_id, db
+            )
+            if resolved_project_id and not orig_project_id:
+                auto_created["projects"].append(resolved_project_id)
+
+            resolved_experiment_id = await resolve_or_create_experiment(
+                parsed_experiment_code, resolution.experiment_id, resolved_project_id, org_id, user_id, db
+            )
+            if resolved_experiment_id and not orig_experiment_id:
+                auto_created["experiments"].append(resolved_experiment_id)
+
+            resolved_sample_id = await resolve_or_create_sample(
+                parsed_sample_id, resolved_experiment_id, org_id, user_id, db
+            )
+            if resolved_sample_id and not orig_sample_id:
+                auto_created["samples"].append(resolved_sample_id)
+
+    # Step 3: Duplicate detection
+    existing_file = await check_duplicate(content_md5, org_id, db)
+    if existing_file:
+        event = IngestEvent(
+            file_id=existing_file.id,
+            source_bucket=source_bucket,
+            source_path=source_path,
+            naming_profile_id=naming_profile_id,
+            parsed_project_code=parsed_project_code,
+            parsed_experiment_code=parsed_experiment_code,
+            parsed_sample_id=parsed_sample_id,
+            resolved_project_id=resolved_project_id,
+            resolved_experiment_id=resolved_experiment_id,
+            resolved_sample_id=resolved_sample_id,
+            auto_created_entities=auto_created,
+            ingest_status="duplicate",
+        )
+        db.add(event)
+        await db.flush()
+        return event
+
+    # Step 4: File type detection
+    file_type = detect_file_type(filename)
+
+    # Step 5: Create file record
+    # Parse date and version from segments if available
+    file_date = None
+    file_version = None
+    if match_result.status == "matched" and match_result.parse_result:
+        file_version = match_result.parse_result.segments.get("version")
+
+    gcs_uri = f"gs://{source_bucket}/{source_path}"
+    file_record = File(
+        organization_id=org_id,
+        gcs_uri=gcs_uri,
+        filename=filename,
+        size_bytes=file_size_bytes,
+        md5_checksum=content_md5,
+        file_type=file_type,
+        project_id=resolved_project_id,
+        ingest_source="auto_ingest",
+        version=file_version,
+        file_date=file_date,
+        uploader_user_id=user_id,
+    )
+    db.add(file_record)
+    await db.flush()
+
+    # Step 6: Create file_parse_result
+    parse_result_record = FileParseResult(
+        file_id=file_record.id,
+        naming_profile_id=naming_profile_id,
+        parsed_segments_json=match_result.parse_result.segments if match_result.parse_result else None,
+        match_status=match_result.status,
+        auto_linked=match_result.status == "matched",
+    )
+    db.add(parse_result_record)
+    await db.flush()
+
+    # Step 7: Determine ingest status
+    if match_result.status == "matched":
+        ingest_status = "cataloged"
+    elif match_result.status == "multiple_matches":
+        ingest_status = "multiple_matches"
+    else:
+        ingest_status = "unmatched"
+
+    # Step 7: Create ingest event
+    event = IngestEvent(
+        file_id=file_record.id,
+        source_bucket=source_bucket,
+        source_path=source_path,
+        naming_profile_id=naming_profile_id,
+        parsed_project_code=parsed_project_code,
+        parsed_experiment_code=parsed_experiment_code,
+        parsed_sample_id=parsed_sample_id,
+        resolved_project_id=resolved_project_id,
+        resolved_experiment_id=resolved_experiment_id,
+        resolved_sample_id=resolved_sample_id,
+        auto_created_entities=auto_created,
+        ingest_status=ingest_status,
+    )
+    db.add(event)
+    await db.flush()
+
+    # Step 8: Update experiment status if first FASTQ
+    if resolved_experiment_id and file_type == "fastq":
+        exp_result = await db.execute(
+            select(Experiment).where(Experiment.id == resolved_experiment_id)
+        )
+        experiment = exp_result.scalar_one_or_none()
+        if experiment and experiment.status == "registered":
+            experiment.status = "fastq_uploaded"
+            await db.flush()
+
+    # Step 9: Emit event for pipeline triggers
+    asyncio.create_task(
+        event_bus.emit(
+            DATA_UPLOADED,
+            {
+                "event_type": DATA_UPLOADED,
+                "org_id": org_id,
+                "user_id": user_id,
+                "entity_type": "ingest_event",
+                "entity_id": event.id,
+                "title": f"File ingested: {filename}",
+                "message": f"File '{filename}' cataloged with status '{ingest_status}'",
+                "summary": f"Ingest status: {ingest_status}",
+                "severity": "info",
+                "metadata": {
+                    "file_id": file_record.id,
+                    "ingest_event_id": event.id,
+                    "ingest_status": ingest_status,
+                    "file_type": file_type,
+                },
+            },
+        )
+    )
+
+    await log_action(
+        db,
+        user_id=user_id,
+        entity_type="file",
+        entity_id=file_record.id,
+        action="auto_ingest",
+        details={
+            "filename": filename,
+            "ingest_status": ingest_status,
+            "file_type": file_type,
+            "auto_created": auto_created,
+        },
+    )
+
+    return event
+
+
+async def get_unclaimed_entities(org_id: int, db: AsyncSession) -> list[dict]:
+    """Return all unclaimed entities (projects, experiments, samples)."""
+    unclaimed = []
+
+    projects = await db.execute(
+        select(Project).where(Project.organization_id == org_id, Project.is_unclaimed.is_(True))
+    )
+    for p in projects.scalars().all():
+        unclaimed.append({
+            "entity_type": "project",
+            "entity_id": p.id,
+            "name": p.name,
+            "created_at": p.created_at,
+        })
+
+    experiments = await db.execute(
+        select(Experiment).where(Experiment.organization_id == org_id, Experiment.is_unclaimed.is_(True))
+    )
+    for e in experiments.scalars().all():
+        unclaimed.append({
+            "entity_type": "experiment",
+            "entity_id": e.id,
+            "name": e.name,
+            "created_at": e.created_at,
+        })
+
+    samples = await db.execute(
+        select(Sample).where(Sample.is_unclaimed.is_(True))
+    )
+    for s in samples.scalars().all():
+        unclaimed.append({
+            "entity_type": "sample",
+            "entity_id": s.id,
+            "name": s.sample_id_external or f"Sample {s.id}",
+            "created_at": s.created_at,
+        })
+
+    return unclaimed
