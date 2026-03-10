@@ -7,6 +7,7 @@ from app.api.dependencies import require_role
 from app.schemas.compute import ClusterStatusResponse, PartitionStatus, BudgetResponse
 from app.schemas.slurm_job import JobResponse, JobListResponse
 from app.schemas.notebook_session import UserSummary, ExperimentSummary
+from app.adapters.registry import get_compute_adapter
 from app.services.slurm_service import SlurmService
 from app.services.compute_cost_service import ComputeCostService
 
@@ -50,15 +51,46 @@ def _job_response(job) -> JobResponse:
 async def get_cluster_status(
     current_user: dict = require_role("admin", "comp_bio"),
 ):
-    status = await SlurmService.get_cluster_status()
-    return ClusterStatusResponse(
-        controller_status=status["controller_status"],
-        partitions=[PartitionStatus(**p) for p in status["partitions"]],
-        total_nodes=status["total_nodes"],
-        active_nodes=status["active_nodes"],
-        queue_depth=status["queue_depth"],
-        cost_burn_rate_hourly=status.get("cost_burn_rate_hourly"),
-    )
+    # Use the BAL compute adapter for cluster status
+    try:
+        compute_adapter = get_compute_adapter()
+        status = await compute_adapter.get_cluster_status()
+
+        # Normalize node_pools to partitions for backward compatibility
+        node_pools = status.get("node_pools", status.get("partitions", []))
+        partitions = []
+        for pool in node_pools:
+            partitions.append(
+                PartitionStatus(
+                    name=pool.get("name", "unknown"),
+                    max_nodes=pool.get("max_nodes", pool.get("current_nodes", 0)),
+                    active_nodes=pool.get("active_nodes", pool.get("current_nodes", 0)),
+                    idle_nodes=pool.get("idle_nodes", 0),
+                    queue_depth=pool.get("queue_depth", 0),
+                    instance_type=pool.get("instance_type", pool.get("machine_type", "unknown")),
+                    use_spot=pool.get("use_spot", pool.get("spot", False)),
+                )
+            )
+
+        return ClusterStatusResponse(
+            controller_status=status.get("controller_status", "unknown"),
+            partitions=partitions,
+            total_nodes=status.get("total_nodes", 0),
+            active_nodes=status.get("active_nodes", 0),
+            queue_depth=status.get("queue_depth", 0),
+            cost_burn_rate_hourly=status.get("cost_burn_rate_hourly"),
+        )
+    except RuntimeError:
+        # Adapter not initialized, fall back to legacy SLURM service
+        status = await SlurmService.get_cluster_status()
+        return ClusterStatusResponse(
+            controller_status=status["controller_status"],
+            partitions=[PartitionStatus(**p) for p in status["partitions"]],
+            total_nodes=status["total_nodes"],
+            active_nodes=status["active_nodes"],
+            queue_depth=status["queue_depth"],
+            cost_burn_rate_hourly=status.get("cost_burn_rate_hourly"),
+        )
 
 
 @router.get("/jobs", response_model=JobListResponse)
@@ -143,7 +175,14 @@ async def resubmit_job(
 async def get_budget(
     current_user: dict = require_role("admin", "comp_bio"),
 ):
-    status = await SlurmService.get_cluster_status()
-    burn_rate = status.get("cost_burn_rate_hourly", 0.0) or 0.0
+    # Use the BAL compute adapter for metrics
+    try:
+        compute_adapter = get_compute_adapter()
+        metrics = await compute_adapter.get_cluster_metrics()
+        burn_rate = metrics.get("cost_burn_rate_hourly", 0.0) or 0.0
+    except RuntimeError:
+        status = await SlurmService.get_cluster_status()
+        burn_rate = status.get("cost_burn_rate_hourly", 0.0) or 0.0
+
     budget = ComputeCostService.get_monthly_spend_estimate(burn_rate)
     return BudgetResponse(**budget)
