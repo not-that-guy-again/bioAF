@@ -75,26 +75,23 @@ async def sample_job(session, admin_user):
 
 @pytest.mark.asyncio
 async def test_cluster_status_endpoint(client, admin_token):
-    """Cluster status endpoint returns expected structure."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        side_effect=[
-            '{"sinfo": [{"partition": {"name": "standard"}, "nodes": {"total": 5, "allocated": 2, "idle": 3}}]}',
-            '{"jobs": [{"job_id": 1}, {"job_id": 2}]}',
-        ],
-    ):
-        response = await client.get(
-            "/api/compute/cluster",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["controller_status"] == "running"
-        assert len(data["partitions"]) == 1
-        assert data["partitions"][0]["name"] == "standard"
-        assert data["active_nodes"] == 2
-        assert data["queue_depth"] == 2
+    """Cluster status endpoint returns expected structure via BAL adapter."""
+    response = await client.get(
+        "/api/compute/cluster",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["controller_status"] == "running"
+    # Local-mode adapter returns 3 node pools
+    assert len(data["partitions"]) == 3
+    pool_names = {p["name"] for p in data["partitions"]}
+    assert "bioaf-platform" in pool_names
+    assert "bioaf-pipelines" in pool_names
+    assert "bioaf-interactive" in pool_names
+    assert data["total_nodes"] == 1
+    assert data["active_nodes"] == 1
+    assert data["queue_depth"] == 0
 
 
 @pytest.mark.asyncio
