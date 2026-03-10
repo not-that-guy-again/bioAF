@@ -11,7 +11,7 @@ from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
 from app.services.event_types import SESSION_IDLE
 from app.services.quota_service import QuotaService
-from app.services.slurm_service import SlurmService
+from app.adapters.registry import get_notebook_adapter
 
 logger = logging.getLogger("bioaf.notebooks")
 
@@ -60,40 +60,28 @@ class NotebookService:
         session.add(notebook_session)
         await session.flush()
 
-        # Build environment prefix for project context
-        env_prefix = ""
-        if project_id:
-            env_prefix = f"export BIOAF_PROJECT_ID={project_id}; "
-
-        # Submit SLURM job for the session
-        if session_type == "jupyter":
-            job_script = (
-                f"{env_prefix}"
-                "jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser "
-                "--NotebookApp.token='' --NotebookApp.allow_origin='*'"
-            )
-        else:
-            job_script = f"{env_prefix}rserver --www-port=8787 --www-address=0.0.0.0"
-
+        # Launch via the notebook adapter (BAL)
         try:
-            slurm_job = await SlurmService.submit_job(
-                session,
-                user_id=user_id,
-                org_id=org_id,
-                job_script=job_script,
-                partition="interactive",
-                cpu=cpu_cores,
-                memory_gb=memory_gb,
-                job_name=f"bioaf-{session_type}-{notebook_session.id}",
-                experiment_id=experiment_id,
-                notebook_session_id=notebook_session.id,
+            notebook_adapter = get_notebook_adapter()
+            result = await notebook_adapter.launch_session(
+                {
+                    "session_type": session_type,
+                    "resource_profile": resource_profile,
+                    "cpu_cores": cpu_cores,
+                    "memory_gb": memory_gb,
+                    "experiment_id": experiment_id,
+                    "project_id": project_id,
+                    "user_id": user_id,
+                    "session_id": notebook_session.id,
+                }
             )
 
-            notebook_session.slurm_job_id = slurm_job.slurm_job_id
+            notebook_session.slurm_job_id = result.get("session_id", "")
+            notebook_session.proxy_url = result.get("url")
             notebook_session.status = "starting"
         except Exception as e:
             notebook_session.status = "failed"
-            logger.error("Failed to submit SLURM job for session %d: %s", notebook_session.id, e)
+            logger.error("Failed to launch notebook session %d: %s", notebook_session.id, e)
 
         await session.flush()
 
@@ -121,12 +109,13 @@ class NotebookService:
 
         old_status = notebook_session.status
 
-        # Cancel the underlying SLURM job
+        # Terminate via the notebook adapter
         if notebook_session.slurm_job_id:
             try:
-                await SlurmService._run_ssh_command(f"scancel {notebook_session.slurm_job_id}")
+                notebook_adapter = get_notebook_adapter()
+                await notebook_adapter.terminate_session(notebook_session.slurm_job_id)
             except Exception as e:
-                logger.warning("Failed to cancel SLURM job %s: %s", notebook_session.slurm_job_id, e)
+                logger.warning("Failed to terminate session %s: %s", notebook_session.slurm_job_id, e)
 
         notebook_session.status = "stopped"
         notebook_session.stopped_at = datetime.now(timezone.utc)
@@ -223,9 +212,10 @@ class NotebookService:
                         ns.stopped_at = now
                         if ns.slurm_job_id:
                             try:
-                                await SlurmService._run_ssh_command(f"scancel {ns.slurm_job_id}")
+                                notebook_adapter = get_notebook_adapter()
+                                await notebook_adapter.terminate_session(ns.slurm_job_id)
                             except Exception as e:
-                                logger.warning("Failed to cancel SLURM job for idle session: %s", e)
+                                logger.warning("Failed to terminate idle session: %s", e)
 
             await session.flush()
             await session.commit()

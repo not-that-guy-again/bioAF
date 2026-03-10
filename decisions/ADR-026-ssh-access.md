@@ -98,23 +98,27 @@ This is deferred to a future phase. The SSH/exec approach provides the critical 
 ## Consequences
 
 **Positive:**
+
 - Meets users where they are — teams that author pipelines interactively can do so immediately
 - Minimal implementation effort — generating a command string from pod metadata is straightforward
 - Audit logging provides accountability without restricting flexibility
 - The setup guide reduces friction for users unfamiliar with kubectl
 
 **Negative:**
+
 - No visibility into what users do inside connected sessions — file modifications, package installs, and configuration changes are invisible to the platform
 - Users can make changes inside containers that diverge from the GitOps-managed environment, creating drift
 - Requires users to install and configure kubectl (or SSH client) locally — not zero-setup
 - Security exposure: users with container access can potentially access environment variables, mounted secrets, or other containers in the namespace
 
 **Mitigations:**
+
 - Pipeline containers run with minimal RBAC permissions — they can access their own data volumes but not the Kubernetes API or other namespaces
 - Secrets mounted into pipeline containers are limited to what that specific pipeline needs
 - The platform displays a subtle reminder when the Connect button is used: "Changes made inside this session are not tracked by bioAF's environment management. Consider committing pipeline changes to your Git repository."
 
 **Neutral:**
+
 - This feature does not replace the existing pipeline import-from-GitHub workflow — both coexist
 - The audit log entry for session initiation is consistent with the existing audit log schema (ADR-009)
 

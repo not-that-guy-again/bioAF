@@ -10,9 +10,11 @@ import type { ComponentState } from "@/lib/types";
 interface ComponentCardProps {
   component: ComponentState;
   onAction: () => void;
+  comingSoon?: boolean;
+  comingSoonMessage?: string;
 }
 
-export function ComponentCard({ component, onAction }: ComponentCardProps) {
+export function ComponentCard({ component, onAction, comingSoon, comingSoonMessage }: ComponentCardProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [action, setAction] = useState<"enable" | "disable">("enable");
   const [error, setError] = useState("");
@@ -30,6 +32,23 @@ export function ComponentCard({ component, onAction }: ComponentCardProps) {
       setError(e instanceof ApiError ? e.message : "Action failed");
     }
   };
+
+  if (comingSoon) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6 border border-gray-200 opacity-60">
+        <div className="flex items-start justify-between mb-3">
+          <h3 className="font-semibold text-gray-400">{component.name}</h3>
+          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
+            Coming Soon
+          </span>
+        </div>
+        <p className="text-sm text-gray-400 mb-3">{component.description}</p>
+        {comingSoonMessage && (
+          <p className="text-xs text-gray-400 italic">{comingSoonMessage}</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>

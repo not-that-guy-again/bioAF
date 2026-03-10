@@ -26,7 +26,7 @@ Implement GCS as the recommended and default storage backend for bioAF, using th
 
 ### Data Flow Pattern
 
-```
+```text
 GCS Ingest Bucket          Pipeline Container              GCS Results Bucket
 (raw data lands here)      (ephemeral, runs on K8s)        (permanent outputs)
        │                          │                               ▲
@@ -122,6 +122,7 @@ resource "google_storage_bucket" "ingest" {
 ## Consequences
 
 **Positive:**
+
 - Eliminates the single largest optional component cost (Filestore ~$200/month minimum)
 - Pay only for actual storage used, not provisioned capacity
 - GCS scales infinitely without manual resize operations
@@ -130,12 +131,14 @@ resource "google_storage_bucket" "ingest" {
 - The ingest bucket pattern enables clean separation of landing zone from permanent storage
 
 **Negative:**
+
 - Pipeline containers must explicitly stage inputs and collect outputs — adds latency for large files
 - No POSIX filesystem semantics without an intermediary (gcsfuse has performance limitations for random I/O)
 - Notebook home directory sync adds complexity compared to NFS mount
 - Some legacy tools expect local filesystem paths; containerization mitigates this but doesn't eliminate it
 
 **Neutral:**
+
 - Raw data, results, and config backups were already in GCS — this decision extends GCS to working storage and notebook persistence
 - The BAL abstraction (ADR-020) means pipeline definitions and UI components are unaffected by the storage backend choice
 

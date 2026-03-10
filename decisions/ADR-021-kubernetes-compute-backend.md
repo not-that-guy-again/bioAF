@@ -125,6 +125,7 @@ For teams that initially chose SLURM and later want to migrate to Kubernetes:
 ## Consequences
 
 **Positive:**
+
 - Eliminates SLURM controller and login node costs (~$50-80/month)
 - Single orchestrator (GKE) for both platform services and workloads
 - Native autoscaling to zero — no idle compute charges
@@ -133,12 +134,14 @@ For teams that initially chose SLURM and later want to migrate to Kubernetes:
 - Path to multi-cloud: K8s runs on AWS (EKS) and Azure (AKS) with minimal adapter changes
 
 **Negative:**
+
 - Some nf-core pipelines are tested primarily on SLURM; K8s executor may have edge cases
 - Teams accustomed to SLURM job scripting (sbatch, srun) need to adapt
 - K8s resource requests/limits are less intuitive than SLURM's partition model for some users
 - Autopilot pricing can be less predictable than reserved SLURM nodes for sustained workloads
 
 **Neutral:**
+
 - Nextflow and Snakemake both support K8s executors natively; pipeline definitions do not change
 - The BAL abstraction (ADR-020) means the UI and service layer are unaffected by the backend choice
 

@@ -27,7 +27,7 @@ Implement a GCS event-driven auto-ingest system that monitors a dedicated ingest
 
 ### Event Pipeline
 
-```
+```text
 GCS Ingest Bucket
        │
        │  Object finalize event
@@ -57,20 +57,24 @@ GCS Ingest Bucket
 When the ingest service parses a filename and resolves entity codes:
 
 **Project resolution:**
+
 - If the project code maps to an existing bioAF project via the naming profile's `project_code_mappings` -> link the file to that project
 - If the project code has no mapping -> auto-create a new project with the code as its name, status set to `unclaimed`, and a visual "Unclaimed" badge displayed everywhere the project appears
 
 **Experiment resolution:**
+
 - If the experiment code maps to an existing experiment -> link the file to that experiment
 - If the experiment code has no mapping but the project exists -> auto-create the experiment under the resolved project, status set to `unclaimed`
 - If neither project nor experiment exists -> auto-create the project first (unclaimed), then create the experiment under it (unclaimed), then link the file
 
 **Sample resolution:**
+
 - If a sample_id segment exists in the filename and matches an existing sample in the resolved experiment -> link the file to that sample
 - If the sample_id doesn't match -> auto-create a minimal sample record with the external ID, status set to `unclaimed`
 - If no sample_id segment exists in the naming profile -> file is linked to the experiment only
 
 **Unclaimed entity behavior:**
+
 - Unclaimed entities display a prominent visual badge throughout the platform (experiment list, project list, dataset browser, dashboard)
 - Unclaimed entities have no pipeline settings, no metadata beyond what the filename provided, and no assigned owner
 - Any user with appropriate permissions (comp_bio or admin) can "claim" an unclaimed entity, which opens a form to complete the metadata and assign ownership
@@ -185,6 +189,7 @@ The existing drag-and-drop upload UI (F-010) remains fully functional. Manual up
 ## Consequences
 
 **Positive:**
+
 - CRO deliveries are automatically cataloged without human intervention
 - Files are immediately visible across the platform (experiments, projects, samples, dataset browser)
 - The auto-creation pattern ensures no data is lost even when metadata is incomplete
@@ -192,12 +197,14 @@ The existing drag-and-drop upload UI (F-010) remains fully functional. Manual up
 - The ingest bucket separation keeps the landing zone clean and distinct from permanent storage
 
 **Negative:**
+
 - Auto-created entities with incomplete metadata may accumulate if not regularly claimed
 - Pub/Sub adds a GCP service dependency and small cost (~$0.40 per million messages)
 - Large file processing (multi-GB FASTQs) may hit the Pub/Sub ack deadline; requires careful timeout management
 - The system trusts filename parsing for entity linkage — errors in CRO naming propagate automatically
 
 **Neutral:**
+
 - Manual upload is unaffected — this is additive functionality
 - The ingest service runs as a deployment on GKE, scaling with the existing cluster
 

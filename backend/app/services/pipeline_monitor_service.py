@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.models.pipeline_process import PipelineProcess
 from app.models.pipeline_run import PipelineRun
 from app.services.audit_service import log_action
-from app.services.slurm_service import SlurmService
+from app.adapters.registry import get_compute_adapter, get_storage_adapter
 
 logger = logging.getLogger("bioaf.pipeline_monitor")
 
@@ -43,11 +43,12 @@ class PipelineMonitorService:
 
     @staticmethod
     async def _sync_single_run(session: AsyncSession, run: PipelineRun) -> None:
-        """Sync a single run's status from its Nextflow trace file."""
-        trace_path = f"{run.work_dir}/pipeline_info/trace.tsv"
-
+        """Sync a single run's status from the compute adapter."""
+        # Use the compute adapter to get job status
         try:
-            trace_content = await SlurmService._run_ssh_command(f"cat {trace_path} 2>/dev/null || echo ''")
+            compute_adapter = get_compute_adapter()
+            await compute_adapter.get_job_status(run.slurm_job_id or str(run.id))
+            trace_content = await compute_adapter.get_job_logs(run.slurm_job_id or str(run.id))
         except Exception:
             return
 
@@ -132,14 +133,18 @@ class PipelineMonitorService:
                 except Exception as e:
                     logger.warning("Could not advance experiment status: %s", e)
 
-        # Index output files
+        # Collect output files via storage adapter
         try:
+            storage_adapter = get_storage_adapter()
             outdir = f"/data/results/experiments/{run.experiment_id}/runs/{run.id}"
-            output = await SlurmService._run_ssh_command(f"find {outdir} -type f 2>/dev/null || echo ''")
-            if output.strip():
-                run.output_files_json = {"files": output.strip().split("\n")}
+            collected = await storage_adapter.collect_outputs(
+                outdir,
+                {"id": run.id, "experiment_id": run.experiment_id},
+            )
+            if collected:
+                run.output_files_json = {"files": [f["filename"] for f in collected]}
         except Exception as e:
-            logger.warning("Failed to index output files for run %d: %s", run.id, e)
+            logger.warning("Failed to collect output files for run %d: %s", run.id, e)
 
         # Audit log
         await log_action(
@@ -199,10 +204,9 @@ class PipelineMonitorService:
         stdout = ""
         stderr = ""
         try:
-            if process.stdout_path:
-                stdout = await SlurmService._run_ssh_command(f"cat {process.stdout_path} 2>/dev/null || echo ''")
-            if process.stderr_path:
-                stderr = await SlurmService._run_ssh_command(f"cat {process.stderr_path} 2>/dev/null || echo ''")
+            compute_adapter = get_compute_adapter()
+            logs = await compute_adapter.get_job_logs(str(process.pipeline_run_id))
+            stdout = logs
         except Exception as e:
             logger.warning("Failed to read logs for process %s: %s", process_name, e)
 
@@ -217,10 +221,8 @@ class PipelineMonitorService:
             return ""
 
         try:
-            report = await SlurmService._run_ssh_command(
-                f"cat {work_dir}/pipeline_info/report.html 2>/dev/null || echo ''"
-            )
-            return report
+            compute_adapter = get_compute_adapter()
+            return await compute_adapter.get_job_logs(f"report-{run_id}")
         except Exception:
             return ""
 

@@ -1,6 +1,5 @@
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch
 
 from app.services.auth_service import AuthService
 
@@ -56,48 +55,38 @@ async def bench_token(bench_user) -> str:
 @pytest.mark.asyncio
 async def test_session_launch(client, comp_bio_token):
     """Session launch creates session and job records."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="55555",
-    ):
-        response = await client.post(
-            "/api/notebooks/sessions",
-            json={
-                "session_type": "jupyter",
-                "resource_profile": "small",
-            },
-            headers={"Authorization": f"Bearer {comp_bio_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["session_type"] == "jupyter"
-        assert data["resource_profile"] == "small"
-        assert data["cpu_cores"] == 2
-        assert data["memory_gb"] == 4
-        assert data["status"] in ("starting", "pending")
+    response = await client.post(
+        "/api/notebooks/sessions",
+        json={
+            "session_type": "jupyter",
+            "resource_profile": "small",
+        },
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["session_type"] == "jupyter"
+    assert data["resource_profile"] == "small"
+    assert data["cpu_cores"] == 2
+    assert data["memory_gb"] == 4
+    assert data["status"] in ("starting", "pending")
 
 
 @pytest.mark.asyncio
 async def test_session_launch_medium_profile(client, comp_bio_token):
     """Medium profile sets correct resources."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="55556",
-    ):
-        response = await client.post(
-            "/api/notebooks/sessions",
-            json={
-                "session_type": "rstudio",
-                "resource_profile": "medium",
-            },
-            headers={"Authorization": f"Bearer {comp_bio_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["cpu_cores"] == 4
-        assert data["memory_gb"] == 8
+    response = await client.post(
+        "/api/notebooks/sessions",
+        json={
+            "session_type": "rstudio",
+            "resource_profile": "medium",
+        },
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cpu_cores"] == 4
+    assert data["memory_gb"] == 8
 
 
 @pytest.mark.asyncio
@@ -149,18 +138,13 @@ async def test_session_stop(client, session, comp_bio_user, comp_bio_token):
     await session.flush()
     await session.commit()
 
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="",
-    ):
-        response = await client.post(
-            f"/api/notebooks/sessions/{ns.id}/stop",
-            headers={"Authorization": f"Bearer {comp_bio_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "stopped"
+    response = await client.post(
+        f"/api/notebooks/sessions/{ns.id}/stop",
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "stopped"
 
 
 @pytest.mark.asyncio
@@ -248,20 +232,15 @@ async def test_bench_cannot_launch_session(client, bench_token):
 @pytest.mark.asyncio
 async def test_session_launch_creates_audit_entry(client, session, comp_bio_token):
     """Session launch writes an audit log entry."""
-    with patch(
-        "app.services.slurm_service.SlurmService._run_ssh_command",
-        new_callable=AsyncMock,
-        return_value="88888",
-    ):
-        response = await client.post(
-            "/api/notebooks/sessions",
-            json={
-                "session_type": "jupyter",
-                "resource_profile": "small",
-            },
-            headers={"Authorization": f"Bearer {comp_bio_token}"},
-        )
-        assert response.status_code == 200
+    response = await client.post(
+        "/api/notebooks/sessions",
+        json={
+            "session_type": "jupyter",
+            "resource_profile": "small",
+        },
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 200
 
     from sqlalchemy import select
     from app.models.audit_log import AuditLog
