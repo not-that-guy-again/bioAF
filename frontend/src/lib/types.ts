@@ -385,6 +385,41 @@ export interface ClusterStatus {
   cost_burn_rate_hourly: number | null;
 }
 
+// BAL normalized compute types (Phase 12)
+
+export interface NodePoolStatus {
+  name: string;
+  machine_type: string;
+  min_nodes: number;
+  max_nodes: number;
+  current_nodes: number;
+  status: string;
+  spot?: boolean;
+}
+
+export interface InfraComputeStatus {
+  controller_status: string;
+  node_pools: NodePoolStatus[];
+  total_nodes: number;
+  active_nodes: number;
+  queue_depth: number;
+  health: string;
+}
+
+export interface NodePoolMetrics {
+  name: string;
+  cpu_utilization_pct: number;
+  memory_utilization_pct: number;
+  cost_rate_hourly: number;
+}
+
+export interface InfraComputeMetrics {
+  cpu_utilization_pct: number;
+  memory_utilization_pct: number;
+  cost_burn_rate_hourly: number;
+  node_pools: NodePoolMetrics[];
+}
+
 export interface SlurmJob {
   id: number;
   slurm_job_id: string;
