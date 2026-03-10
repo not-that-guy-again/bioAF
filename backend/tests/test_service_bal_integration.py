@@ -1,6 +1,5 @@
 """Tests verifying that refactored services call through the BAL adapter interfaces."""
 
-from unittest.mock import AsyncMock, patch
 
 import pytest
 

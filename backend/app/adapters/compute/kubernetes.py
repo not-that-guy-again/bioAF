@@ -9,11 +9,8 @@ import os
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.base import ComputeProvider
-from app.models.pipeline_run import PipelineRun
 
 logger = logging.getLogger("bioaf.adapters.compute.k8s")
 

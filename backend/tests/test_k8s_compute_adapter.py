@@ -1,6 +1,5 @@
 """Tests for the Kubernetes compute adapter in local mode."""
 
-import os
 
 import pytest
 

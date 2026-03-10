@@ -47,7 +47,7 @@ class PipelineMonitorService:
         # Use the compute adapter to get job status
         try:
             compute_adapter = get_compute_adapter()
-            job_status = await compute_adapter.get_job_status(run.slurm_job_id or str(run.id))
+            await compute_adapter.get_job_status(run.slurm_job_id or str(run.id))
             trace_content = await compute_adapter.get_job_logs(run.slurm_job_id or str(run.id))
         except Exception:
             return
