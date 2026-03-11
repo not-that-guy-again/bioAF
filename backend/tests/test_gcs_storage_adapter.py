@@ -127,7 +127,7 @@ class TestGcsStorageMetrics:
         assert "buckets" in result
         assert "total_size_gb" in result
         assert "total_cost_monthly_usd" in result
-        assert len(result["buckets"]) == 4
+        assert len(result["buckets"]) == 5
 
     @pytest.mark.asyncio
     async def test_bucket_names_contain_org_slug(self, adapter):
