@@ -47,6 +47,7 @@ from app.api.ingest import claim_router
 from app.api.pipeline_triggers import router as pipeline_triggers_router
 from app.api.pipeline_triggers import budget_router
 from app.api.ssh_connect import router as ssh_connect_router
+from app.api.gcp_config import router as gcp_config_router
 
 api_router = APIRouter()
 
@@ -97,3 +98,4 @@ api_router.include_router(claim_router)
 api_router.include_router(pipeline_triggers_router)
 api_router.include_router(budget_router)
 api_router.include_router(ssh_connect_router)
+api_router.include_router(gcp_config_router)
