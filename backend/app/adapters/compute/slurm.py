@@ -32,3 +32,6 @@ class SlurmComputeProvider(ComputeProvider):
 
     async def get_cost_estimate(self, job_spec: dict) -> dict:
         raise NotImplementedError("SLURM compute backend coming soon. Select Kubernetes during setup.")
+
+    async def get_connection_command(self, job_id: str) -> str:
+        raise NotImplementedError("SLURM compute backend coming soon. Select Kubernetes during setup.")
