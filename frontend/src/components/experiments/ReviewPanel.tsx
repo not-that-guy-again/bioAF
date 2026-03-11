@@ -107,8 +107,9 @@ export function ReviewPanel({ pipelineRunId, userRole, onReviewSubmitted }: Revi
           <h3 className="font-semibold text-sm mb-3">Pipeline Run Review</h3>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Verdict</label>
+              <label htmlFor="review-verdict" className="block text-xs text-gray-500 mb-1">Verdict</label>
               <select
+                id="review-verdict"
                 value={verdict}
                 onChange={(e) => setVerdict(e.target.value as ReviewVerdict)}
                 className="border rounded px-3 py-2 text-sm w-full"
@@ -120,8 +121,9 @@ export function ReviewPanel({ pipelineRunId, userRole, onReviewSubmitted }: Revi
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Notes</label>
+              <label htmlFor="review-notes" className="block text-xs text-gray-500 mb-1">Notes</label>
               <textarea
+                id="review-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Review notes, observations, caveats..."
