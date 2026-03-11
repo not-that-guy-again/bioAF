@@ -23,20 +23,29 @@ describe("Sidebar", () => {
     });
   });
 
-  it("renders all 9 top-level items for admin user", () => {
+  it("renders all 8 top-level items for admin user", () => {
     render(<Sidebar />);
     const nav = screen.getByTestId("sidebar-nav");
-    // 9 top-level sections: Dashboard, Results, Pipelines, Projects,
-    // Experiments, Notebooks, Data & Files, Infrastructure, Settings
+    // 8 top-level sections: Dashboard, Results, Pipelines, Projects,
+    // Notebooks, Data & Files, Infrastructure, Settings
+    // (Experiments is now nested under Projects, not a top-level section)
     expect(nav).toHaveTextContent("Dashboard");
     expect(nav).toHaveTextContent("Results");
     expect(nav).toHaveTextContent("Pipelines");
     expect(nav).toHaveTextContent("Projects");
-    expect(nav).toHaveTextContent("Experiments");
     expect(nav).toHaveTextContent("Notebooks");
     expect(nav).toHaveTextContent("Data & Files");
     expect(nav).toHaveTextContent("Infrastructure");
     expect(nav).toHaveTextContent("Settings");
+  });
+
+  it("does not render Experiments as a top-level nav item", () => {
+    render(<Sidebar />);
+    const nav = screen.getByTestId("sidebar-nav");
+    // Experiments should only appear as a child of Projects, not as a top-level button
+    const buttons = Array.from(nav.querySelectorAll("button"));
+    const experimentButton = buttons.find((b) => b.textContent?.trim() === "Experiments");
+    expect(experimentButton).toBeUndefined();
   });
 
   it("hides Settings when user role is not admin", () => {
@@ -56,12 +65,47 @@ describe("Sidebar", () => {
     expect(nav).toHaveTextContent("Settings");
   });
 
+  it("renders Projects as an expandable section with 3 children", () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText("Projects"));
+    expect(screen.getByText("Project List")).toBeInTheDocument();
+    expect(screen.getByText("Experiment Templates")).toBeInTheDocument();
+    expect(screen.getByText("Experiment List")).toBeInTheDocument();
+  });
+
+  it("Project List child navigates to /projects", () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText("Projects"));
+    const projectListLink = screen.getByText("Project List").closest("a");
+    expect(projectListLink).toHaveAttribute("href", "/projects");
+  });
+
+  it("Experiment Templates child navigates to /projects/experiment-templates", () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText("Projects"));
+    const templatesLink = screen.getByText("Experiment Templates").closest("a");
+    expect(templatesLink).toHaveAttribute("href", "/projects/experiment-templates");
+  });
+
+  it("Experiment List child navigates to /projects/experiments", () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByText("Projects"));
+    const listLink = screen.getByText("Experiment List").closest("a");
+    expect(listLink).toHaveAttribute("href", "/projects/experiments");
+  });
+
+  it("highlights Projects section and auto-expands when on an experiment page", () => {
+    mockPathname.mockReturnValue("/projects/experiments");
+    render(<Sidebar />);
+    const projectsButton = screen.getByText("Projects").closest("button");
+    expect(projectsButton?.className).toContain("bg-gray-800");
+    expect(screen.getByText("Experiment List")).toBeInTheDocument();
+  });
+
   it("navigates to correct path for single-page items", () => {
     render(<Sidebar />);
     const dashboardLink = screen.getByText("Dashboard").closest("a");
     expect(dashboardLink).toHaveAttribute("href", "/dashboard");
-    const projectsLink = screen.getByText("Projects").closest("a");
-    expect(projectsLink).toHaveAttribute("href", "/projects");
     const notebooksLink = screen.getByText("Notebooks").closest("a");
     expect(notebooksLink).toHaveAttribute("href", "/notebooks");
   });

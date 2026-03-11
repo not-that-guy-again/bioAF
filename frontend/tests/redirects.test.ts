@@ -57,6 +57,33 @@ describe("Route Redirects", () => {
     expect(redirect!.destination).toBe("/settings/info");
   });
 
+  it("redirects /experiments/templates to /projects/experiment-templates", () => {
+    const redirect = redirects.find(
+      (r: Redirect) => r.source === "/experiments/templates",
+    );
+    expect(redirect).toBeDefined();
+    expect(redirect!.destination).toBe("/projects/experiment-templates");
+    expect(redirect!.permanent).toBe(true);
+  });
+
+  it("redirects /experiments to /projects/experiments", () => {
+    const redirect = redirects.find(
+      (r: Redirect) => r.source === "/experiments",
+    );
+    expect(redirect).toBeDefined();
+    expect(redirect!.destination).toBe("/projects/experiments");
+    expect(redirect!.permanent).toBe(true);
+  });
+
+  it("redirects /experiments/:id to /projects/experiments/:id", () => {
+    const redirect = redirects.find(
+      (r: Redirect) => r.source === "/experiments/:id",
+    );
+    expect(redirect).toBeDefined();
+    expect(redirect!.destination).toBe("/projects/experiments/:id");
+    expect(redirect!.permanent).toBe(true);
+  });
+
   it("contains all expected redirect sources", () => {
     const sources = redirects.map((r: Redirect) => r.source);
     expect(sources).toContain("/home");
@@ -67,5 +94,8 @@ describe("Route Redirects", () => {
     expect(sources).toContain("/references");
     expect(sources).toContain("/environments");
     expect(sources).toContain("/packages");
+    expect(sources).toContain("/experiments");
+    expect(sources).toContain("/experiments/templates");
+    expect(sources).toContain("/experiments/:id");
   });
 });
