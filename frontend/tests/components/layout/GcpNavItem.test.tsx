@@ -17,7 +17,7 @@ jest.mock("@/lib/auth", () => ({
 
 describe("GCP Configuration nav item", () => {
   beforeEach(() => {
-    mockPathname.mockReturnValue("/settings/gcp");
+    mockPathname.mockReturnValue("/dashboard");
   });
 
   it("appears in Settings section for admin users", () => {
