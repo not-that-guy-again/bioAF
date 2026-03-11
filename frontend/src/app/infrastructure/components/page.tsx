@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ComponentCatalog } from "@/components/components/ComponentCatalog";
+import { StorageSection } from "@/components/components/StorageSection";
 import { isAuthenticated } from "@/lib/auth";
 
 export default function InfraComponentsPage() {
@@ -28,6 +29,10 @@ export default function InfraComponentsPage() {
             key={refreshKey}
             onRefresh={() => setRefreshKey((k) => k + 1)}
           />
+          <div className="mt-10">
+            <h2 className="text-xl font-semibold mb-4">Storage</h2>
+            <StorageSection />
+          </div>
         </main>
       </div>
     </div>
