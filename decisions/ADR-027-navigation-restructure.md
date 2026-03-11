@@ -39,7 +39,7 @@ Pipelines
   ├── Pipeline Runs
   └── Pipeline Scheduling
 Projects
-Experiments
+  ├── Project List
   ├── Experiment Templates
   └── Experiment List
 Notebooks
@@ -67,7 +67,7 @@ Settings (admin only)
 
 **Top-level items** are always visible in the left navigation sidebar. Items with sub-pages show an expand/collapse chevron. Clicking the chevron (or the top-level item) expands to reveal the secondary navigation items. Clicking a secondary item loads that page.
 
-**Single-page items** (Dashboard, Projects, Notebooks) load directly when clicked — no expand/collapse, no secondary items.
+**Single-page items** (Dashboard, Notebooks) load directly when clicked — no expand/collapse, no secondary items.
 
 **Tertiary navigation** does not exist in the sidebar. Deeper navigation happens within pages through tabs and contextual links. For example:
 
@@ -79,7 +79,7 @@ Settings (admin only)
 ### Page-to-Section Mapping
 
 | Page | Old Location | New Location |
-|---|---|---|
+| --- | --- | --- |
 | Home dashboard | Home | Dashboard (top-level) |
 | QC Dashboards | Results → QC Dashboards | Results → QC Dashboards |
 | cellxgene | Results → cellxgene | Results → Cellxgene |
@@ -87,9 +87,9 @@ Settings (admin only)
 | Pipeline Catalog | Compute → Pipelines → Catalog | Pipelines → Pipeline Catalog |
 | Pipeline Runs (active + history) | Compute → Pipelines → Active Runs / Run History | Pipelines → Pipeline Runs |
 | Pipeline Scheduling | (new page) | Pipelines → Pipeline Scheduling |
-| Project List | (was organizational only) | Projects (top-level) |
-| Experiment Templates | Admin → Experiment Templates | Experiments → Experiment Templates |
-| Experiment List | Experiments → All Experiments | Experiments → Experiment List |
+| Project List | (was organizational only) | Projects → Project List |
+| Experiment Templates | Admin → Experiment Templates | Projects → Experiment Templates |
+| Experiment List | Experiments → All Experiments | Projects → Experiment List |
 | Notebook launcher + templates | Compute → Notebooks | Notebooks (top-level) |
 | FASTQ Upload | Data → Upload | Data & Files → Upload |
 | Dataset Browser | Data → Browser | Data & Files → Dataset Browser |
@@ -134,7 +134,7 @@ In each case, the left sidebar highlights which section the user is in, and brea
 - **No page content changes.** Every existing page renders the same content with the same layout.
 - **No permission changes.** Role-based visibility remains as-is.
 - **No data model changes.** No schema migrations, no API changes.
-- **No URL restructuring in v1.** API routes and page URLs remain stable. Frontend routing may be updated to match the new hierarchy in a future pass.
+- **URL restructuring for experiment routes.** Old `/experiments`, `/experiments/:id`, and `/experiments/templates` URLs redirect permanently (HTTP 301) to their new paths under `/projects/`. All other API routes and page URLs remain stable.
 
 ---
 

@@ -101,7 +101,7 @@ class TestStorageMetricsEndpoint:
         assert "buckets" in data
         assert "total_size_gb" in data
         assert "total_cost_monthly_usd" in data
-        assert len(data["buckets"]) == 4
+        assert len(data["buckets"]) == 5
 
     @pytest.mark.asyncio
     async def test_bench_denied(self, client, bench_token):

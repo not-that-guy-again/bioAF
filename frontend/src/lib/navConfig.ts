@@ -31,13 +31,13 @@ export const navConfig: NavSection[] = [
       { label: "Pipeline Scheduling", path: "/pipelines/scheduling" },
     ],
   },
-  { label: "Projects", path: "/projects", icon: "folder" },
   {
-    label: "Experiments",
-    icon: "flask",
+    label: "Projects",
+    icon: "folder",
     children: [
-      { label: "Experiment Templates", path: "/experiments/templates" },
-      { label: "Experiment List", path: "/experiments" },
+      { label: "Project List", path: "/projects" },
+      { label: "Experiment Templates", path: "/projects/experiment-templates" },
+      { label: "Experiment List", path: "/projects/experiments" },
     ],
   },
   { label: "Notebooks", path: "/notebooks", icon: "notebook" },
@@ -90,7 +90,9 @@ export function findNavMatch(
       return { section };
     }
     if (section.children) {
-      for (const child of section.children) {
+      // Sort by path length descending so more specific paths match before shorter ones
+      const sorted = [...section.children].sort((a, b) => b.path.length - a.path.length);
+      for (const child of sorted) {
         if (pathname === child.path || pathname.startsWith(child.path + "/")) {
           return { section, child };
         }

@@ -5,34 +5,18 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ComponentCatalog } from "@/components/components/ComponentCatalog";
+import { StorageSection } from "@/components/components/StorageSection";
 import { isAuthenticated } from "@/lib/auth";
-import { api } from "@/lib/api";
-import type { ComponentState } from "@/lib/types";
-import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 
 export default function InfraComponentsPage() {
   const router = useRouter();
-  const [components, setComponents] = useState<ComponentState[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push("/login");
-      return;
     }
-    fetchComponents();
   }, [router]);
-
-  const fetchComponents = async () => {
-    try {
-      const data = await api.get<{ components: ComponentState[] }>("/api/components");
-      setComponents(data.components);
-    } catch {
-      // handled by api client
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="flex h-screen">
@@ -41,11 +25,14 @@ export default function InfraComponentsPage() {
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold mb-6">Components</h1>
-          {loading ? (
-            <LoadingSpinner size="lg" />
-          ) : (
-            <ComponentCatalog components={components} onRefresh={fetchComponents} />
-          )}
+          <ComponentCatalog
+            key={refreshKey}
+            onRefresh={() => setRefreshKey((k) => k + 1)}
+          />
+          <div className="mt-10">
+            <h2 className="text-xl font-semibold mb-4">Storage</h2>
+            <StorageSection />
+          </div>
         </main>
       </div>
     </div>

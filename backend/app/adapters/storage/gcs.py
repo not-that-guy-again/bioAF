@@ -43,6 +43,10 @@ class GcsStorageProvider(StorageProvider):
     def results_bucket(self) -> str:
         return f"bioaf-results-{self._org_slug}"
 
+    @property
+    def config_backups_bucket(self) -> str:
+        return f"bioaf-config-backups-{self._org_slug}"
+
     async def resolve_input_path(self, file_record: dict) -> str:
         if self.is_local:
             return f"/data/inputs/{file_record.get('filename', 'unknown')}"
@@ -142,8 +146,15 @@ class GcsStorageProvider(StorageProvider):
                     "storage_class": "STANDARD",
                     "cost_monthly_usd": 0.02,
                 },
+                {
+                    "name": self.config_backups_bucket,
+                    "size_gb": 0.01,
+                    "object_count": 5,
+                    "storage_class": "NEARLINE",
+                    "cost_monthly_usd": 0.0,
+                },
             ],
-            "total_size_gb": 4.5,
+            "total_size_gb": 4.51,
             "total_cost_monthly_usd": 0.11,
         }
 

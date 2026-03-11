@@ -9,11 +9,95 @@ from app.services.event_bus import event_bus
 from app.services.event_types import COMPONENT_HEALTH_DEGRADED, COMPONENT_HEALTH_DOWN
 
 # Static component catalog definitions
+# Each entry may include a "compute_stack" field to indicate which stack it belongs to:
+# "kubernetes", "slurm", or absent for universal components.
 COMPONENT_CATALOG: dict[str, dict] = {
+    # --- Kubernetes-native components ---
+    "k8s_pipeline_pool": {
+        "name": "K8s Pipeline Node Pool",
+        "description": "GKE Autopilot node pool for batch pipeline jobs. Scales to zero when idle.",
+        "category": "compute",
+        "compute_stack": "kubernetes",
+        "dependencies": [],
+        "estimated_monthly_cost": "$0 (scales to zero)",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [
+            {"key": "pipeline_pool_max_nodes", "label": "Max Nodes", "type": "number", "default": 20},
+            {"key": "pipeline_pool_machine_type", "label": "Machine Type", "type": "string", "default": "n2-highmem-8"},
+            {"key": "pipeline_pool_use_spot", "label": "Use Spot VMs", "type": "boolean", "default": True},
+        ],
+    },
+    "k8s_interactive_pool": {
+        "name": "K8s Interactive Node Pool",
+        "description": "GKE node pool for notebooks and interactive sessions. Scales to zero when idle.",
+        "category": "compute",
+        "compute_stack": "kubernetes",
+        "dependencies": [],
+        "estimated_monthly_cost": "$0 (scales to zero)",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [
+            {"key": "interactive_pool_max_nodes", "label": "Max Nodes", "type": "number", "default": 5},
+            {
+                "key": "interactive_pool_machine_type",
+                "label": "Machine Type",
+                "type": "string",
+                "default": "n2-standard-4",
+            },
+        ],
+    },
+    "nextflow_k8s": {
+        "name": "Nextflow (K8s Executor)",
+        "description": "Pipeline orchestration using Nextflow with native Kubernetes executor. Supports nf-core/scrnaseq.",
+        "category": "pipeline_orchestration",
+        "compute_stack": "kubernetes",
+        "dependencies": ["k8s_pipeline_pool"],
+        "estimated_monthly_cost": "$0 (uses K8s compute)",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+    "snakemake_k8s": {
+        "name": "Snakemake (K8s Executor)",
+        "description": "Pipeline orchestration using Snakemake with Kubernetes executor support.",
+        "category": "pipeline_orchestration",
+        "compute_stack": "kubernetes",
+        "dependencies": ["k8s_pipeline_pool"],
+        "estimated_monthly_cost": "$0 (uses K8s compute)",
+        "provisioning_time_estimate": "~5 minutes",
+        "config_schema": [],
+    },
+    "jupyter_k8s": {
+        "name": "JupyterHub on K8s",
+        "description": "Managed Jupyter notebook environment on Kubernetes with pre-built scRNA-seq kernels.",
+        "category": "analysis",
+        "compute_stack": "kubernetes",
+        "dependencies": ["k8s_interactive_pool"],
+        "estimated_monthly_cost": "$50-$200",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [
+            {"key": "jupyter_cpu_limit", "label": "Max CPU per session", "type": "number", "default": 4},
+            {"key": "jupyter_memory_limit", "label": "Max Memory per session (GB)", "type": "number", "default": 8},
+            {"key": "session_idle_timeout_hours", "label": "Idle Timeout (hours)", "type": "number", "default": 4},
+        ],
+    },
+    "rstudio_k8s": {
+        "name": "RStudio on K8s",
+        "description": "Managed RStudio environment on Kubernetes with Seurat and Bioconductor pre-installed.",
+        "category": "analysis",
+        "compute_stack": "kubernetes",
+        "dependencies": ["k8s_interactive_pool"],
+        "estimated_monthly_cost": "$50-$200",
+        "provisioning_time_estimate": "~10 minutes",
+        "config_schema": [
+            {"key": "rstudio_cpu_limit", "label": "Max CPU per session", "type": "number", "default": 4},
+            {"key": "rstudio_memory_limit", "label": "Max Memory per session (GB)", "type": "number", "default": 8},
+        ],
+    },
+    # --- SLURM-stack components ---
     "slurm": {
         "name": "SLURM HPC Cluster",
         "description": "High-performance compute cluster with autoscaling for batch bioinformatics jobs",
         "category": "compute",
+        "compute_stack": "slurm",
         "dependencies": [],
         "estimated_monthly_cost": "$200-$1,500",
         "provisioning_time_estimate": "~15 minutes",
@@ -40,6 +124,7 @@ COMPONENT_CATALOG: dict[str, dict] = {
         "name": "Filestore NFS",
         "description": "Managed NFS storage for shared file access across compute nodes and notebooks",
         "category": "compute",
+        "compute_stack": "slurm",
         "dependencies": ["slurm"],
         "estimated_monthly_cost": "$200-$500",
         "provisioning_time_estimate": "~10 minutes",
