@@ -78,10 +78,11 @@ export function InviteForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="bulk-invite-emails" className="block text-sm font-medium text-gray-700 mb-1">
           Bulk invite (one email per line or comma-separated)
         </label>
         <textarea
+          id="bulk-invite-emails"
           value={bulkEmails}
           onChange={(e) => setBulkEmails(e.target.value)}
           rows={3}

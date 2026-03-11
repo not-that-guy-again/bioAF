@@ -153,23 +153,23 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       {step === 0 && (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)}
+            <label htmlFor="setup-name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <input id="setup-name" type="text" value={name} onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            <label htmlFor="setup-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <input id="setup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            <label htmlFor="setup-password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input id="setup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+            <label htmlFor="setup-confirm-password" className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+            <input id="setup-confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500" required />
           </div>
           <button onClick={handleCreateAdmin} className="w-full bg-bioaf-600 text-white py-2 rounded hover:bg-bioaf-700">
@@ -205,8 +205,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       {step === 2 && (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Organization Name</label>
-            <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)}
+            <label htmlFor="setup-org-name" className="block text-sm font-medium text-gray-700 mb-1">Organization Name</label>
+            <input id="setup-org-name" type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)}
               placeholder="e.g., Acme Biotech"
               className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500" required />
           </div>
