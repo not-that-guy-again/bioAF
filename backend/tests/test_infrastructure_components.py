@@ -1,7 +1,6 @@
 """Tests for the infrastructure components and storage buckets API endpoints."""
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import text
 
 from app.adapters import registry

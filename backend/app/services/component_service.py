@@ -37,7 +37,12 @@ COMPONENT_CATALOG: dict[str, dict] = {
         "provisioning_time_estimate": "~10 minutes",
         "config_schema": [
             {"key": "interactive_pool_max_nodes", "label": "Max Nodes", "type": "number", "default": 5},
-            {"key": "interactive_pool_machine_type", "label": "Machine Type", "type": "string", "default": "n2-standard-4"},
+            {
+                "key": "interactive_pool_machine_type",
+                "label": "Machine Type",
+                "type": "string",
+                "default": "n2-standard-4",
+            },
         ],
     },
     "nextflow_k8s": {
