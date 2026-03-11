@@ -24,3 +24,7 @@ PyGithub>=2.1.0
 pyyaml>=6.0
 # Phase 9: GEO Export
 openpyxl>=3.1
+# Phase 16: GCP Settings Configuration
+google-auth>=2.29
+google-cloud-resource-manager>=1.12
+google-cloud-container>=2.47
