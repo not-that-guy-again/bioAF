@@ -12,13 +12,24 @@ All subprocess calls are mocked. No real Terraform execution.
 
 import asyncio
 import json
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import text
 
 from app.services.terraform_executor import TerraformExecutor, TerraformProgressEvent
+
+
+@contextmanager
+def _patch_work_dir():
+    """Patch _prepare_work_dir to return a real temp dir (no file system deps)."""
+    tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
+    with patch.object(TerraformExecutor, "_prepare_work_dir", return_value=tmp):
+        yield tmp
 
 
 # ---------------------------------------------------------------------------
@@ -152,13 +163,12 @@ async def test_run_plan_creates_run_record(session):
         return _mock_subprocess_run(plan_stdout)
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                run = await TerraformExecutor.run_plan(
-                    session=session,
-                    user_id=user_id,
-                    module_name="foundation",
-                )
+        with _patch_work_dir():
+            run = await TerraformExecutor.run_plan(
+                session=session,
+                user_id=user_id,
+                module_name="foundation",
+            )
 
     assert run.id is not None
     assert run.action == "plan"
@@ -186,13 +196,12 @@ async def test_run_plan_stores_parsed_plan_json(session):
         return _mock_subprocess_run(_make_plan_output(2))
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                run = await TerraformExecutor.run_plan(
-                    session=session,
-                    user_id=user_id,
-                    module_name="foundation",
-                )
+        with _patch_work_dir():
+            run = await TerraformExecutor.run_plan(
+                session=session,
+                user_id=user_id,
+                module_name="foundation",
+            )
 
     assert run.plan_json is not None
     assert run.plan_json["add_count"] == 2
@@ -219,13 +228,12 @@ async def test_run_apply_yields_progress_events(session):
         return _mock_subprocess_run(_make_plan_output(1))
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run_plan):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                plan_run = await TerraformExecutor.run_plan(
-                    session=session,
-                    user_id=user_id,
-                    module_name="foundation",
-                )
+        with _patch_work_dir():
+            plan_run = await TerraformExecutor.run_plan(
+                session=session,
+                user_id=user_id,
+                module_name="foundation",
+            )
 
     apply_stdout = _make_apply_output(1)
 
@@ -234,7 +242,7 @@ async def test_run_apply_yields_progress_events(session):
 
     events = []
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run_apply):
-        with patch("app.services.terraform_executor.Path.exists", return_value=True):
+        with _patch_work_dir():
             async for event in TerraformExecutor.run_apply(
                 session=session, run_id=plan_run.id, user_id=user_id
             ):
@@ -263,13 +271,12 @@ async def test_run_apply_updates_resources_completed(session):
         return _mock_subprocess_run(_make_plan_output(1))
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_plan):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                plan_run = await TerraformExecutor.run_plan(
-                    session=session,
-                    user_id=user_id,
-                    module_name="foundation",
-                )
+        with _patch_work_dir():
+            plan_run = await TerraformExecutor.run_plan(
+                session=session,
+                user_id=user_id,
+                module_name="foundation",
+            )
 
     apply_stdout = _make_apply_output(1)
 
@@ -277,7 +284,7 @@ async def test_run_apply_updates_resources_completed(session):
         return _mock_subprocess_run(apply_stdout)
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply):
-        with patch("app.services.terraform_executor.Path.exists", return_value=True):
+        with _patch_work_dir():
             async for _ in TerraformExecutor.run_apply(
                 session=session, run_id=plan_run.id, user_id=user_id
             ):
@@ -306,13 +313,12 @@ async def test_run_apply_handles_failure(session):
         return _mock_subprocess_run(_make_plan_output(1))
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_plan):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                plan_run = await TerraformExecutor.run_plan(
-                    session=session,
-                    user_id=user_id,
-                    module_name="foundation",
-                )
+        with _patch_work_dir():
+            plan_run = await TerraformExecutor.run_plan(
+                session=session,
+                user_id=user_id,
+                module_name="foundation",
+            )
 
     fail_result = _mock_subprocess_run("", returncode=1)
     fail_result.stderr = "Error: some terraform error"
@@ -321,7 +327,7 @@ async def test_run_apply_handles_failure(session):
         return fail_result
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply_fail):
-        with patch("app.services.terraform_executor.Path.exists", return_value=True):
+        with _patch_work_dir():
             async for _ in TerraformExecutor.run_apply(
                 session=session, run_id=plan_run.id, user_id=user_id
             ):
@@ -387,11 +393,10 @@ async def test_stale_lock_recovery(session):
 
     # Should not raise - stale run gets cleared
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                run = await TerraformExecutor.run_plan(
-                    session=session, user_id=user_id, module_name="foundation"
-                )
+        with _patch_work_dir():
+            run = await TerraformExecutor.run_plan(
+                session=session, user_id=user_id, module_name="foundation"
+            )
 
     assert run.id is not None
     assert run.status == "awaiting_confirmation"
@@ -460,14 +465,12 @@ async def test_bootstrap_creates_state_bucket_key(session):
         return _mock_subprocess_run(_make_plan_output(1))
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with patch("app.services.terraform_executor.shutil.copytree"):
-            with patch("app.services.terraform_executor.Path.exists", return_value=True):
-                with patch("app.services.terraform_executor.shutil.rmtree"):
-                    events = []
-                    async for event in TerraformExecutor.bootstrap_foundation(
-                        session=session, user_id=user_id
-                    ):
-                        events.append(event)
+        with _patch_work_dir():
+            events = []
+            async for event in TerraformExecutor.bootstrap_foundation(
+                session=session, user_id=user_id
+            ):
+                events.append(event)
 
     # Check platform_config updated
     row = (
