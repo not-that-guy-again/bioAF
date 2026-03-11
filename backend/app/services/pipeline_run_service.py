@@ -192,12 +192,51 @@ class PipelineRunService:
         )
 
         # 13. Best-effort reference linkage from parameter paths
+        linked_ref_ids: list[int] = []
         try:
-            await PipelineRunService._link_references_from_params(session, run.id, org_id, merged_params)
+            linked_ref_ids = await PipelineRunService._link_references_from_params(
+                session, run.id, org_id, merged_params
+            )
         except Exception as e:
             logger.warning("Reference linkage failed for run %d: %s", run.id, e)
 
+        # 14. Auto-populate reference_genome if not explicitly set
+        if not run.reference_genome:
+            run.reference_genome = await PipelineRunService._resolve_reference_genome(
+                session, linked_ref_ids, merged_params
+            )
+            if run.reference_genome:
+                await session.flush()
+
         return run
+
+    @staticmethod
+    async def _resolve_reference_genome(
+        session: AsyncSession,
+        linked_ref_ids: list[int],
+        params: dict,
+    ) -> str | None:
+        """Resolve reference_genome from linked reference datasets or parameter keys.
+
+        Priority:
+        1. First linked reference dataset (name + version)
+        2. params["genome"] or params["reference_genome"] fallback
+        """
+        if linked_ref_ids:
+            from app.models.reference_dataset import ReferenceDataset
+
+            result = await session.execute(select(ReferenceDataset).where(ReferenceDataset.id == linked_ref_ids[0]))
+            ref = result.scalar_one_or_none()
+            if ref:
+                return f"{ref.name} {ref.version}"
+
+        # Fallback to parameter keys (reference_genome is more explicit, check first)
+        for key in ("reference_genome", "genome"):
+            val = params.get(key)
+            if val and isinstance(val, str):
+                return val
+
+        return None
 
     @staticmethod
     async def _link_references_from_params(

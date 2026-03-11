@@ -73,6 +73,10 @@ class KubernetesComputeProvider(ComputeProvider):
             "basis": "input file count heuristic",
         }
 
+    async def get_connection_command(self, job_id: str) -> str:
+        namespace = "bioaf-pipelines"
+        return f"kubectl exec -it -n {namespace} job/{job_id} -- /bin/bash"
+
     # -- Local mode implementations --
 
     async def _local_submit_job(self, job_spec: dict) -> dict:

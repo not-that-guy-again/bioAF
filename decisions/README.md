@@ -1,23 +1,34 @@
 # Architecture Decision Records
 
-This directory contains the architectural decision records (ADRs) for the bioAF project. Each ADR documents a significant architectural decision, its context, rationale, and consequences.
-
-## Index
-
-| ADR | Title | Status |
-|---|---|---|
-| [ADR-001](ADR-001-gcp-only.md) | GCP as Sole Supported Cloud Provider | Accepted |
-| [ADR-002](ADR-002-mandatory-optional-split.md) | Mandatory Foundation with Optional Components | Accepted |
-| [ADR-003](ADR-003-email-based-auth.md) | Email-Based Authentication as Primary Auth Method | Accepted |
-| [ADR-004](ADR-004-tiered-backup-strategy.md) | Tiered Backup Strategy with Mandatory Database Backups | Accepted |
-| [ADR-005](ADR-005-github-based-upgrades.md) | GitHub-Based Versioning and Upgrade System | Accepted |
-| [ADR-006](ADR-006-experiment-tracking-as-foundation.md) | Experiment Tracking as Architectural Foundation | Accepted |
-| [ADR-007](ADR-007-ui-driven-terraform.md) | UI-Driven Terraform Execution for Infrastructure Management | Accepted |
-| [ADR-008](ADR-008-secret-manager.md) | Google Secret Manager for All Secrets | Accepted |
-| [ADR-009](ADR-009-immutable-audit-log.md) | Immutable Audit Log via Database-Level Enforcement | Accepted |
-| [ADR-010](ADR-010-notification-system.md) | Built-in Notification System with Email and Slack Connectors | Accepted |
-| [ADR-011](ADR-011-scrna-seq-initial-scope.md) | Single-Cell RNA-seq as Initial Workflow Scope | Accepted |
-| [ADR-012](ADR-012-data-portability.md) | Customer Owns All Data and Infrastructure State | Accepted |
+| ADR | Title | Status | Date |
+|-----|-------|--------|------|
+| [ADR-001](ADR-001-gcp-only.md) | GCP as Sole Supported Cloud Provider | Accepted | 2026-03-05 |
+| [ADR-002](ADR-002-mandatory-optional-split.md) | Mandatory Foundation with Optional Components | Accepted | 2026-03-05 |
+| [ADR-003](ADR-003-email-based-auth.md) | Email-Based Authentication as Primary Auth Method | Accepted | 2026-03-05 |
+| [ADR-004](ADR-004-tiered-backup-strategy.md) | Tiered Backup Strategy with Mandatory Database Backups | Accepted | 2026-03-05 |
+| [ADR-005](ADR-005-github-based-upgrades.md) | GitHub-Based Versioning and Upgrade System | Accepted | 2026-03-05 |
+| [ADR-006](ADR-006-experiment-tracking-as-foundation.md) | Experiment Tracking as Architectural Foundation | Accepted | 2026-03-05 |
+| [ADR-007](ADR-007-ui-driven-terraform.md) | UI-Driven Terraform Execution for Infrastructure Management | Accepted | 2026-03-05 |
+| [ADR-008](ADR-008-secret-manager.md) | Google Secret Manager for All Secrets | Accepted | 2026-03-05 |
+| [ADR-009](ADR-009-immutable-audit-log.md) | Immutable Audit Log via Database-Level Enforcement | Accepted | 2026-03-05 |
+| [ADR-010](ADR-010-notification-system.md) | Built-in Notification System with Email and Slack Connectors | Accepted | 2026-03-05 |
+| [ADR-011](ADR-011-scrna-seq-initial-scope.md) | Single-Cell RNA-seq as Initial Workflow Scope | Accepted | 2026-03-05 |
+| [ADR-012](ADR-012-data-portability.md) | Customer Owns All Data and Infrastructure State | Accepted | 2026-03-05 |
+| [ADR-013](ADR-013-minseqe-compliant-metadata.md) | MINSEQE-Compliant Structured Metadata Schema | Accepted | 2026-03-06 |
+| [ADR-014](ADR-014-geo-export-service.md) | GEO Export Service for Publication-Ready Data Submission | Accepted | 2026-03-06 |
+| [ADR-015](ADR-015-analysis-snapshot-sdk.md) | Analysis Snapshot SDK for Iterative Analysis Provenance | Accepted | 2026-03-06 |
+| [ADR-016](ADR-016-snapshot-comparison-ui.md) | Snapshot Comparison UI | Accepted | 2026-03-06 |
+| [ADR-017](ADR-017-reference-data-management.md) | Managed Reference Data Layer | Accepted | 2026-03-06 |
+| [ADR-018](ADR-018-cross-experiment-projects.md) | Cross-Experiment Analysis Projects | Accepted | 2026-03-06 |
+| [ADR-019](ADR-019-pipeline-review-handoff.md) | Pipeline Run Review and Data Handoff Protocol | Accepted | 2026-03-06 |
+| [ADR-020](ADR-020-bioaf-adapter-layer.md) | BioAF Adapter Layer (BAL) | Accepted | 2026-03-10 |
+| [ADR-021](ADR-021-kubernetes-compute-backend.md) | Kubernetes as Recommended Compute Backend | Accepted | 2026-03-10 |
+| [ADR-022](ADR-022-gcs-storage-backend.md) | GCS as Recommended Storage Backend | Accepted | 2026-03-10 |
+| [ADR-023](ADR-023-cro-naming-profiles.md) | Configurable CRO Naming Profiles | Accepted | 2026-03-10 |
+| [ADR-024](ADR-024-gcs-auto-ingest.md) | GCS Event-Driven Auto-Ingest | Accepted | 2026-03-10 |
+| [ADR-025](ADR-025-automated-pipeline-triggering.md) | Automated Pipeline Triggering | Accepted | 2026-03-10 |
+| [ADR-026](ADR-026-ssh-access.md) | SSH Access to Running Containers | Accepted | 2026-03-10 |
+| [ADR-027](ADR-027-navigation-restructure.md) | Navigation Restructure | Accepted | 2026-03-10 |
 
 ## How to Use This Directory
 

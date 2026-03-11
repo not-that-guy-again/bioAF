@@ -1,6 +1,6 @@
 # ADR-027: Navigation Restructure
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-03-10
 **Deciders:** Brent (repository owner)
 
