@@ -52,6 +52,22 @@ USER_INVITATION_ACCEPTED = "user.invitation_accepted"
 # Reference data events
 REFERENCE_DEPRECATED = "reference.deprecated"
 
+# Ingest events
+FILES_CATALOGED = "ingest.files_cataloged"
+UNCLAIMED_ENTITY = "ingest.unclaimed_entity"
+UNMATCHED_FILE = "ingest.unmatched_file"
+DUPLICATE_FILE = "ingest.duplicate_file"
+INGEST_FAILURE = "ingest.failure"
+INGEST_BATCH_COMPLETE = "ingest.batch_complete"
+
+# Trigger events
+AUTO_RUN_SUBMITTED = "trigger.auto_run_submitted"
+RUN_QUEUED_BUDGET = "trigger.run_queued_budget"
+RUN_QUEUED_EXHAUSTED = "trigger.run_queued_exhausted"
+BUDGET_MID_QUEUE = "trigger.budget_mid_queue"
+EVALUATION_FAILED = "trigger.evaluation_failed"
+BATCH_WINDOW_CLOSED = "trigger.batch_window_closed"
+
 # Terraform events
 TERRAFORM_APPLY_FAILURE = "terraform.apply_failure"
 
@@ -79,6 +95,18 @@ ALL_EVENT_TYPES = [
     PIPELINE_RUN_REVIEWED,
     PIPELINE_RUN_REVIEW_REMINDER,
     REFERENCE_DEPRECATED,
+    FILES_CATALOGED,
+    UNCLAIMED_ENTITY,
+    UNMATCHED_FILE,
+    DUPLICATE_FILE,
+    INGEST_FAILURE,
+    INGEST_BATCH_COMPLETE,
+    AUTO_RUN_SUBMITTED,
+    RUN_QUEUED_BUDGET,
+    RUN_QUEUED_EXHAUSTED,
+    BUDGET_MID_QUEUE,
+    EVALUATION_FAILED,
+    BATCH_WINDOW_CLOSED,
 ]
 
 # Severity mapping for event types
@@ -106,4 +134,16 @@ EVENT_SEVERITY = {
     PIPELINE_RUN_REVIEWED: "info",
     PIPELINE_RUN_REVIEW_REMINDER: "warning",
     REFERENCE_DEPRECATED: "warning",
+    FILES_CATALOGED: "info",
+    UNCLAIMED_ENTITY: "warning",
+    UNMATCHED_FILE: "warning",
+    DUPLICATE_FILE: "info",
+    INGEST_FAILURE: "critical",
+    INGEST_BATCH_COMPLETE: "info",
+    AUTO_RUN_SUBMITTED: "info",
+    RUN_QUEUED_BUDGET: "warning",
+    RUN_QUEUED_EXHAUSTED: "critical",
+    BUDGET_MID_QUEUE: "warning",
+    EVALUATION_FAILED: "critical",
+    BATCH_WINDOW_CLOSED: "info",
 }

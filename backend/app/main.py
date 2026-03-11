@@ -87,6 +87,8 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_cost_billing_sync_loop()))
     background_tasks.append(asyncio.create_task(_version_check_loop()))
     background_tasks.append(asyncio.create_task(_review_reminder_loop()))
+    background_tasks.append(asyncio.create_task(_trigger_batch_expiry_loop()))
+    background_tasks.append(asyncio.create_task(_budget_queue_processing_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -325,6 +327,46 @@ async def _review_reminder_loop():
             break
         except Exception as e:
             logger.error("Review reminder error: %s", e)
+
+
+async def _trigger_batch_expiry_loop():
+    """Check for expired batching windows every 5 seconds."""
+    from app.database import async_session_factory
+    from app.services.trigger_service import TriggerService
+
+    while True:
+        try:
+            await asyncio.sleep(5)
+            async with async_session_factory() as session:
+                evaluations = await TriggerService.process_expired_batches(session)
+                if evaluations:
+                    await session.commit()
+                    logger.info("Processed %d expired trigger batches", len(evaluations))
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Trigger batch expiry error: %s", e)
+
+
+async def _budget_queue_processing_loop():
+    """Process budget queue every 60 seconds."""
+    from app.database import async_session_factory
+    from app.services.trigger_service import TriggerService
+
+    while True:
+        try:
+            await asyncio.sleep(60)
+            async with async_session_factory() as session:
+                results = await TriggerService.process_budget_queue(session)
+                if results:
+                    await session.commit()
+                    submitted = sum(1 for r in results if r["action"] == "submitted")
+                    if submitted:
+                        logger.info("Budget queue: submitted %d runs", submitted)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Budget queue processing error: %s", e)
 
 
 app = FastAPI(

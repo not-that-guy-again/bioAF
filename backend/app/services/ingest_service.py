@@ -20,7 +20,13 @@ from app.models.project import Project
 from app.models.sample import Sample
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
-from app.services.event_types import DATA_UPLOADED
+from app.services.event_types import (
+    DATA_UPLOADED,
+    DUPLICATE_FILE,
+    FILES_CATALOGED,
+    UNCLAIMED_ENTITY,
+    UNMATCHED_FILE,
+)
 from app.services.naming_profile_parser import match_filename, resolve_entities
 from app.services.naming_profile_service import NamingProfileService
 
@@ -296,6 +302,20 @@ async def process_ingest_event(
         )
         db.add(event)
         await db.flush()
+        asyncio.create_task(
+            event_bus.emit(
+                DUPLICATE_FILE,
+                {
+                    "event_type": DUPLICATE_FILE,
+                    "org_id": org_id,
+                    "entity_type": "file",
+                    "entity_id": existing_file.id,
+                    "title": f"Duplicate file detected: {filename}",
+                    "message": f"File '{filename}' matches existing file #{existing_file.id}",
+                    "severity": "info",
+                },
+            )
+        )
         return event
 
     # Step 4: File type detection
@@ -372,29 +392,58 @@ async def process_ingest_event(
             experiment.status = "fastq_uploaded"
             await db.flush()
 
-    # Step 9: Emit event for pipeline triggers
-    asyncio.create_task(
-        event_bus.emit(
-            DATA_UPLOADED,
-            {
-                "event_type": DATA_UPLOADED,
-                "org_id": org_id,
-                "user_id": user_id,
-                "entity_type": "ingest_event",
-                "entity_id": event.id,
-                "title": f"File ingested: {filename}",
-                "message": f"File '{filename}' cataloged with status '{ingest_status}'",
-                "summary": f"Ingest status: {ingest_status}",
-                "severity": "info",
-                "metadata": {
-                    "file_id": file_record.id,
-                    "ingest_event_id": event.id,
-                    "ingest_status": ingest_status,
-                    "file_type": file_type,
+    # Step 9: Emit events for notifications and pipeline triggers
+    if ingest_status == "cataloged":
+        asyncio.create_task(
+            event_bus.emit(
+                FILES_CATALOGED,
+                {
+                    "event_type": FILES_CATALOGED,
+                    "org_id": org_id,
+                    "entity_type": "ingest_event",
+                    "entity_id": event.id,
+                    "title": f"File cataloged: {filename}",
+                    "message": f"File '{filename}' successfully cataloged as {file_type}",
+                    "severity": "info",
+                    "metadata": {"file_id": file_record.id, "file_type": file_type},
                 },
-            },
+            )
         )
-    )
+    elif ingest_status == "unmatched":
+        asyncio.create_task(
+            event_bus.emit(
+                UNMATCHED_FILE,
+                {
+                    "event_type": UNMATCHED_FILE,
+                    "org_id": org_id,
+                    "entity_type": "file",
+                    "entity_id": file_record.id,
+                    "title": f"Unmatched file: {filename}",
+                    "message": f"File '{filename}' did not match any naming profile",
+                    "severity": "warning",
+                },
+            )
+        )
+
+    # Emit unclaimed entity notifications
+    if auto_created["projects"] or auto_created["experiments"] or auto_created["samples"]:
+        asyncio.create_task(
+            event_bus.emit(
+                UNCLAIMED_ENTITY,
+                {
+                    "event_type": UNCLAIMED_ENTITY,
+                    "org_id": org_id,
+                    "entity_type": "ingest_event",
+                    "entity_id": event.id,
+                    "title": "Unclaimed entities created",
+                    "message": f"Auto-created: {len(auto_created['projects'])} projects, "
+                    f"{len(auto_created['experiments'])} experiments, "
+                    f"{len(auto_created['samples'])} samples",
+                    "severity": "warning",
+                    "metadata": auto_created,
+                },
+            )
+        )
 
     await log_action(
         db,

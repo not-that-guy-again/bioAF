@@ -20,6 +20,13 @@ from app.models.trigger_evaluation import TriggerEvaluation
 from app.schemas.pipeline_trigger import PipelineTriggerCreate, PipelineTriggerUpdate
 from app.services.audit_service import log_action
 from app.services.budget_service import BudgetService
+from app.services.event_bus import event_bus
+from app.services.event_types import (
+    AUTO_RUN_SUBMITTED,
+    BATCH_WINDOW_CLOSED,
+    EVALUATION_FAILED,
+    RUN_QUEUED_BUDGET,
+)
 
 
 # In-memory batching windows: trigger_id -> {file_ids, expiry_time}
@@ -226,6 +233,20 @@ class TriggerService:
             )
             trigger = result.scalar_one_or_none()
             if trigger and trigger.enabled:
+                asyncio.create_task(
+                    event_bus.emit(
+                        BATCH_WINDOW_CLOSED,
+                        {
+                            "event_type": BATCH_WINDOW_CLOSED,
+                            "org_id": trigger.organization_id,
+                            "entity_type": "pipeline_trigger",
+                            "entity_id": trigger.id,
+                            "title": f"Batch window closed for trigger #{trigger.id}",
+                            "message": f"Submitting {len(file_ids)} file(s) for evaluation",
+                            "severity": "info",
+                        },
+                    )
+                )
                 evaluation = await TriggerService._submit_or_queue_run(
                     trigger, file_ids, db
                 )
@@ -338,6 +359,21 @@ class TriggerService:
                 result="submitted",
                 pipeline_run_id=run.id,
             )
+
+            asyncio.create_task(
+                event_bus.emit(
+                    AUTO_RUN_SUBMITTED,
+                    {
+                        "event_type": AUTO_RUN_SUBMITTED,
+                        "org_id": trigger.organization_id,
+                        "entity_type": "pipeline_run",
+                        "entity_id": run.id,
+                        "title": f"Pipeline auto-submitted: {run.pipeline_name}",
+                        "message": f"Trigger #{trigger.id} submitted run with {len(file_ids)} file(s)",
+                        "severity": "info",
+                    },
+                )
+            )
         elif budget_result.decision in ("might_exceed", "will_exceed", "budget_exhausted") and auto_queue:
             # Queue for review
             run = PipelineRun(
@@ -358,6 +394,22 @@ class TriggerService:
                 budget_check_result=budget_result.model_dump(),
                 result="queued",
                 pipeline_run_id=run.id,
+            )
+
+            asyncio.create_task(
+                event_bus.emit(
+                    RUN_QUEUED_BUDGET,
+                    {
+                        "event_type": RUN_QUEUED_BUDGET,
+                        "org_id": trigger.organization_id,
+                        "entity_type": "pipeline_run",
+                        "entity_id": run.id,
+                        "title": f"Pipeline queued for budget review: {run.pipeline_name}",
+                        "message": f"Budget decision: {budget_result.decision}, "
+                        f"estimated cost: ${budget_result.estimated_cost:.2f}",
+                        "severity": "warning",
+                    },
+                )
             )
         else:
             evaluation = TriggerEvaluation(
