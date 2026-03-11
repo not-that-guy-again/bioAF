@@ -28,6 +28,7 @@ async def _init_adapter_registry():
 @pytest_asyncio.fixture
 async def db_engine():
     """Create engine, set up tables, yield, tear down."""
+    import app.models  # noqa: F401 — register all models with Base.metadata
     from app.database import Base
 
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)

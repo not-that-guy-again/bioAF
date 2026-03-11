@@ -41,6 +41,11 @@ from app.api.references import router as references_router
 from app.api.geo_export import router as geo_export_router
 from app.api.snapshots import router as snapshots_router
 from app.api.infrastructure import router as infrastructure_router
+from app.api.naming_profiles import router as naming_profiles_router
+from app.api.ingest import router as ingest_router
+from app.api.ingest import claim_router
+from app.api.pipeline_triggers import router as pipeline_triggers_router
+from app.api.pipeline_triggers import budget_router
 
 api_router = APIRouter()
 
@@ -85,3 +90,8 @@ api_router.include_router(references_router)
 api_router.include_router(geo_export_router)
 api_router.include_router(snapshots_router)
 api_router.include_router(infrastructure_router)
+api_router.include_router(naming_profiles_router)
+api_router.include_router(ingest_router)
+api_router.include_router(claim_router)
+api_router.include_router(pipeline_triggers_router)
+api_router.include_router(budget_router)
