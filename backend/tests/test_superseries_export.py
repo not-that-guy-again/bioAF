@@ -1,6 +1,5 @@
 """Tests for GEO SuperSeries export."""
 
-import json
 import zipfile
 from io import BytesIO
 
@@ -150,14 +149,10 @@ async def project_with_duplicate_samples(session, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_superseries_export_two_experiments(
-    session, admin_user, project_with_experiments
-):
+async def test_superseries_export_two_experiments(session, admin_user, project_with_experiments):
     """Test SuperSeries export with a project containing 2 experiments."""
     project, experiments, _ = project_with_experiments
-    zip_bytes, filename = await SuperSeriesExportService.export(
-        session, project.id, admin_user.organization_id
-    )
+    zip_bytes, filename = await SuperSeriesExportService.export(session, project.id, admin_user.organization_id)
     assert filename.startswith("geo_superseries_")
     assert filename.endswith(".zip")
 
@@ -170,14 +165,10 @@ async def test_superseries_export_two_experiments(
 
 
 @pytest.mark.asyncio
-async def test_superseries_metadata_links_sub_series(
-    session, admin_user, project_with_experiments
-):
+async def test_superseries_metadata_links_sub_series(session, admin_user, project_with_experiments):
     """Test SuperSeries metadata links sub-Series correctly."""
     project, experiments, _ = project_with_experiments
-    zip_bytes, _ = await SuperSeriesExportService.export(
-        session, project.id, admin_user.organization_id
-    )
+    zip_bytes, _ = await SuperSeriesExportService.export(session, project.id, admin_user.organization_id)
     zf = zipfile.ZipFile(BytesIO(zip_bytes))
     metadata = zf.read("SuperSeries_metadata.txt").decode()
     assert "^SUPERSERIES" in metadata
@@ -185,14 +176,10 @@ async def test_superseries_metadata_links_sub_series(
 
 
 @pytest.mark.asyncio
-async def test_unified_file_manifest(
-    session, admin_user, project_with_experiments
-):
+async def test_unified_file_manifest(session, admin_user, project_with_experiments):
     """Test unified file manifest contains entries from all experiments."""
     project, experiments, _ = project_with_experiments
-    zip_bytes, _ = await SuperSeriesExportService.export(
-        session, project.id, admin_user.organization_id
-    )
+    zip_bytes, _ = await SuperSeriesExportService.export(session, project.id, admin_user.organization_id)
     zf = zipfile.ZipFile(BytesIO(zip_bytes))
     manifest = zf.read("unified_file_manifest.tsv").decode()
     for exp in experiments:
@@ -200,9 +187,7 @@ async def test_unified_file_manifest(
 
 
 @pytest.mark.asyncio
-async def test_cross_validation_warns_different_organisms(
-    session, admin_user, project_with_mixed_organisms
-):
+async def test_cross_validation_warns_different_organisms(session, admin_user, project_with_mixed_organisms):
     """Test cross-experiment validation: warn when organisms differ."""
     project, _ = project_with_mixed_organisms
     validation = await SuperSeriesExportService.validate_cross_experiment(
@@ -213,9 +198,7 @@ async def test_cross_validation_warns_different_organisms(
 
 
 @pytest.mark.asyncio
-async def test_cross_validation_error_on_duplicate_sample_ids(
-    session, admin_user, project_with_duplicate_samples
-):
+async def test_cross_validation_error_on_duplicate_sample_ids(session, admin_user, project_with_duplicate_samples):
     """Test cross-experiment validation: error on duplicate sample IDs."""
     project, _ = project_with_duplicate_samples
     validation = await SuperSeriesExportService.validate_cross_experiment(
@@ -227,9 +210,7 @@ async def test_cross_validation_error_on_duplicate_sample_ids(
 
 
 @pytest.mark.asyncio
-async def test_exclude_unclaimed_filters_experiments(
-    session, admin_user, project_with_experiments
-):
+async def test_exclude_unclaimed_filters_experiments(session, admin_user, project_with_experiments):
     """Test exclude_unclaimed parameter filters out unclaimed experiments."""
     project, experiments, _ = project_with_experiments
     # Mark one experiment as unclaimed
@@ -247,14 +228,10 @@ async def test_exclude_unclaimed_filters_experiments(
 
 
 @pytest.mark.asyncio
-async def test_superseries_zip_has_correct_structure(
-    session, admin_user, project_with_experiments
-):
+async def test_superseries_zip_has_correct_structure(session, admin_user, project_with_experiments):
     """Test that the ZIP has the correct directory structure."""
     project, _, _ = project_with_experiments
-    zip_bytes, _ = await SuperSeriesExportService.export(
-        session, project.id, admin_user.organization_id
-    )
+    zip_bytes, _ = await SuperSeriesExportService.export(session, project.id, admin_user.organization_id)
     zf = zipfile.ZipFile(BytesIO(zip_bytes))
     names = zf.namelist()
 

@@ -117,7 +117,7 @@ Click on any error to see the affected field and suggested fix. Most errors can 
 
 ### Step 1: Obtain GEO Credentials
 
-GEO provides FTP credentials when you create a submission account. If you do not have credentials, register at the GEO submission portal (https://www.ncbi.nlm.nih.gov/geo/info/submission.html).
+GEO provides FTP credentials when you create a submission account. If you do not have credentials, register at the [GEO submission portal](https://www.ncbi.nlm.nih.gov/geo/info/submission.html).
 
 ### Step 2: Configure FTP in bioAF
 

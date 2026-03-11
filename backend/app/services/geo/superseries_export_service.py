@@ -94,36 +94,41 @@ class SuperSeriesExportService:
                     session, exp.id, org_id, run_id, qc_status_filter
                 )
                 exp_safe_name = exp.name.replace(" ", "_")[:50]
-                sub_series.append({
-                    "experiment_id": exp.id,
-                    "experiment_name": exp.name,
-                    "sub_series_filename": exp_filename,
-                })
+                sub_series.append(
+                    {
+                        "experiment_id": exp.id,
+                        "experiment_name": exp.name,
+                        "sub_series_filename": exp_filename,
+                    }
+                )
                 experiment_zips[f"experiments/{exp_safe_name}/{exp_filename}"] = exp_zip_bytes
             except Exception as e:
                 logger.warning("Failed to export experiment %d: %s", exp.id, e)
-                sub_series.append({
-                    "experiment_id": exp.id,
-                    "experiment_name": exp.name,
-                    "error": str(e),
-                })
+                sub_series.append(
+                    {
+                        "experiment_id": exp.id,
+                        "experiment_name": exp.name,
+                        "error": str(e),
+                    }
+                )
 
         # Generate SuperSeries metadata
-        superseries_metadata = SuperSeriesExportService._build_superseries_metadata(
-            project, sub_series
-        )
+        superseries_metadata = SuperSeriesExportService._build_superseries_metadata(project, sub_series)
 
         # Generate unified file manifest
         unified_manifest = SuperSeriesExportService._build_unified_manifest(experiments, session)
 
         # Build validation report
-        validation_json = json.dumps({
-            "cross_experiment": cross_validation.to_dict(),
-            "sub_series": sub_series,
-            "project_id": project_id,
-            "project_name": project.name,
-            "export_timestamp": datetime.now(timezone.utc).isoformat(),
-        }, indent=2)
+        validation_json = json.dumps(
+            {
+                "cross_experiment": cross_validation.to_dict(),
+                "sub_series": sub_series,
+                "project_id": project_id,
+                "project_name": project.name,
+                "export_timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            indent=2,
+        )
 
         # Build ZIP
         project_name = project.name.replace(" ", "_")[:50]
@@ -199,9 +204,7 @@ class SuperSeriesExportService:
                 if sample.organism:
                     organisms.add(sample.organism)
         if len(organisms) > 1:
-            validation.warnings.append(
-                f"Multiple organisms across experiments: {', '.join(sorted(organisms))}"
-            )
+            validation.warnings.append(f"Multiple organisms across experiments: {', '.join(sorted(organisms))}")
 
         # Check reference genome consistency (would need pipeline run data)
         # For now, check via sample chemistry versions
@@ -223,9 +226,7 @@ class SuperSeriesExportService:
                     sample_ids.append(sample.sample_id_external)
         duplicates = {sid for sid in sample_ids if sample_ids.count(sid) > 1}
         if duplicates:
-            validation.errors.append(
-                f"Duplicate sample IDs across experiments: {', '.join(sorted(duplicates))}"
-            )
+            validation.errors.append(f"Duplicate sample IDs across experiments: {', '.join(sorted(duplicates))}")
 
         return validation
 
@@ -252,7 +253,5 @@ class SuperSeriesExportService:
     ) -> str:
         lines = ["experiment_id\texperiment_name\tsample_count\tstatus"]
         for exp in experiments:
-            lines.append(
-                f"{exp.id}\t{exp.name}\t{len(exp.samples)}\t{exp.status}"
-            )
+            lines.append(f"{exp.id}\t{exp.name}\t{len(exp.samples)}\t{exp.status}")
         return "\n".join(lines)

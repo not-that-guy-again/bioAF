@@ -2,7 +2,7 @@
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from app.models.experiment import Experiment
 from app.models.notebook_session import NotebookSession

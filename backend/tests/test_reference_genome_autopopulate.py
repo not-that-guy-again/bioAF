@@ -4,8 +4,6 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch
 
-from app.services.auth_service import AuthService
-
 
 @pytest_asyncio.fixture
 async def experiment(session, admin_user):

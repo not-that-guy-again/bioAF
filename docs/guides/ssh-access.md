@@ -39,7 +39,7 @@ bioAF distributes your public key to the compute backend within 60 seconds. You 
 
 Add the following block to your `~/.ssh/config` file to simplify future connections:
 
-```
+```text
 Host bioaf-*
     User bioaf
     IdentityFile ~/.ssh/id_ed25519

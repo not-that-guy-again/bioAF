@@ -225,9 +225,7 @@ class PipelineRunService:
         if linked_ref_ids:
             from app.models.reference_dataset import ReferenceDataset
 
-            result = await session.execute(
-                select(ReferenceDataset).where(ReferenceDataset.id == linked_ref_ids[0])
-            )
+            result = await session.execute(select(ReferenceDataset).where(ReferenceDataset.id == linked_ref_ids[0]))
             ref = result.scalar_one_or_none()
             if ref:
                 return f"{ref.name} {ref.version}"
