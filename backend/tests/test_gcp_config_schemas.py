@@ -129,10 +129,7 @@ class TestGCPValidationCheck:
 
 class TestGCPValidationResult:
     def test_all_passed(self):
-        checks = [
-            GCPValidationCheck(name=f"check_{i}", passed=True, message="OK")
-            for i in range(6)
-        ]
+        checks = [GCPValidationCheck(name=f"check_{i}", passed=True, message="OK") for i in range(6)]
         result = GCPValidationResult(passed=True, checks=checks)
         assert result.passed is True
         assert len(result.checks) == 6

@@ -73,12 +73,7 @@ async def test_migration_is_idempotent(session):
     await session.commit()
 
     count = (
-        await session.execute(
-            text(
-                "SELECT COUNT(*) FROM platform_config "
-                "WHERE key LIKE 'gcp_%' OR key = 'org_slug'"
-            )
-        )
+        await session.execute(text("SELECT COUNT(*) FROM platform_config WHERE key LIKE 'gcp_%' OR key = 'org_slug'"))
     ).scalar()
 
     assert count == 7

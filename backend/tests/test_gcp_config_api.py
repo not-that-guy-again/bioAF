@@ -1,6 +1,5 @@
 """Tests for GCP configuration API endpoints (GET, PUT, POST validate)."""
 
-import json
 from unittest.mock import patch
 
 import pytest
@@ -10,6 +9,7 @@ from sqlalchemy import text
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _seed_gcp_defaults(session):
     """Insert the default GCP platform_config rows (mirrors migration 022)."""
@@ -53,9 +53,7 @@ async def test_get_gcp_config_returns_defaults(client, admin_token, session):
 async def test_get_gcp_config_returns_stored_values(client, admin_token, session):
     """GET returns the stored config values."""
     await _seed_gcp_defaults(session)
-    await session.execute(
-        text("UPDATE platform_config SET value='my-proj' WHERE key='gcp_project_id'")
-    )
+    await session.execute(text("UPDATE platform_config SET value='my-proj' WHERE key='gcp_project_id'"))
     await session.commit()
 
     response = await client.get(
@@ -141,18 +139,8 @@ async def test_put_gcp_config_resets_validation_status(client, admin_token, sess
     """PUT resets gcp_validation_status to empty and gcp_credentials_configured to false."""
     await _seed_gcp_defaults(session)
     # Simulate a previous successful validation
-    await session.execute(
-        text(
-            "UPDATE platform_config SET value='passed' "
-            "WHERE key='gcp_validation_status'"
-        )
-    )
-    await session.execute(
-        text(
-            "UPDATE platform_config SET value='true' "
-            "WHERE key='gcp_credentials_configured'"
-        )
-    )
+    await session.execute(text("UPDATE platform_config SET value='passed' WHERE key='gcp_validation_status'"))
+    await session.execute(text("UPDATE platform_config SET value='true' WHERE key='gcp_credentials_configured'"))
     await session.commit()
 
     await client.put(
@@ -161,11 +149,7 @@ async def test_put_gcp_config_resets_validation_status(client, admin_token, sess
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key='gcp_validation_status'")
-        )
-    ).scalar()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_validation_status'"))).scalar()
     assert row == ""
 
 
@@ -185,10 +169,7 @@ async def test_put_gcp_config_writes_audit_log(client, admin_token, session):
 
     count = (
         await session.execute(
-            text(
-                "SELECT COUNT(*) FROM audit_log "
-                "WHERE entity_type='platform_config' AND action='update_gcp_config'"
-            )
+            text("SELECT COUNT(*) FROM audit_log WHERE entity_type='platform_config' AND action='update_gcp_config'")
         )
     ).scalar()
     assert count >= 1
@@ -227,20 +208,12 @@ async def test_put_gcp_config_requires_admin(client, viewer_token, session):
 async def test_post_validate_returns_result(client, admin_token, session):
     """POST /api/v1/settings/gcp/validate returns validation checks."""
     await _seed_gcp_defaults(session)
-    await session.execute(
-        text("UPDATE platform_config SET value='my-proj' WHERE key='gcp_project_id'")
-    )
+    await session.execute(text("UPDATE platform_config SET value='my-proj' WHERE key='gcp_project_id'"))
     await session.commit()
-
-    mock_result = {
-        "passed": False,
-        "checks": [
-            {"name": "credentials_loaded", "passed": False, "message": "No creds", "status": "failed"},
-        ],
-    }
 
     with patch("app.api.gcp_config.validate_gcp_credentials") as mock_validate:
         from app.schemas.gcp_config import GCPValidationCheck, GCPValidationResult
+
         mock_validate.return_value = GCPValidationResult(
             passed=False,
             checks=[GCPValidationCheck(name="credentials_loaded", passed=False, message="No creds")],
@@ -264,13 +237,12 @@ async def test_post_validate_returns_result(client, admin_token, session):
 async def test_post_validate_writes_audit_log(client, admin_token, session):
     """POST validate writes an audit log entry."""
     await _seed_gcp_defaults(session)
-    await session.execute(
-        text("UPDATE platform_config SET value='my-proj' WHERE key='gcp_project_id'")
-    )
+    await session.execute(text("UPDATE platform_config SET value='my-proj' WHERE key='gcp_project_id'"))
     await session.commit()
 
     with patch("app.api.gcp_config.validate_gcp_credentials") as mock_validate:
         from app.schemas.gcp_config import GCPValidationCheck, GCPValidationResult
+
         mock_validate.return_value = GCPValidationResult(
             passed=True,
             checks=[GCPValidationCheck(name="credentials_loaded", passed=True, message="OK")],

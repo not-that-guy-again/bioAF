@@ -6,7 +6,6 @@ All GCP API calls are mocked - no real GCP calls are made.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from app.services.gcp_config import validate_gcp_credentials
 
@@ -72,9 +71,7 @@ def test_project_not_accessible_skips_downstream(mock_sa, mock_rm):
     mock_creds = MagicMock()
     mock_sa.Credentials.from_service_account_info.return_value = mock_creds
 
-    mock_rm.ProjectsClient.return_value.get_project.side_effect = Exception(
-        "403 Permission denied"
-    )
+    mock_rm.ProjectsClient.return_value.get_project.side_effect = Exception("403 Permission denied")
 
     result = validate_gcp_credentials(
         project_id="my-project",
@@ -102,9 +99,7 @@ def test_storage_api_disabled_marks_check_failed(mock_sa, mock_rm, mock_storage)
     mock_sa.Credentials.from_service_account_info.return_value = mock_creds
     mock_rm.ProjectsClient.return_value.get_project.return_value = MagicMock()
     # Simulate Storage API disabled by raising an exception on bucket list
-    mock_storage.Client.return_value.list_buckets.side_effect = Exception(
-        "Cloud Storage API has not been used"
-    )
+    mock_storage.Client.return_value.list_buckets.side_effect = Exception("Cloud Storage API has not been used")
 
     result = validate_gcp_credentials(
         project_id="my-project",
@@ -112,9 +107,7 @@ def test_storage_api_disabled_marks_check_failed(mock_sa, mock_rm, mock_storage)
         service_account_key=VALID_SA_KEY,
     )
 
-    storage_check = next(
-        (c for c in result.checks if c.name == "storage_api_enabled"), None
-    )
+    storage_check = next((c for c in result.checks if c.name == "storage_api_enabled"), None)
     assert storage_check is not None
     assert storage_check.passed is False
 

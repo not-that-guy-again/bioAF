@@ -15,8 +15,7 @@ def _validate_org_slug(slug: str) -> str:
         raise ValueError("org_slug must be at most 30 characters")
     if not _ORG_SLUG_RE.match(slug):
         raise ValueError(
-            "org_slug must contain only lowercase letters, digits, and hyphens, "
-            "and must not start or end with a hyphen"
+            "org_slug must contain only lowercase letters, digits, and hyphens, and must not start or end with a hyphen"
         )
     if "--" in slug:
         raise ValueError("org_slug must not contain consecutive hyphens")

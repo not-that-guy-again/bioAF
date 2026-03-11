@@ -47,7 +47,7 @@ describe("GCP Settings Page", () => {
   it("renders GCP Configuration heading", async () => {
     render(<GcpSettingsPage />);
     await waitFor(() => {
-      expect(screen.getByText("GCP Configuration")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "GCP Configuration" })).toBeInTheDocument();
     });
   });
 

@@ -49,9 +49,7 @@ def validate_gcp_credentials(
     try:
         if credential_source == "service_account_key":
             key_data = json.loads(service_account_key or "")
-            creds = service_account.Credentials.from_service_account_info(
-                key_data, scopes=_GCP_SCOPES
-            )
+            creds = service_account.Credentials.from_service_account_info(key_data, scopes=_GCP_SCOPES)
         else:
             creds, _ = google_auth_default(scopes=_GCP_SCOPES)
 

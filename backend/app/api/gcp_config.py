@@ -38,10 +38,7 @@ _DEFAULTS: dict[str, str] = {
 async def _read_config(session: AsyncSession) -> dict[str, str]:
     rows = (
         await session.execute(
-            text(
-                "SELECT key, value FROM platform_config "
-                "WHERE key = ANY(:keys)"
-            ).bindparams(keys=_GCP_KEYS)
+            text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=_GCP_KEYS)
         )
     ).fetchall()
     config = dict(_DEFAULTS)
@@ -140,9 +137,7 @@ async def validate_gcp_config(
     credential_source = config.get("gcp_credential_source", "vm_default")
 
     sa_key_row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key='gcp_service_account_key'")
-        )
+        await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_service_account_key'"))
     ).scalar()
 
     result = validate_gcp_credentials(
@@ -152,9 +147,7 @@ async def validate_gcp_config(
     )
 
     # Persist validation outcome
-    status_value = json.dumps(
-        [c.model_dump() for c in result.checks]
-    )
+    status_value = json.dumps([c.model_dump() for c in result.checks])
     await _upsert(session, "gcp_validation_status", status_value)
     await _upsert(
         session,
