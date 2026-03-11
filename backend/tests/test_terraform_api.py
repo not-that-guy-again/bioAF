@@ -144,6 +144,8 @@ async def test_terraform_plan_returns_json(client, session):
     mock_run.started_at = "2026-03-11T00:00:00Z"
     mock_run.completed_at = None
     mock_run.error_message = None
+    mock_run.terraform_state_url = None
+    mock_run.resources_completed = 0
 
     with patch.object(TerraformExecutor, "run_plan", new=AsyncMock(return_value=mock_run)):
         resp = await client.post(
