@@ -50,4 +50,13 @@ describe("Breadcrumb", () => {
     expect(current).toHaveTextContent("Pipeline Catalog");
     expect(current.tagName).toBe("SPAN");
   });
+
+  it("shows Projects as top breadcrumb segment when on experiment detail page", () => {
+    mockPathname.mockReturnValue("/projects/experiments/42");
+    render(<Breadcrumb entityName="My Experiment" />);
+    const breadcrumb = screen.getByTestId("breadcrumb");
+    expect(breadcrumb).toHaveTextContent("Projects");
+    expect(breadcrumb).toHaveTextContent("Experiment List");
+    expect(breadcrumb).toHaveTextContent("My Experiment");
+  });
 });

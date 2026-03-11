@@ -37,9 +37,13 @@ const nextConfig = {
       { source: "/admin/access-logs", destination: "/settings/access-logs", permanent: true },
       { source: "/admin/settings", destination: "/settings/info", permanent: true },
       { source: "/admin/naming-profiles", destination: "/settings/naming-profiles", permanent: true },
-      { source: "/admin/templates", destination: "/experiments/templates", permanent: true },
+      { source: "/admin/templates", destination: "/projects/experiment-templates", permanent: true },
       // Old experiment templates path
-      { source: "/notebooks/templates", destination: "/experiments/templates", permanent: true },
+      { source: "/notebooks/templates", destination: "/projects/experiment-templates", permanent: true },
+      // Experiment routes moved under /projects/
+      { source: "/experiments/templates", destination: "/projects/experiment-templates", permanent: true },
+      { source: "/experiments/:id", destination: "/projects/experiments/:id", permanent: true },
+      { source: "/experiments", destination: "/projects/experiments", permanent: true },
       // Old pipeline paths
       { source: "/pipelines", destination: "/pipelines/catalog", permanent: true },
       // Old data paths
