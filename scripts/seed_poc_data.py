@@ -64,6 +64,9 @@ from app.models.slurm_job import SlurmJob  # noqa: E402
 from app.models.template_notebook import TemplateNotebook  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.user_quota import UserQuota  # noqa: E402
+from app.models.ingest_event import IngestEvent  # noqa: E402
+from app.models.naming_profile import NamingProfile  # noqa: E402
+from app.models.pipeline_trigger import PipelineTrigger  # noqa: E402
 from app.services.auth_service import AuthService  # noqa: E402
 from app.services.vocabulary_validator import _derive_instrument_platform  # noqa: E402
 
@@ -1332,6 +1335,132 @@ async def seed_compute_stack(session: AsyncSession) -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Phase 13: Naming profiles, ingest events, and pipeline triggers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def create_naming_profiles_and_triggers(
+    session: AsyncSession,
+    org_id: int,
+    admin: User,
+    comp_bio: User,
+    experiments: list,
+    runs: list,
+    project: Project,
+) -> None:
+    """Seed naming profiles, sample ingest events, and pipeline triggers."""
+    from app.models.pipeline_catalog_entry import PipelineCatalogEntry
+
+    # --- Naming Profiles ---
+    cro_profile = NamingProfile(
+        organization_id=org_id,
+        name="CRO Standard (6-segment)",
+        description="Standard CRO filename format: date_project_datatype_analysis_researcher_version",
+        delimiter="_",
+        strip_extension=True,
+        segments_json=[
+            {"position": 0, "field": "date", "format": "YYYY-MM-DD", "required": True},
+            {"position": 1, "field": "project_code", "required": True},
+            {"position": 2, "field": "data_type", "required": True},
+            {"position": 3, "field": "analysis_type", "required": True},
+            {"position": 4, "field": "researcher_initials", "required": True},
+            {"position": 5, "field": "version", "required": True},
+        ],
+        project_code_mappings={"PBMC10k": str(project.id)} if project else {},
+        experiment_code_mappings={},
+        status="active",
+        created_by=admin.id,
+    )
+    simple_profile = NamingProfile(
+        organization_id=org_id,
+        name="Simple (project_sample)",
+        description="Minimal two-segment format: project_sampleId",
+        delimiter="_",
+        strip_extension=True,
+        segments_json=[
+            {"position": 0, "field": "project_code", "required": True},
+            {"position": 1, "field": "sample_id", "required": True},
+        ],
+        project_code_mappings={},
+        experiment_code_mappings={},
+        status="active",
+        created_by=admin.id,
+    )
+    session.add_all([cro_profile, simple_profile])
+    await session.flush()
+    print(f"Created 2 naming profiles: '{cro_profile.name}', '{simple_profile.name}'")
+
+    # --- Ingest Events (simulated past ingests) ---
+    demo_ingests = [
+        ("2026-03-01_PBMC10k_RNASeq_DiffExpr_SmithE_v001.fastq.gz", "cataloged"),
+        ("2026-03-02_PBMC10k_RNASeq_CellType_SmithE_v001.fastq.gz", "cataloged"),
+        ("random_unlabeled_file.bam", "unmatched"),
+        ("2026-03-05_PBMC10k_ChIPSeq_Peaks_JonesA_v001.fastq", "cataloged"),
+    ]
+    for fname, status in demo_ingests:
+        ev = IngestEvent(
+            file_id=None,
+            source_bucket="bioaf-ingest-demo",
+            source_path=f"incoming/{fname}",
+            naming_profile_id=cro_profile.id if status == "cataloged" else None,
+            parsed_project_code="PBMC10k" if status == "cataloged" else None,
+            ingest_status=status,
+        )
+        session.add(ev)
+    await session.flush()
+    print(f"Created {len(demo_ingests)} demo ingest events.")
+
+    # --- Pipeline Triggers ---
+    # Find an existing pipeline catalog entry to attach triggers to
+    cat_result = await session.execute(
+        select(PipelineCatalogEntry).where(
+            PipelineCatalogEntry.organization_id == org_id
+        ).limit(1)
+    )
+    catalog_entry = cat_result.scalar_one_or_none()
+
+    if catalog_entry:
+        event_trigger = PipelineTrigger(
+            pipeline_id=catalog_entry.id,
+            organization_id=org_id,
+            trigger_mode="event_driven",
+            event_config={
+                "file_types": ["fastq"],
+                "batching_window_minutes": 15,
+            },
+            budget_config={"auto_queue_when_over_budget": True},
+            enabled=True,
+            created_by=comp_bio.id,
+        )
+        scheduled_trigger = PipelineTrigger(
+            pipeline_id=catalog_entry.id,
+            organization_id=org_id,
+            trigger_mode="scheduled",
+            schedule_config={
+                "cron_expression": "0 6 * * 1",
+                "file_types": ["fastq"],
+                "min_files_to_trigger": 5,
+            },
+            budget_config={"auto_queue_when_over_budget": False},
+            enabled=True,
+            created_by=comp_bio.id,
+        )
+        manual_trigger = PipelineTrigger(
+            pipeline_id=catalog_entry.id,
+            organization_id=org_id,
+            trigger_mode="manual",
+            budget_config={"auto_queue_when_over_budget": True},
+            enabled=True,
+            created_by=admin.id,
+        )
+        session.add_all([event_trigger, scheduled_trigger, manual_trigger])
+        await session.flush()
+        print(f"Created 3 pipeline triggers for '{catalog_entry.name}'.")
+    else:
+        print("No pipeline catalog entry found — skipping trigger seeding.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Main
 # ═══════════════════════════════════════════════════════════════════════════
 async def main() -> None:
@@ -1430,6 +1559,10 @@ async def main() -> None:
 
         await create_audit_entries(
             session, experiments, samples, runs, admin, comp_bio
+        )
+
+        await create_naming_profiles_and_triggers(
+            session, org_id, admin, comp_bio, experiments, runs, project
         )
 
         await session.commit()
