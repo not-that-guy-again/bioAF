@@ -41,6 +41,12 @@ from app.models.cost_record import CostRecord
 from app.models.controlled_vocabulary import ControlledVocabulary
 from app.models.pipeline_run_review import PipelineRunReview
 from app.models.reference_dataset import ReferenceDataset, ReferenceDatasetFile, pipeline_run_references
+from app.models.naming_profile import NamingProfile
+from app.models.file_parse_result import FileParseResult
+from app.models.ingest_event import IngestEvent
+from app.models.pipeline_trigger import PipelineTrigger
+from app.models.trigger_evaluation import TriggerEvaluation
+from app.models.pipeline_cost_history import PipelineCostHistory
 
 __all__ = [
     "User",
@@ -91,4 +97,10 @@ __all__ = [
     "ReferenceDataset",
     "ReferenceDatasetFile",
     "pipeline_run_references",
+    "NamingProfile",
+    "FileParseResult",
+    "IngestEvent",
+    "PipelineTrigger",
+    "TriggerEvaluation",
+    "PipelineCostHistory",
 ]

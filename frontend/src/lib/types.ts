@@ -1153,3 +1153,102 @@ export interface SnapshotComparison {
   command_log_diff: CommandDiff[] | null;
   cell_count_series: CellCountPoint[];
 }
+
+// Phase 13 — Auto-Ingest, Naming Profiles, Pipeline Triggers
+
+export interface SegmentDefinition {
+  position: number;
+  field: "date" | "project_code" | "experiment_code" | "sample_id" | "data_type" | "analysis_type" | "researcher_initials" | "version" | "organism" | "ignore" | "custom";
+  format?: string | null;
+  required: boolean;
+  custom_label?: string | null;
+}
+
+export interface NamingProfile {
+  id: number;
+  organization_id: number;
+  name: string;
+  description: string | null;
+  delimiter: string;
+  strip_extension: boolean;
+  segments: SegmentDefinition[];
+  project_code_mappings: Record<string, string>;
+  experiment_code_mappings: Record<string, string>;
+  status: "active" | "inactive";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NamingProfileTestResult {
+  filename: string;
+  match_status: "matched" | "unmatched" | "multiple_matches";
+  profile_id: number | null;
+  profile_name: string | null;
+  parsed_segments: Record<string, string> | null;
+  candidate_profile_ids: number[];
+  error: string | null;
+}
+
+export interface IngestEvent {
+  id: number;
+  file_id: number | null;
+  source_bucket: string;
+  source_path: string;
+  naming_profile_id: number | null;
+  parsed_project_code: string | null;
+  parsed_experiment_code: string | null;
+  parsed_sample_id: string | null;
+  resolved_project_id: number | null;
+  resolved_experiment_id: number | null;
+  resolved_sample_id: number | null;
+  auto_created_entities: Record<string, number[]>;
+  ingest_status: "cataloged" | "unmatched" | "multiple_matches" | "duplicate" | "failed";
+  created_at: string;
+}
+
+export interface UnclaimedEntity {
+  entity_type: "project" | "experiment" | "sample";
+  entity_id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface PipelineTrigger {
+  id: number;
+  pipeline_id: number;
+  organization_id: number;
+  trigger_mode: "manual" | "event_driven" | "scheduled";
+  event_config: Record<string, unknown> | null;
+  schedule_config: Record<string, unknown> | null;
+  parameter_defaults: Record<string, unknown> | null;
+  budget_config: Record<string, unknown>;
+  enabled: boolean;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TriggerEvaluation {
+  id: number;
+  trigger_id: number;
+  evaluation_type: string;
+  matched_files: number[];
+  budget_check_result: Record<string, unknown> | null;
+  result: "submitted" | "queued" | "skipped" | "no_files" | "error";
+  pipeline_run_id: number | null;
+  created_at: string;
+}
+
+export interface BudgetStatus {
+  monthly_budget: number;
+  current_spend: number;
+  remaining: number;
+  utilization_pct: number;
+}
+
+export interface CostEstimate {
+  estimated_cost: number;
+  confidence_interval_pct: number;
+  historical_run_count: number;
+  budget_check: Record<string, unknown>;
+}
