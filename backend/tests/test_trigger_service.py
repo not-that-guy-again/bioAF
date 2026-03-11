@@ -1,7 +1,5 @@
 """Tests for the pipeline trigger evaluation engine."""
 
-import time
-
 import pytest
 import pytest_asyncio
 from sqlalchemy import text
@@ -13,7 +11,6 @@ from app.schemas.pipeline_trigger import (
     BudgetTriggerConfig,
     EventTriggerConfig,
     PipelineTriggerCreate,
-    ScheduleTriggerConfig,
 )
 from app.services.trigger_service import TriggerService
 
@@ -199,21 +196,33 @@ async def test_batching_window(client, admin_token, session, org_user, pipeline,
     from app.models.file import File
 
     file1 = File(
-        organization_id=org_id, gcs_uri="gs://b/f1.fastq", filename="f1.fastq",
-        file_type="fastq", ingest_source="auto_ingest",
+        organization_id=org_id,
+        gcs_uri="gs://b/f1.fastq",
+        filename="f1.fastq",
+        file_type="fastq",
+        ingest_source="auto_ingest",
     )
     file2 = File(
-        organization_id=org_id, gcs_uri="gs://b/f2.fastq", filename="f2.fastq",
-        file_type="fastq", ingest_source="auto_ingest",
+        organization_id=org_id,
+        gcs_uri="gs://b/f2.fastq",
+        filename="f2.fastq",
+        file_type="fastq",
+        ingest_source="auto_ingest",
     )
     session.add_all([file1, file2])
     await session.flush()
 
     ev1 = IngestEvent(
-        file_id=file1.id, source_bucket="b", source_path="f1.fastq", ingest_status="cataloged",
+        file_id=file1.id,
+        source_bucket="b",
+        source_path="f1.fastq",
+        ingest_status="cataloged",
     )
     ev2 = IngestEvent(
-        file_id=file2.id, source_bucket="b", source_path="f2.fastq", ingest_status="cataloged",
+        file_id=file2.id,
+        source_bucket="b",
+        source_path="f2.fastq",
+        ingest_status="cataloged",
     )
     session.add_all([ev1, ev2])
     await session.flush()
@@ -238,14 +247,20 @@ async def test_budget_queues_run(client, admin_token, session, org_user, event_t
     from app.models.file import File
 
     file = File(
-        organization_id=org_id, gcs_uri="gs://b/budget.fastq", filename="budget.fastq",
-        file_type="fastq", ingest_source="auto_ingest",
+        organization_id=org_id,
+        gcs_uri="gs://b/budget.fastq",
+        filename="budget.fastq",
+        file_type="fastq",
+        ingest_source="auto_ingest",
     )
     session.add(file)
     await session.flush()
 
     ev = IngestEvent(
-        file_id=file.id, source_bucket="b", source_path="budget.fastq", ingest_status="cataloged",
+        file_id=file.id,
+        source_bucket="b",
+        source_path="budget.fastq",
+        ingest_status="cataloged",
     )
     session.add(ev)
     await session.flush()

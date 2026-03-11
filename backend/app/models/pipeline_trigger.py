@@ -21,7 +21,9 @@ class PipelineTrigger(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     pipeline = relationship("PipelineCatalogEntry")
     organization = relationship("Organization")

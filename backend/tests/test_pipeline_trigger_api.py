@@ -7,7 +7,7 @@ import pytest_asyncio
 @pytest_asyncio.fixture
 async def pipeline_id(client, admin_token):
     """Create a pipeline catalog entry and return its ID."""
-    from sqlalchemy import text
+
     # Use the client's internal test infrastructure to create a pipeline
     # We'll use a direct DB approach via the admin API
     # Since there's no pipeline creation endpoint, we need to be creative

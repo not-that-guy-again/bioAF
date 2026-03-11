@@ -5,8 +5,6 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from app.services.naming_profile_parser import (
-    EntityResolution,
-    MatchResult,
     ParseResult,
     _strip_extension,
     match_filename,
@@ -211,7 +209,7 @@ class TestParseFilename:
         )
         result = parse_filename("ProjectX_Sample001.txt", profile)
         assert result.success is False
-        assert "Expected 3" in result.error
+        assert result.error is not None and "Expected 3" in result.error
 
     def test_empty_filename(self):
         profile = _make_profile(

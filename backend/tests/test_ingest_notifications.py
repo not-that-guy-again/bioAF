@@ -19,7 +19,6 @@ from app.services.event_types import (
     DUPLICATE_FILE,
     FILES_CATALOGED,
     RUN_QUEUED_BUDGET,
-    UNCLAIMED_ENTITY,
     UNMATCHED_FILE,
 )
 from app.services.ingest_service import process_ingest_event
@@ -170,7 +169,7 @@ async def test_trigger_submitted_emits_auto_run(client, admin_token, session, or
         event_config=EventTriggerConfig(file_types=["fastq"], batching_window_minutes=0),
         budget_config=BudgetTriggerConfig(auto_queue_when_over_budget=True),
     )
-    trigger = await TriggerService.create_trigger(session, org_id, user_id, data)
+    await TriggerService.create_trigger(session, org_id, user_id, data)
     await session.commit()
 
     file = File(
@@ -234,7 +233,7 @@ async def test_trigger_queued_emits_budget_event(client, admin_token, session, o
         event_config=EventTriggerConfig(file_types=["fastq"], batching_window_minutes=0),
         budget_config=BudgetTriggerConfig(auto_queue_when_over_budget=True),
     )
-    trigger = await TriggerService.create_trigger(session, org_id, user_id, data)
+    await TriggerService.create_trigger(session, org_id, user_id, data)
     await session.commit()
 
     file = File(

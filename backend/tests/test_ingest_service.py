@@ -201,9 +201,7 @@ async def test_experiment_transitions_to_fastq_uploaded(client, admin_token, ses
     )
     await session.commit()
 
-    result = await session.execute(
-        text(f"SELECT status FROM experiments WHERE id = {event.resolved_experiment_id}")
-    )
+    result = await session.execute(text(f"SELECT status FROM experiments WHERE id = {event.resolved_experiment_id}"))
     row = result.fetchone()
     assert row.status == "fastq_uploaded"
 

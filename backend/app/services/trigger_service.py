@@ -6,11 +6,9 @@ batching windows and budget-aware pre-flight checks.
 
 import asyncio
 import time
-from collections import defaultdict
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.models.file import File
 from app.models.ingest_event import IngestEvent
@@ -24,7 +22,6 @@ from app.services.event_bus import event_bus
 from app.services.event_types import (
     AUTO_RUN_SUBMITTED,
     BATCH_WINDOW_CLOSED,
-    EVALUATION_FAILED,
     RUN_QUEUED_BUDGET,
 )
 
@@ -68,9 +65,7 @@ class TriggerService:
 
     @staticmethod
     async def get_trigger(session: AsyncSession, trigger_id: int) -> PipelineTrigger | None:
-        result = await session.execute(
-            select(PipelineTrigger).where(PipelineTrigger.id == trigger_id)
-        )
+        result = await session.execute(select(PipelineTrigger).where(PipelineTrigger.id == trigger_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -89,9 +84,7 @@ class TriggerService:
         user_id: int,
         data: PipelineTriggerUpdate,
     ) -> PipelineTrigger | None:
-        result = await session.execute(
-            select(PipelineTrigger).where(PipelineTrigger.id == trigger_id)
-        )
+        result = await session.execute(select(PipelineTrigger).where(PipelineTrigger.id == trigger_id))
         trigger = result.scalar_one_or_none()
         if not trigger:
             return None
@@ -134,9 +127,7 @@ class TriggerService:
         trigger_id: int,
         user_id: int,
     ) -> PipelineTrigger | None:
-        result = await session.execute(
-            select(PipelineTrigger).where(PipelineTrigger.id == trigger_id)
-        )
+        result = await session.execute(select(PipelineTrigger).where(PipelineTrigger.id == trigger_id))
         trigger = result.scalar_one_or_none()
         if not trigger:
             return None
@@ -207,9 +198,7 @@ class TriggerService:
                 evaluations.append(evaluation)
             else:
                 # Immediate submission
-                evaluation = await TriggerService._submit_or_queue_run(
-                    trigger, [file_id], db
-                )
+                evaluation = await TriggerService._submit_or_queue_run(trigger, [file_id], db)
                 evaluations.append(evaluation)
 
         return evaluations
@@ -228,9 +217,7 @@ class TriggerService:
                     del _active_batches[trigger_id]
 
         for trigger_id, file_ids in expired_triggers:
-            result = await db.execute(
-                select(PipelineTrigger).where(PipelineTrigger.id == trigger_id)
-            )
+            result = await db.execute(select(PipelineTrigger).where(PipelineTrigger.id == trigger_id))
             trigger = result.scalar_one_or_none()
             if trigger and trigger.enabled:
                 asyncio.create_task(
@@ -247,9 +234,7 @@ class TriggerService:
                         },
                     )
                 )
-                evaluation = await TriggerService._submit_or_queue_run(
-                    trigger, file_ids, db
-                )
+                evaluation = await TriggerService._submit_or_queue_run(trigger, file_ids, db)
                 evaluations.append(evaluation)
 
         return evaluations
@@ -291,9 +276,7 @@ class TriggerService:
                 evaluations.append(evaluation)
                 continue
 
-            evaluation = await TriggerService._submit_or_queue_run(
-                trigger, file_ids, db
-            )
+            evaluation = await TriggerService._submit_or_queue_run(trigger, file_ids, db)
             evaluations.append(evaluation)
 
         return evaluations
@@ -459,9 +442,7 @@ class TriggerService:
         db: AsyncSession,
     ) -> PipelineRun | None:
         """Admin approves a specific queued run, bypassing budget check."""
-        result = await db.execute(
-            select(PipelineRun).where(PipelineRun.id == run_id)
-        )
+        result = await db.execute(select(PipelineRun).where(PipelineRun.id == run_id))
         run = result.scalar_one_or_none()
         if not run:
             return None

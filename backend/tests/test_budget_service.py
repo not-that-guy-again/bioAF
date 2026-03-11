@@ -1,6 +1,5 @@
 """Tests for the budget pre-flight engine."""
 
-import os
 from decimal import Decimal
 
 import pytest
@@ -33,9 +32,7 @@ async def cost_history(session, org_id):
     runs = []
     costs = [4.50, 5.00, 5.50, 4.75, 5.25]
     for i, cost in enumerate(costs):
-        run = PipelineRun(
-            organization_id=org_id, pipeline_name="nf-core/scrnaseq", status="completed"
-        )
+        run = PipelineRun(organization_id=org_id, pipeline_name="nf-core/scrnaseq", status="completed")
         session.add(run)
         await session.flush()
         record = PipelineCostHistory(
@@ -57,9 +54,7 @@ async def cost_history(session, org_id):
 @pytest.mark.asyncio
 async def test_estimate_no_history(client, admin_token, session):
     """With no history, returns default estimate with wide confidence interval."""
-    cost, ci, count = await BudgetService.estimate_pipeline_cost(
-        "nonexistent-pipeline", 4, 1_000_000, session
-    )
+    cost, ci, count = await BudgetService.estimate_pipeline_cost("nonexistent-pipeline", 4, 1_000_000, session)
     assert cost == 5.0  # Default
     assert ci == 50.0  # Wide interval
     assert count == 0
@@ -68,9 +63,7 @@ async def test_estimate_no_history(client, admin_token, session):
 @pytest.mark.asyncio
 async def test_estimate_with_history(client, admin_token, session, cost_history):
     """With history, returns mean of recent runs."""
-    cost, ci, count = await BudgetService.estimate_pipeline_cost(
-        "nf-core/scrnaseq", 4, 1_000_000_000, session
-    )
+    cost, ci, count = await BudgetService.estimate_pipeline_cost("nf-core/scrnaseq", 4, 1_000_000_000, session)
     assert count == 5
     assert 4.0 < cost < 6.0  # Should be around 5.0
 

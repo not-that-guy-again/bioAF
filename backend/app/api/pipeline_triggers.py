@@ -6,7 +6,6 @@ from app.api.dependencies import require_role
 from app.database import get_session
 from app.models.pipeline_run import PipelineRun
 from app.schemas.pipeline_trigger import (
-    BudgetCheckResult,
     CostEstimateResponse,
     PipelineTriggerCreate,
     PipelineTriggerResponse,
@@ -71,9 +70,7 @@ async def list_queue(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(PipelineRun)
-        .where(PipelineRun.status == "pending_budget_review")
-        .order_by(PipelineRun.created_at.asc())
+        select(PipelineRun).where(PipelineRun.status == "pending_budget_review").order_by(PipelineRun.created_at.asc())
     )
     runs = result.scalars().all()
     return [
@@ -166,7 +163,10 @@ async def test_trigger(
     from app.models.ingest_event import IngestEvent
 
     result = await session.execute(
-        select(IngestEvent).where(IngestEvent.ingest_status == "cataloged").order_by(IngestEvent.created_at.desc()).limit(10)
+        select(IngestEvent)
+        .where(IngestEvent.ingest_status == "cataloged")
+        .order_by(IngestEvent.created_at.desc())
+        .limit(10)
     )
     events = list(result.scalars().all())
     matches = []

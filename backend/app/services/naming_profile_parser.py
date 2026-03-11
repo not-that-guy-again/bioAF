@@ -168,9 +168,7 @@ def match_filename(filename: str, profiles: list[NamingProfile]) -> MatchResult:
         return MatchResult(
             status="matched",
             parse_result=successful_results[0],
-            candidate_profile_ids=[successful_results[0].profile_id]
-            if successful_results[0].profile_id
-            else [],
+            candidate_profile_ids=[successful_results[0].profile_id] if successful_results[0].profile_id else [],
         )
     else:
         return MatchResult(
@@ -203,9 +201,7 @@ async def resolve_entities(
         if mapped_id:
             try:
                 pid = int(mapped_id)
-                result = await db.execute(
-                    select(Project).where(Project.id == pid, Project.organization_id == org_id)
-                )
+                result = await db.execute(select(Project).where(Project.id == pid, Project.organization_id == org_id))
                 project = result.scalar_one_or_none()
                 if project:
                     resolution.project_id = project.id

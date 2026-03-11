@@ -15,13 +15,11 @@ from app.models.experiment import Experiment
 from app.models.file import File
 from app.models.file_parse_result import FileParseResult
 from app.models.ingest_event import IngestEvent
-from app.models.naming_profile import NamingProfile
 from app.models.project import Project
 from app.models.sample import Sample
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
 from app.services.event_types import (
-    DATA_UPLOADED,
     DUPLICATE_FILE,
     FILES_CATALOGED,
     UNCLAIMED_ENTITY,
@@ -76,9 +74,7 @@ async def check_duplicate(md5_checksum: str | None, org_id: int, db: AsyncSessio
     """Check if a file with the same MD5 already exists."""
     if not md5_checksum:
         return None
-    result = await db.execute(
-        select(File).where(File.md5_checksum == md5_checksum, File.organization_id == org_id)
-    )
+    result = await db.execute(select(File).where(File.md5_checksum == md5_checksum, File.organization_id == org_id))
     return result.scalar_one_or_none()
 
 
@@ -96,9 +92,7 @@ async def resolve_or_create_project(
         return None
 
     # Try to find by name
-    result = await db.execute(
-        select(Project).where(Project.name == project_code, Project.organization_id == org_id)
-    )
+    result = await db.execute(select(Project).where(Project.name == project_code, Project.organization_id == org_id))
     existing = result.scalar_one_or_none()
     if existing:
         return existing.id
@@ -384,9 +378,7 @@ async def process_ingest_event(
 
     # Step 8: Update experiment status if first FASTQ
     if resolved_experiment_id and file_type == "fastq":
-        exp_result = await db.execute(
-            select(Experiment).where(Experiment.id == resolved_experiment_id)
-        )
+        exp_result = await db.execute(select(Experiment).where(Experiment.id == resolved_experiment_id))
         experiment = exp_result.scalar_one_or_none()
         if experiment and experiment.status == "registered":
             experiment.status = "fastq_uploaded"
@@ -470,33 +462,37 @@ async def get_unclaimed_entities(org_id: int, db: AsyncSession) -> list[dict]:
         select(Project).where(Project.organization_id == org_id, Project.is_unclaimed.is_(True))
     )
     for p in projects.scalars().all():
-        unclaimed.append({
-            "entity_type": "project",
-            "entity_id": p.id,
-            "name": p.name,
-            "created_at": p.created_at,
-        })
+        unclaimed.append(
+            {
+                "entity_type": "project",
+                "entity_id": p.id,
+                "name": p.name,
+                "created_at": p.created_at,
+            }
+        )
 
     experiments = await db.execute(
         select(Experiment).where(Experiment.organization_id == org_id, Experiment.is_unclaimed.is_(True))
     )
     for e in experiments.scalars().all():
-        unclaimed.append({
-            "entity_type": "experiment",
-            "entity_id": e.id,
-            "name": e.name,
-            "created_at": e.created_at,
-        })
+        unclaimed.append(
+            {
+                "entity_type": "experiment",
+                "entity_id": e.id,
+                "name": e.name,
+                "created_at": e.created_at,
+            }
+        )
 
-    samples = await db.execute(
-        select(Sample).where(Sample.is_unclaimed.is_(True))
-    )
+    samples = await db.execute(select(Sample).where(Sample.is_unclaimed.is_(True)))
     for s in samples.scalars().all():
-        unclaimed.append({
-            "entity_type": "sample",
-            "entity_id": s.id,
-            "name": s.sample_id_external or f"Sample {s.id}",
-            "created_at": s.created_at,
-        })
+        unclaimed.append(
+            {
+                "entity_type": "sample",
+                "entity_id": s.id,
+                "name": s.sample_id_external or f"Sample {s.id}",
+                "created_at": s.created_at,
+            }
+        )
 
     return unclaimed

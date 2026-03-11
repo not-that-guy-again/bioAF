@@ -117,9 +117,7 @@ async def test_match_statistics_empty(client, admin_token, session, sample_profi
 @pytest.mark.asyncio
 async def test_test_profiles(client, admin_token, session, org_user_ids, sample_profile):
     org_id, _ = org_user_ids
-    results = await NamingProfileService.test_profiles(
-        session, org_id, ["2026-03-10_ProjectX.txt", "unknown_file.txt"]
-    )
+    results = await NamingProfileService.test_profiles(session, org_id, ["2026-03-10_ProjectX.txt", "unknown_file.txt"])
     assert len(results) == 2
     # First file should match the sample_profile
     assert results[0]["match_status"] == "matched"

@@ -141,9 +141,7 @@ async def list_unmatched(
     session: AsyncSession = Depends(get_session),
 ):
     result = await session.execute(
-        select(IngestEvent)
-        .where(IngestEvent.ingest_status == "unmatched")
-        .order_by(IngestEvent.created_at.desc())
+        select(IngestEvent).where(IngestEvent.ingest_status == "unmatched").order_by(IngestEvent.created_at.desc())
     )
     return [_event_response(e) for e in result.scalars().all()]
 
@@ -214,9 +212,7 @@ async def claim_experiment(
         experiment.description = body.description
     await session.flush()
 
-    await log_action(
-        session, user_id=user_id, entity_type="experiment", entity_id=experiment.id, action="claim"
-    )
+    await log_action(session, user_id=user_id, entity_type="experiment", entity_id=experiment.id, action="claim")
     await session.commit()
     return {"id": experiment.id, "name": experiment.name, "is_unclaimed": False}
 
