@@ -1,6 +1,6 @@
 # ADR-022: GCS as Recommended Storage Backend
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-03-10
 **Deciders:** Brent (repository owner), informed by feedback from computational biology practitioners
 

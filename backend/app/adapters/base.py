@@ -42,6 +42,10 @@ class ComputeProvider(ABC):
     async def get_cost_estimate(self, job_spec: dict) -> dict:
         """Estimate cost for a job spec with confidence interval."""
 
+    @abstractmethod
+    async def get_connection_command(self, job_id: str) -> str:
+        """Get kubectl exec/SSH command for direct access to a running job."""
+
 
 class StorageProvider(ABC):
     """Abstract interface for storage backends (GCS, NFS)."""

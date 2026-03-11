@@ -1,6 +1,6 @@
 # ADR-023: Configurable CRO Naming Profiles
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-03-10
 **Deciders:** Brent (repository owner), informed by feedback from computational biology practitioners
 

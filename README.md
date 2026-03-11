@@ -12,8 +12,9 @@ A turnkey computational biology platform for small biotech companies (5-50 resea
 - **Experiment Tracking** - MINSEQE-compliant metadata, sample management, batch processing, project organization
 - **Compute Orchestration** - Kubernetes (GKE) or SLURM compute via the BioAF Adapter Layer, JupyterHub/RStudio notebooks, auto-scaling, quota management
 - **Pipeline Engine** - Nextflow and Snakemake integration, pipeline catalog, run monitoring, parameter management
-- **Data Management** - File upload/download, dataset browser, GCS storage integration, GEO export
+- **Data Management** - File upload/download, dataset browser, GCS storage integration, GEO export, SuperSeries cross-experiment packaging
 - **Results & Visualization** - QC dashboards, cellxgene single-cell viewer, plot archive, search
+- **SSH Access** - One-click kubectl exec into running pipeline jobs and notebook sessions
 - **Notifications** - Event-driven alerts via in-app, email (SMTP), and Slack webhooks
 - **Cost Center** - GCP billing integration, budget alerts, component cost breakdown, projections
 - **Backup & Recovery** - Tiered backups (Cloud SQL PITR, Filestore snapshots, config exports), one-click restore
@@ -51,8 +52,10 @@ Frontend (Next.js 14)  -->  Backend (FastAPI)  -->  Cloud SQL PostgreSQL 16
 - BioAF Adapter Layer for compute/storage abstraction ([ADR-020](decisions/ADR-020-bioaf-adapter-layer.md))
 - Kubernetes compute backend ([ADR-021](decisions/ADR-021-kubernetes-compute-backend.md))
 - GCS storage backend ([ADR-022](decisions/ADR-022-gcs-storage-backend.md))
+- SSH access for running workloads ([ADR-026](decisions/ADR-026-ssh-access.md))
+- Navigation restructure ([ADR-027](decisions/ADR-027-navigation-restructure.md))
 
-See all ADRs in [docs/adr-index.md](docs/adr-index.md).
+See all ADRs in [decisions/README.md](decisions/README.md).
 
 ## Quickstart
 
@@ -86,7 +89,11 @@ See the full [Deployment Guide](docs/deployment-guide.md) for detailed instructi
 - [Computational Biologist Guide](docs/user-guide-compbio.md) - Pipelines, notebooks, environments
 - [Admin Guide](docs/user-guide-admin.md) - User management, costs, backups, notifications
 - [Life After bioAF](docs/life-after-bioaf.md) - Data portability after teardown
-- [ADR Index](docs/adr-index.md) - Architecture Decision Records
+- [ADR Index](decisions/README.md) - Architecture Decision Records
+- [SSH Access Guide](docs/guides/ssh-access.md) - Connecting to running workloads
+- [GEO Export Guide](docs/guides/geo-export.md) - Exporting to NCBI GEO
+- [Reference Data Guide](docs/guides/reference-data.md) - Managing reference genomes and annotations
+- [Compute Stack Setup](docs/guides/compute-stack-setup.md) - Kubernetes and SLURM configuration
 
 ## Development Setup
 
@@ -123,9 +130,12 @@ alembic upgrade head
 ### Running Tests
 
 ```bash
-# Full test suite (requires PostgreSQL)
+# Backend tests (requires PostgreSQL)
 docker compose -f docker/docker-compose.dev.yml up -d db
 cd backend && python -m pytest tests/ -v
+
+# Frontend tests
+cd frontend && npm test
 ```
 
 ## Component Catalog

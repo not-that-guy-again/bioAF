@@ -2,69 +2,189 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NavItem } from "./NavItem";
+import { useState, useEffect } from "react";
 import { getCurrentUser } from "@/lib/auth";
+import { navConfig, NavSection, NavChild } from "@/lib/navConfig";
 
-const navItems = [
-  { label: "Home", href: "/", icon: "home", active: true },
-  { label: "Experiments", href: "/experiments", icon: "flask", active: true },
-  { label: "Projects", href: "/projects", icon: "folder", active: true },
-  { label: "Data", href: "/data", icon: "database", active: true },
-  { label: "Compute", href: "/compute", icon: "server", active: true },
-  { label: "Pipeline Catalog", href: "/pipelines", icon: "workflow", active: true, compBioOnly: true },
-  { label: "Pipeline Runs", href: "/pipelines/runs", icon: "play", active: true, compBioOnly: true },
-  { label: "Packages", href: "/packages", icon: "package", active: true, compBioOnly: true },
-  { label: "Environments", href: "/environments", icon: "layers", active: true, compBioOnly: true },
-  { label: "Templates", href: "/notebooks/templates", icon: "notebook", active: true, compBioOnly: true },
-  { label: "Results", href: "/results", icon: "chart", active: true },
-  { label: "Reference Data", href: "/references", icon: "archive", active: true },
-  { label: "Components", href: "/components", icon: "puzzle", active: true },
-  { label: "Activity Feed", href: "/activity", icon: "activity", active: true },
-  { label: "Ingest Dashboard", href: "/ingest", icon: "upload", active: true, compBioOnly: true },
-  { label: "Naming Profiles", href: "/admin/naming-profiles", icon: "tag", active: true, adminOnly: true },
-  { label: "Pipeline Triggers", href: "/pipelines/triggers", icon: "zap", active: true, compBioOnly: true },
-  { label: "Templates", href: "/admin/templates", icon: "template", active: true, adminOnly: true },
-  { label: "Users & Roles", href: "/admin/users", icon: "users", active: true, adminOnly: true },
-  { label: "Backup & Recovery", href: "/admin/backups", icon: "shield", active: true, adminOnly: true },
-  { label: "Cost Center", href: "/admin/costs", icon: "dollar", active: true, adminOnly: true },
-  { label: "Access Logs", href: "/admin/access-logs", icon: "log", active: true, adminOnly: true },
-  { label: "Settings", href: "/admin/settings", icon: "settings", active: true, adminOnly: true },
-];
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`w-4 h-4 transition-transform ${expanded ? "rotate-90" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
+function SidebarChildItem({
+  child,
+  isActive,
+}: {
+  child: NavChild;
+  isActive: boolean;
+}) {
+  return (
+    <Link
+      href={child.path}
+      className={`block pl-10 pr-3 py-1.5 rounded-md text-sm transition-colors ${
+        isActive
+          ? "bg-bioaf-700 text-white"
+          : "text-gray-400 hover:bg-gray-800 hover:text-white"
+      }`}
+    >
+      {child.label}
+    </Link>
+  );
+}
+
+function SidebarSection({
+  section,
+  pathname,
+  expanded,
+  onToggle,
+}: {
+  section: NavSection;
+  pathname: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const isExpandable = !!section.children;
+  const isSectionActive = isExpandable
+    ? section.children!.some(
+        (c) => pathname === c.path || pathname.startsWith(c.path + "/"),
+      )
+    : pathname === section.path ||
+      (section.path === "/dashboard" && pathname === "/");
+
+  if (!isExpandable) {
+    return (
+      <Link
+        href={section.path!}
+        className={`flex items-center px-3 py-2 rounded-md transition-colors ${
+          isSectionActive
+            ? "bg-bioaf-700 text-white"
+            : "text-gray-300 hover:bg-gray-800 hover:text-white"
+        }`}
+      >
+        <span>{section.label}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors ${
+          isSectionActive
+            ? "text-white bg-gray-800"
+            : "text-gray-300 hover:bg-gray-800 hover:text-white"
+        }`}
+      >
+        <span>{section.label}</span>
+        <ChevronIcon expanded={expanded} />
+      </button>
+      {expanded && (
+        <div className="mt-1 space-y-0.5" data-testid={`children-${section.label}`}>
+          {section.children!.map((child) => (
+            <SidebarChildItem
+              key={child.path}
+              child={child}
+              isActive={
+                pathname === child.path ||
+                pathname.startsWith(child.path + "/")
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const user = getCurrentUser();
   const isAdmin = user?.role === "admin";
-  const isCompBio = user?.role === "comp_bio";
-  const canSeePipelines = isAdmin || isCompBio;
+
+  // Initialize expanded state: auto-expand section containing active path
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    for (const section of navConfig) {
+      if (section.children) {
+        const hasActiveChild = section.children.some(
+          (c) => pathname === c.path || pathname.startsWith(c.path + "/"),
+        );
+        if (hasActiveChild) {
+          initial.add(section.label);
+        }
+      }
+    }
+    return initial;
+  });
+
+  // Auto-expand when navigating to a new section
+  useEffect(() => {
+    for (const section of navConfig) {
+      if (section.children) {
+        const hasActiveChild = section.children.some(
+          (c) => pathname === c.path || pathname.startsWith(c.path + "/"),
+        );
+        if (hasActiveChild && !expandedSections.has(section.label)) {
+          setExpandedSections((prev) => new Set(prev).add(section.label));
+        }
+      }
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleSection = (label: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+      }
+      return next;
+    });
+  };
+
+  const visibleSections = navConfig.filter(
+    (section) => !section.adminOnly || isAdmin,
+  );
 
   return (
-    <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
+    <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col" data-testid="sidebar">
       <div className="p-6 border-b border-gray-700">
-        <Link href="/" className="text-xl font-bold text-bioaf-400">
+        <Link href="/dashboard" className="text-xl font-bold text-bioaf-400">
           bioAF
         </Link>
         <p className="text-xs text-gray-400 mt-1">Computational Biology Platform</p>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          if (item.adminOnly && !isAdmin) return null;
-          if ((item as Record<string, unknown>).compBioOnly && !canSeePipelines) return null;
-          return (
-            <NavItem
-              key={item.href}
-              label={item.label}
-              href={item.href}
-              active={item.active}
-              isCurrentPage={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)}
-            />
-          );
-        })}
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto" data-testid="sidebar-nav">
+        {visibleSections.map((section) => (
+          <SidebarSection
+            key={section.label}
+            section={section}
+            pathname={pathname}
+            expanded={expandedSections.has(section.label)}
+            onToggle={() => toggleSection(section.label)}
+          />
+        ))}
       </nav>
 
-      <div className="p-4 border-t border-gray-700 text-xs text-gray-500">
-        v0.1.0
+      <div className="p-4 border-t border-gray-700">
+        {user && (
+          <div className="text-xs text-gray-400">
+            <div className="truncate">{user.email as string}</div>
+            <div className="text-gray-500 mt-0.5">{user.role as string}</div>
+          </div>
+        )}
+        <div className="text-xs text-gray-600 mt-2">v0.1.0</div>
       </div>
     </aside>
   );
