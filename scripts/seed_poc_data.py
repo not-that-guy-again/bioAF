@@ -19,6 +19,8 @@ Creates:
   - Activity feed entries spanning the last 2 weeks
   - User quotas
   - Platform config: compute_stack = kubernetes
+  - Phase 14: descriptive reference_genome on pipeline runs, SSH connect
+    audit entries, and SuperSeries project-experiment linkages
 
 Usage (from project root, with DATABASE_URL configured):
     python scripts/seed_poc_data.py
@@ -426,12 +428,12 @@ async def create_pipeline_runs(
     admin: User,
 ) -> list[PipelineRun]:
     run_configs = [
-        {"ref": "GRCh38", "aligner": "STARsolo", "hours_ago": 168, "status": "completed"},
-        {"ref": "GRCh38", "aligner": "STARsolo", "hours_ago": 120, "status": "completed"},
-        {"ref": "GRCm39", "aligner": "STARsolo", "hours_ago": 72, "status": "completed"},
-        {"ref": "GRCm39", "aligner": "CellRanger", "hours_ago": 24, "status": "completed"},
-        {"ref": "GRCh38", "aligner": "STARsolo", "hours_ago": 96, "status": "completed"},
-        {"ref": "GRCh38", "aligner": "Salmon/Alevin", "hours_ago": 48, "status": "completed"},
+        {"ref": "GRCh38 release-104", "aligner": "STARsolo", "hours_ago": 168, "status": "completed"},
+        {"ref": "GRCh38 release-104", "aligner": "STARsolo", "hours_ago": 120, "status": "completed"},
+        {"ref": "GRCm39 release-M33", "aligner": "STARsolo", "hours_ago": 72, "status": "completed"},
+        {"ref": "GRCm39 release-M33", "aligner": "CellRanger", "hours_ago": 24, "status": "completed"},
+        {"ref": "GRCh38 release-104", "aligner": "STARsolo", "hours_ago": 96, "status": "completed"},
+        {"ref": "GRCh38 release-104", "aligner": "Salmon/Alevin", "hours_ago": 48, "status": "completed"},
     ]
 
     runs = []
@@ -1310,10 +1312,39 @@ async def create_audit_entries(
                 previous_value_json={"status": "running"},
             ))
 
+    # Phase 14: SSH connection audit entries for pipeline runs
+    ssh_scenarios = [
+        {"run_idx": 0, "user": comp_bio, "outcome": "success",
+         "details": {"source_ip": "10.0.2.15", "ssh_user": "bioaf-runner",
+                     "session_duration_sec": 1842}},
+        {"run_idx": 1, "user": comp_bio, "outcome": "success",
+         "details": {"source_ip": "10.0.2.15", "ssh_user": "bioaf-runner",
+                     "session_duration_sec": 923}},
+        {"run_idx": 2, "user": admin, "outcome": "success",
+         "details": {"source_ip": "10.0.1.10", "ssh_user": "bioaf-admin",
+                     "session_duration_sec": 305}},
+        {"run_idx": 0, "user": admin, "outcome": "rejected",
+         "details": {"source_ip": "192.168.99.42", "ssh_user": "unknown",
+                     "reason": "unauthorized_key"}},
+    ]
+    for scenario in ssh_scenarios:
+        if scenario["run_idx"] < len(runs):
+            run = runs[scenario["run_idx"]]
+            entries.append(AuditLog(
+                user_id=scenario["user"].id,
+                entity_type="pipeline_run",
+                entity_id=run.id,
+                action="connect",
+                details_json={
+                    "outcome": scenario["outcome"],
+                    **scenario["details"],
+                },
+            ))
+
     for entry in entries:
         session.add(entry)
     await session.flush()
-    print(f"Created {len(entries)} audit log entries.")
+    print(f"Created {len(entries)} audit log entries (incl. {len(ssh_scenarios)} SSH connect events).")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1538,6 +1569,20 @@ async def main() -> None:
                 run.project_id = project.id
             await session.flush()
             print(f"Linked {min(len(runs), 4)} pipeline runs to project '{project.name}'.")
+
+        # Phase 14: Link experiments to the project for SuperSeries export
+        # A SuperSeries groups multiple experiments (GEO Series) under one
+        # umbrella project.  We attach the first 3 experiments so the project
+        # can be exported as a SuperSeries with multiple sub-series.
+        linked_exp_count = 0
+        for exp in experiments[:3]:
+            exp.project_id = project.id
+            linked_exp_count += 1
+        await session.flush()
+        print(
+            f"Linked {linked_exp_count} experiments to project "
+            f"'{project.name}' for SuperSeries export."
+        )
 
         notebook_sessions = await create_notebook_sessions(
             session, experiments, project, org_id, comp_bio, admin
