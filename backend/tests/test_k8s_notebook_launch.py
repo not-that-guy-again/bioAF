@@ -5,7 +5,7 @@ DB updates, GCS sync init, terminate, status, namespace setup.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
 
@@ -58,7 +58,7 @@ class TestLaunchSession:
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
 
-        result = await adapter._k8s_launch_session(_session_spec())
+        await adapter._k8s_launch_session(_session_spec())
 
         mock_core.create_namespaced_pod.assert_called_once()
         pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]

@@ -1,7 +1,6 @@
 """Tests for Phase 22 migration: notebook session K8s columns and platform_config keys."""
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import text
 
 

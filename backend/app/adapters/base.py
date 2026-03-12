@@ -79,7 +79,7 @@ class NotebookProvider(ABC):
         """Start a Jupyter/RStudio session. Returns session_id and URL."""
 
     @abstractmethod
-    async def terminate_session(self, session_id: str) -> dict:
+    async def terminate_session(self, session_id: str, **kwargs) -> dict:  # type: ignore[override]
         """Stop a running session. Returns confirmation dict."""
 
     @abstractmethod

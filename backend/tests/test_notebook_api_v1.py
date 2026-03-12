@@ -55,9 +55,7 @@ async def bench_user(session, admin_user):
 
 @pytest_asyncio.fixture
 async def bench_token(bench_user) -> str:
-    return AuthService.create_token(
-        bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id
-    )
+    return AuthService.create_token(bench_user.id, bench_user.email, bench_user.role, bench_user.organization_id)
 
 
 @pytest_asyncio.fixture
@@ -144,9 +142,7 @@ async def test_launch_creates_session(client, comp_bio_token, platform_config_re
 
 # Test 24: Stop requires owner or admin
 @pytest.mark.asyncio
-async def test_stop_requires_owner_or_admin(
-    client, session, comp_bio_user, comp_bio_token, admin_user
-):
+async def test_stop_requires_owner_or_admin(client, session, comp_bio_user, comp_bio_token, admin_user):
     from app.models.notebook_session import NotebookSession
 
     # Create session owned by admin
@@ -173,9 +169,7 @@ async def test_stop_requires_owner_or_admin(
 
 # Test 25: Admin can stop any session
 @pytest.mark.asyncio
-async def test_stop_by_admin_succeeds(
-    client, session, comp_bio_user, admin_token
-):
+async def test_stop_by_admin_succeeds(client, session, comp_bio_user, admin_token):
     from app.models.notebook_session import NotebookSession
 
     ns = NotebookSession(
@@ -201,9 +195,7 @@ async def test_stop_by_admin_succeeds(
 
 # Test 26: List sessions filtered by role
 @pytest.mark.asyncio
-async def test_list_sessions_filtered_by_role(
-    client, session, comp_bio_user, comp_bio_token, admin_user, admin_token
-):
+async def test_list_sessions_filtered_by_role(client, session, comp_bio_user, comp_bio_token, admin_user, admin_token):
     from app.models.notebook_session import NotebookSession
 
     for uid in [admin_user.id, comp_bio_user.id]:
@@ -240,9 +232,7 @@ async def test_list_sessions_filtered_by_role(
 
 # Test 27: Sync triggers GCS sync
 @pytest.mark.asyncio
-async def test_sync_triggers_gcs_sync(
-    client, session, comp_bio_user, comp_bio_token
-):
+async def test_sync_triggers_gcs_sync(client, session, comp_bio_user, comp_bio_token):
     from app.models.notebook_session import NotebookSession
 
     ns = NotebookSession(
@@ -290,8 +280,6 @@ async def test_container_registry_config(client, session, admin_token):
     )
     assert response.status_code == 200
 
-    result = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'")
-    )
+    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))
     val = result.scalar_one_or_none()
     assert val == "us-central1-docker.pkg.dev/proj/repo/bioaf-scrna:v2"

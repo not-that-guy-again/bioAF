@@ -3,7 +3,7 @@
 import pytest
 import pytest_asyncio
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 
 from app.services.auth_service import AuthService
 
@@ -55,12 +55,8 @@ async def test_monitor_detects_idle_session(session, running_session):
     """Test 16: session with last_activity_at older than timeout is terminated."""
     from app.services.session_monitor import SessionMonitorService
 
-    with patch.object(
-        SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock
-    ) as mock_terminate:
-        await SessionMonitorService.poll_notebook_sessions(
-            session, idle_timeout_hours=4
-        )
+    with patch.object(SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock) as mock_terminate:
+        await SessionMonitorService.poll_notebook_sessions(session, idle_timeout_hours=4)
         mock_terminate.assert_called_once()
 
 
@@ -88,14 +84,11 @@ async def test_monitor_sends_warning_before_shutdown(session, comp_bio_user):
     await session.flush()
     await session.commit()
 
-    with patch.object(
-        SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock
-    ) as mock_terminate, patch.object(
-        SessionMonitorService, "_send_idle_warning", new_callable=AsyncMock
-    ) as mock_warn:
-        await SessionMonitorService.poll_notebook_sessions(
-            session, idle_timeout_hours=4, warning_minutes=15
-        )
+    with (
+        patch.object(SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock) as mock_terminate,
+        patch.object(SessionMonitorService, "_send_idle_warning", new_callable=AsyncMock) as mock_warn,
+    ):
+        await SessionMonitorService.poll_notebook_sessions(session, idle_timeout_hours=4, warning_minutes=15)
         mock_warn.assert_called_once()
         mock_terminate.assert_not_called()
 
@@ -123,14 +116,11 @@ async def test_monitor_ignores_active_session(session, comp_bio_user):
     await session.flush()
     await session.commit()
 
-    with patch.object(
-        SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock
-    ) as mock_terminate, patch.object(
-        SessionMonitorService, "_send_idle_warning", new_callable=AsyncMock
-    ) as mock_warn:
-        await SessionMonitorService.poll_notebook_sessions(
-            session, idle_timeout_hours=4
-        )
+    with (
+        patch.object(SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock) as mock_terminate,
+        patch.object(SessionMonitorService, "_send_idle_warning", new_callable=AsyncMock) as mock_warn,
+    ):
+        await SessionMonitorService.poll_notebook_sessions(session, idle_timeout_hours=4)
         mock_terminate.assert_not_called()
         mock_warn.assert_not_called()
 
@@ -158,10 +148,6 @@ async def test_monitor_handles_missing_metrics(session, comp_bio_user):
     await session.flush()
     await session.commit()
 
-    with patch.object(
-        SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock
-    ) as mock_terminate:
-        await SessionMonitorService.poll_notebook_sessions(
-            session, idle_timeout_hours=4
-        )
+    with patch.object(SessionMonitorService, "_terminate_idle_session", new_callable=AsyncMock) as mock_terminate:
+        await SessionMonitorService.poll_notebook_sessions(session, idle_timeout_hours=4)
         mock_terminate.assert_called_once()

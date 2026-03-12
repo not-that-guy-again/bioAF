@@ -78,9 +78,7 @@ class KubernetesNotebookProvider(NotebookProvider):
 
     # -- Namespace setup --
 
-    async def ensure_notebook_namespace(
-        self, namespace: str = DEFAULT_NOTEBOOK_NAMESPACE
-    ) -> None:
+    async def ensure_notebook_namespace(self, namespace: str = DEFAULT_NOTEBOOK_NAMESPACE) -> None:
         """Ensure the notebook namespace and service account exist."""
         from kubernetes import client
         from kubernetes.client.rest import ApiException
@@ -164,7 +162,8 @@ class KubernetesNotebookProvider(NotebookProvider):
         if session_type == "jupyter":
             container_port = 8888
             container_command = [
-                "jupyter", "lab",
+                "jupyter",
+                "lab",
                 "--ip=0.0.0.0",
                 f"--port={container_port}",
                 "--no-browser",
@@ -269,9 +268,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 "type": "ClusterIP",
             },
         }
-        core_client.create_namespaced_service(
-            namespace=namespace, body=service_manifest
-        )
+        core_client.create_namespaced_service(namespace=namespace, body=service_manifest)
         logger.info("Created service %s in %s", service_name, namespace)
 
         # Wait for pod readiness (poll up to 5 minutes)
@@ -279,9 +276,7 @@ class KubernetesNotebookProvider(NotebookProvider):
             pod = core_client.read_namespaced_pod(name=pod_name, namespace=namespace)
             if pod.status.phase == "Running":
                 conditions = pod.status.conditions or []
-                ready = any(
-                    c.type == "Ready" and c.status == "True" for c in conditions
-                )
+                ready = any(c.type == "Ready" and c.status == "True" for c in conditions)
                 if ready:
                     break
             if pod.status.phase in ("Failed", "Unknown"):
@@ -296,9 +291,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 }
             await asyncio.sleep(5)
 
-        access_url = (
-            f"http://{service_name}.{namespace}.svc.cluster.local:{container_port}"
-        )
+        access_url = f"http://{service_name}.{namespace}.svc.cluster.local:{container_port}"
 
         return {
             "session_id": session_id,
@@ -349,9 +342,7 @@ class KubernetesNotebookProvider(NotebookProvider):
         # Delete service
         service_name = f"bioaf-notebook-svc-{session_id}"
         try:
-            core_client.delete_namespaced_service(
-                name=service_name, namespace=namespace
-            )
+            core_client.delete_namespaced_service(name=service_name, namespace=namespace)
             logger.info("Deleted service %s", service_name)
         except Exception as e:
             logger.warning("Failed to delete service %s: %s", service_name, e)
@@ -383,9 +374,7 @@ class KubernetesNotebookProvider(NotebookProvider):
         phase = pod.status.phase
         if phase == "Running":
             conditions = pod.status.conditions or []
-            ready = any(
-                c.type == "Ready" and c.status == "True" for c in conditions
-            )
+            ready = any(c.type == "Ready" and c.status == "True" for c in conditions)
             status = "running" if ready else "starting"
         elif phase == "Pending":
             status = "starting"
@@ -403,9 +392,7 @@ class KubernetesNotebookProvider(NotebookProvider):
             "namespace": namespace,
         }
 
-    async def _k8s_list_sessions(
-        self, filters: dict | None = None
-    ) -> list[dict]:
+    async def _k8s_list_sessions(self, filters: dict | None = None) -> list[dict]:
         """List notebook pods in the namespace."""
         core_client = self._get_k8s_core_client()
         namespace = DEFAULT_NOTEBOOK_NAMESPACE
@@ -463,9 +450,7 @@ class KubernetesNotebookProvider(NotebookProvider):
     def _local_terminate_session(self, session_id: str) -> dict:
         if session_id in _local_sessions:
             _local_sessions[session_id]["status"] = "stopped"
-            _local_sessions[session_id]["stopped_at"] = datetime.now(
-                timezone.utc
-            ).isoformat()
+            _local_sessions[session_id]["stopped_at"] = datetime.now(timezone.utc).isoformat()
         logger.info("Local mode: terminated session %s", session_id)
         return {
             "session_id": session_id,
@@ -485,13 +470,7 @@ class KubernetesNotebookProvider(NotebookProvider):
         sessions = list(_local_sessions.values())
         if filters:
             if "status" in filters:
-                sessions = [
-                    s for s in sessions if s.get("status") == filters["status"]
-                ]
+                sessions = [s for s in sessions if s.get("status") == filters["status"]]
             if "session_type" in filters:
-                sessions = [
-                    s
-                    for s in sessions
-                    if s.get("session_type") == filters["session_type"]
-                ]
+                sessions = [s for s in sessions if s.get("session_type") == filters["session_type"]]
         return sessions

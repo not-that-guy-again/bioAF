@@ -121,16 +121,14 @@ async def launch_session(
     if compute_deployed != "true":
         raise HTTPException(
             400,
-            "Compute infrastructure is not deployed. "
-            "Deploy it from Infrastructure > Components first.",
+            "Compute infrastructure is not deployed. Deploy it from Infrastructure > Components first.",
         )
 
     scrna_image = await _get_config_value(session, "bioaf_scrna_image")
     if not scrna_image or scrna_image == "null":
         raise HTTPException(
             400,
-            "The notebook environment image has not been built yet. "
-            "Contact your administrator.",
+            "The notebook environment image has not been built yet. Contact your administrator.",
         )
 
     try:
@@ -180,9 +178,7 @@ async def stop_session(
         raise HTTPException(403, "Can only stop your own sessions")
 
     try:
-        notebook_session = await NotebookService.stop_session(
-            session, session_id, user_id
-        )
+        notebook_session = await NotebookService.stop_session(session, session_id, user_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

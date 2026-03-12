@@ -1,7 +1,7 @@
 """Tests for session persistence service (GCS home directory sync)."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 
 def test_generate_sync_in_command():
@@ -44,12 +44,15 @@ async def test_sync_session_executes_in_pod():
     mock_core_client = MagicMock()
     mock_stream = MagicMock(return_value="sync complete")
 
-    with patch(
-        "app.services.session_persistence._get_k8s_core_client",
-        return_value=mock_core_client,
-    ), patch(
-        "kubernetes.stream.stream",
-        mock_stream,
+    with (
+        patch(
+            "app.services.session_persistence._get_k8s_core_client",
+            return_value=mock_core_client,
+        ),
+        patch(
+            "kubernetes.stream.stream",
+            mock_stream,
+        ),
     ):
         await sync_session_to_gcs(
             pod_name="bioaf-notebook-99",

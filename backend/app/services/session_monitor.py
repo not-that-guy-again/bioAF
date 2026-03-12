@@ -27,11 +27,7 @@ class SessionMonitorService:
     ) -> None:
         """Check running notebook sessions for idle timeout."""
         try:
-            result = await session.execute(
-                select(NotebookSession).where(
-                    NotebookSession.status == "running"
-                )
-            )
+            result = await session.execute(select(NotebookSession).where(NotebookSession.status == "running"))
             running_sessions = list(result.scalars().all())
 
             now = datetime.now(timezone.utc)
@@ -46,13 +42,9 @@ class SessionMonitorService:
                 warning_threshold_hours = idle_timeout_hours - (warning_minutes / 60)
 
                 if idle_hours >= idle_timeout_hours:
-                    await SessionMonitorService._terminate_idle_session(
-                        session, ns
-                    )
+                    await SessionMonitorService._terminate_idle_session(session, ns)
                 elif idle_hours >= warning_threshold_hours:
-                    await SessionMonitorService._send_idle_warning(
-                        session, ns, idle_timeout_hours
-                    )
+                    await SessionMonitorService._send_idle_warning(session, ns, idle_timeout_hours)
 
             await session.flush()
             await session.commit()
@@ -67,9 +59,7 @@ class SessionMonitorService:
             logger.error("Session monitor poll failed: %s", e)
 
     @staticmethod
-    async def _terminate_idle_session(
-        session: AsyncSession, ns: NotebookSession
-    ) -> None:
+    async def _terminate_idle_session(session: AsyncSession, ns: NotebookSession) -> None:
         """Terminate an idle session and notify the owner."""
         from app.adapters.registry import get_notebook_adapter
 
@@ -84,9 +74,7 @@ class SessionMonitorService:
                 gcs_home_prefix=ns.gcs_home_prefix or "",
             )
         except Exception as e:
-            logger.warning(
-                "Failed to terminate idle session %d: %s", ns.id, e
-            )
+            logger.warning("Failed to terminate idle session %d: %s", ns.id, e)
 
         now = datetime.now(timezone.utc)
         ns.status = "stopped"
@@ -106,10 +94,7 @@ class SessionMonitorService:
                         "entity_type": "notebook_session",
                         "entity_id": ns.id,
                         "title": "Notebook session auto-stopped due to inactivity",
-                        "message": (
-                            f"Your {ns.session_type} session was stopped after "
-                            f"exceeding the idle timeout"
-                        ),
+                        "message": (f"Your {ns.session_type} session was stopped after exceeding the idle timeout"),
                         "summary": f"Notebook session {ns.id} auto-stopped",
                     },
                 )
