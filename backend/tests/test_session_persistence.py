@@ -42,14 +42,14 @@ async def test_sync_session_executes_in_pod():
     from app.services.session_persistence import sync_session_to_gcs
 
     mock_core_client = MagicMock()
-    mock_exec_fn = MagicMock(return_value="sync complete")
+    mock_stream = MagicMock(return_value="sync complete")
 
     with patch(
         "app.services.session_persistence._get_k8s_core_client",
         return_value=mock_core_client,
     ), patch(
-        "app.services.session_persistence.stream",
-        mock_exec_fn,
+        "kubernetes.stream.stream",
+        mock_stream,
     ):
         await sync_session_to_gcs(
             pod_name="bioaf-notebook-99",
@@ -58,8 +58,7 @@ async def test_sync_session_executes_in_pod():
             local_dir="/home/jovyan",
         )
 
-    mock_exec_fn.assert_called_once()
-    call_kwargs = mock_exec_fn.call_args
-    # Verify the pod name and namespace are correct
-    assert call_kwargs[1]["name"] == "bioaf-notebook-99" or "bioaf-notebook-99" in str(call_kwargs)
-    assert "bioaf-notebooks" in str(call_kwargs)
+    mock_stream.assert_called_once()
+    call_args_str = str(mock_stream.call_args)
+    assert "bioaf-notebook-99" in call_args_str
+    assert "bioaf-notebooks" in call_args_str
