@@ -524,6 +524,15 @@ async def process_ingest_event(
         },
     )
 
+    # Step 10: Evaluate pipeline triggers for cataloged files
+    if ingest_status == "cataloged" and event.file_id:
+        try:
+            from app.services.trigger_service import TriggerService
+
+            await TriggerService.evaluate_event_triggers(event, db)
+        except Exception:
+            logger.exception("Trigger evaluation failed for event %d", event.id)
+
     return event
 
 
