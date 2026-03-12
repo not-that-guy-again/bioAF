@@ -204,6 +204,19 @@ export default function PipelineRunDetailPage() {
             </div>
           )}
 
+          {/* K8s metadata */}
+          {run.k8s_job_name && (
+            <div className="bg-white rounded-lg shadow p-4 mb-6 flex gap-6" data-testid="k8s-metadata">
+              <div><span className="text-xs text-gray-500">K8s Job</span><p className="text-sm font-mono">{run.k8s_job_name}</p></div>
+              {run.k8s_pod_name && (
+                <div><span className="text-xs text-gray-500">Pod</span><p className="text-sm font-mono">{run.k8s_pod_name}</p></div>
+              )}
+              {run.k8s_namespace && (
+                <div><span className="text-xs text-gray-500">Namespace</span><p className="text-sm font-mono">{run.k8s_namespace}</p></div>
+              )}
+            </div>
+          )}
+
           {/* Tabs */}
           <div className="border-b border-gray-200 mb-6">
             <nav className="flex -mb-px space-x-8">

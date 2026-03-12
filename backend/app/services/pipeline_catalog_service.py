@@ -38,6 +38,15 @@ BUILTIN_PIPELINES = [
         "version": "1.12.0",
         "defaults_file": "nf-core-fetchngs.json",
     },
+    {
+        "pipeline_key": "bioaf-system-test",
+        "name": "bioAF System Test",
+        "description": "Verifies end-to-end pipeline execution: reads input files from GCS, processes them, writes output files to GCS.",
+        "source_type": "builtin",
+        "source_url": "",
+        "version": "1.0.0",
+        "defaults_file": "bioaf-system-test.json",
+    },
 ]
 
 DEFAULTS_DIR = Path(__file__).parent.parent.parent.parent / "scripts" / "pipelines" / "defaults"
