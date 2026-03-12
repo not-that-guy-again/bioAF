@@ -57,9 +57,9 @@ def test_foundation_outputs_tf_defines_state_bucket_name():
     assert "state_bucket_name" in content
 
 
-def test_storage_module_gitkeep_exists():
-    """terraform/modules/storage/.gitkeep must exist as a placeholder."""
-    assert (REPO_ROOT / "terraform" / "modules" / "storage" / ".gitkeep").exists()
+def test_storage_module_main_tf_exists():
+    """terraform/modules/storage/main.tf must exist (replaced .gitkeep in Phase 18)."""
+    assert (REPO_ROOT / "terraform" / "modules" / "storage" / "main.tf").exists()
 
 
 def test_compute_module_gitkeep_exists():

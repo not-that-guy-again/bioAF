@@ -41,6 +41,8 @@ export default function InfraComponentsPage() {
   const [tfStatus, setTfStatus] = useState<TerraformStatus | null>(null);
   const [runs, setRuns] = useState<TerraformRun[]>([]);
   const [showBootstrapModal, setShowBootstrapModal] = useState(false);
+  const [showStorageDeployModal, setShowStorageDeployModal] = useState(false);
+  const [storageDeployed, setStorageDeployed] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -48,6 +50,7 @@ export default function InfraComponentsPage() {
       return;
     }
     loadTerraformStatus();
+    loadStorageStatus();
   }, [router, refreshKey]);
 
   async function loadTerraformStatus() {
@@ -61,8 +64,24 @@ export default function InfraComponentsPage() {
     }
   }
 
+  async function loadStorageStatus() {
+    try {
+      const config = await api.get<Record<string, string>>("/api/v1/infrastructure/storage/buckets");
+      // If the request succeeds, storage is deployed
+      setStorageDeployed(true);
+    } catch {
+      setStorageDeployed(false);
+    }
+  }
+
   function handleBootstrapComplete() {
     setShowBootstrapModal(false);
+    setRefreshKey((k) => k + 1);
+  }
+
+  function handleStorageDeployComplete() {
+    setShowStorageDeployModal(false);
+    setStorageDeployed(true);
     setRefreshKey((k) => k + 1);
   }
 
@@ -89,7 +108,11 @@ export default function InfraComponentsPage() {
 
           <div className="mt-10">
             <h2 className="text-xl font-semibold mb-4">Storage</h2>
-            <StorageSection />
+            <StorageSection
+              storageDeployed={storageDeployed}
+              terraformInitialized={tfStatus?.terraform_initialized ?? false}
+              onDeploy={() => setShowStorageDeployModal(true)}
+            />
           </div>
 
           <div className="mt-10">
@@ -105,6 +128,15 @@ export default function InfraComponentsPage() {
           sseUrl="/api/v1/infrastructure/terraform/bootstrap"
           onComplete={handleBootstrapComplete}
           onClose={() => setShowBootstrapModal(false)}
+        />
+      )}
+
+      {showStorageDeployModal && (
+        <TerraformProgressModal
+          title="Deploy Storage Infrastructure"
+          sseUrl="/api/v1/infrastructure/storage/deploy"
+          onComplete={handleStorageDeployComplete}
+          onClose={() => setShowStorageDeployModal(false)}
         />
       )}
     </div>

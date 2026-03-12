@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.api.dependencies import require_role
 from app.adapters.registry import get_compute_adapter, get_storage_adapter
-from app.models.organization import Organization
 from app.schemas.infrastructure import (
     InfraComputeStatusResponse,
     InfraComputeMetricsResponse,
@@ -17,8 +16,6 @@ from app.schemas.infrastructure import (
     BucketMetrics,
     ComponentDefinitionResponse,
     ComponentsListResponse,
-    StorageBucketInfo,
-    StorageBucketsResponse,
 )
 
 router = APIRouter(prefix="/api/v1/infrastructure", tags=["infrastructure"])
@@ -164,49 +161,5 @@ async def get_components(
     return ComponentsListResponse(compute_stack=compute_stack, components=components)
 
 
-# Bucket purpose descriptions keyed by bucket type
-_BUCKET_PURPOSES = {
-    "ingest": "Landing zone for incoming sequencing files. bioAF auto-detects and catalogs new files here.",
-    "raw": "Permanent storage for raw sequencing data after ingest.",
-    "working": "Intermediate pipeline outputs and working files.",
-    "results": "Final pipeline results and analysis outputs.",
-    "config-backups": "Automated backups of platform configuration and metadata.",
-}
-
-
-def _org_slug(org_name: str) -> str:
-    """Generate a URL-safe slug from an organization name."""
-    return org_name.lower().replace(" ", "-").replace("_", "-")
-
-
-@router.get("/storage/buckets", response_model=StorageBucketsResponse)
-async def get_storage_buckets(
-    current_user: dict = require_role("admin", "comp_bio"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Returns GCS bucket configuration for the current organization."""
-    org_id = current_user.get("org_id")
-    org_result = await session.execute(select(Organization).where(Organization.id == org_id))
-    org = org_result.scalar_one_or_none()
-    slug = _org_slug(org.name) if org else "demo"
-
-    storage_adapter = get_storage_adapter()
-    metrics = await storage_adapter.get_storage_metrics()
-    metrics_by_name = {b["name"]: b for b in metrics.get("buckets", [])}
-
-    bucket_types = ["ingest", "raw", "working", "results", "config-backups"]
-    buckets = []
-    for btype in bucket_types:
-        bucket_name = f"bioaf-{btype}-{slug}"
-        bmetrics = metrics_by_name.get(bucket_name, {})
-        buckets.append(
-            StorageBucketInfo(
-                name=bucket_name,
-                purpose=_BUCKET_PURPOSES.get(btype, ""),
-                is_ingest=(btype == "ingest"),
-                size_gb=bmetrics.get("size_gb", 0.0),
-                object_count=bmetrics.get("object_count", 0),
-            )
-        )
-
-    return StorageBucketsResponse(org_slug=slug, buckets=buckets)
+# NOTE: The /storage/buckets endpoint was moved to app/api/storage_deploy.py
+# in Phase 18 to support live GCS bucket metrics.
