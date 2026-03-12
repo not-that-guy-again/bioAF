@@ -541,3 +541,19 @@ def test_write_tfvars_defaults():
     tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
     assert tfvars["region"] == "us-central1"
     assert tfvars["state_bucket_name"] == "bioaf-tfstate-proj-123"
+
+
+def test_write_tfvars_empty_strings_use_defaults():
+    """_write_tfvars treats empty string values as missing and uses defaults."""
+    tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
+    config = {
+        "gcp_project_id": "proj-456",
+        "gcp_region": "",
+        "terraform_state_bucket": "",
+        "org_slug": "",
+    }
+    TerraformExecutor._write_tfvars(tmp, "foundation", config)
+
+    tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
+    assert tfvars["region"] == "us-central1"
+    assert tfvars["state_bucket_name"] == "bioaf-tfstate-proj-456"

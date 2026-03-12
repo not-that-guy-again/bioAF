@@ -434,11 +434,11 @@ class TerraformExecutor:
     @staticmethod
     def _write_tfvars(work_dir: Path, module_name: str, config: dict) -> None:
         """Write terraform.tfvars.json into work_dir from platform_config values."""
-        project_id = config.get("gcp_project_id", "")
-        region = config.get("gcp_region", "us-central1")
-        zone = config.get("gcp_zone", f"{region}-a")
-        org_slug = config.get("org_slug", "bioaf")
-        state_bucket = config.get("terraform_state_bucket", f"bioaf-tfstate-{project_id}")
+        project_id = config.get("gcp_project_id") or ""
+        region = config.get("gcp_region") or "us-central1"
+        zone = config.get("gcp_zone") or f"{region}-a"
+        org_slug = config.get("org_slug") or "bioaf"
+        state_bucket = config.get("terraform_state_bucket") or f"bioaf-tfstate-{project_id}"
 
         # Common variables shared by all modules
         tfvars: dict = {
