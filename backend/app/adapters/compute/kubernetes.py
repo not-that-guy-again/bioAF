@@ -174,6 +174,97 @@ class KubernetesComputeProvider(ComputeProvider):
             ],
         }
 
+    # -- K8s client helpers --
+
+    def _get_k8s_core_client(self):
+        """Get a Kubernetes CoreV1Api client. Tests mock this method."""
+        from kubernetes import client, config
+
+        config.load_incluster_config()
+        return client.CoreV1Api()
+
+    def _get_k8s_batch_client(self):
+        """Get a Kubernetes BatchV1Api client. Tests mock this method."""
+        from kubernetes import client, config
+
+        config.load_incluster_config()
+        return client.BatchV1Api()
+
+    def _get_k8s_rbac_client(self):
+        """Get a Kubernetes RbacAuthorizationV1Api client. Tests mock this method."""
+        from kubernetes import client, config
+
+        config.load_incluster_config()
+        return client.RbacAuthorizationV1Api()
+
+    _namespace_ready = False
+
+    async def ensure_pipeline_namespace(self, namespace: str = "bioaf-pipelines") -> None:
+        """Ensure the pipeline namespace, service account, and role binding exist."""
+        from kubernetes import client
+        from kubernetes.client.rest import ApiException
+
+        core_v1 = self._get_k8s_core_client()
+        rbac_v1 = self._get_k8s_rbac_client()
+
+        # Check if namespace already exists
+        try:
+            core_v1.read_namespace(name=namespace)
+            logger.info("Namespace %s already exists, skipping setup", namespace)
+            self._namespace_ready = True
+            return
+        except ApiException as e:
+            if e.status != 404:
+                raise
+
+        # Create namespace
+        core_v1.create_namespace(
+            body=client.V1Namespace(
+                metadata=client.V1ObjectMeta(
+                    name=namespace,
+                    labels={"bioaf.io/managed": "true"},
+                )
+            )
+        )
+        logger.info("Created namespace %s", namespace)
+
+        # Create service account
+        core_v1.create_namespaced_service_account(
+            namespace=namespace,
+            body=client.V1ServiceAccount(
+                metadata=client.V1ObjectMeta(
+                    name="bioaf-pipeline-runner",
+                    labels={"bioaf.io/managed": "true"},
+                )
+            ),
+        )
+        logger.info("Created service account bioaf-pipeline-runner in %s", namespace)
+
+        # Create role binding
+        rbac_v1.create_namespaced_role_binding(
+            namespace=namespace,
+            body=client.V1RoleBinding(
+                metadata=client.V1ObjectMeta(
+                    name="bioaf-pipeline-runner-binding",
+                    labels={"bioaf.io/managed": "true"},
+                ),
+                role_ref=client.V1RoleRef(
+                    api_group="rbac.authorization.k8s.io",
+                    kind="ClusterRole",
+                    name="edit",
+                ),
+                subjects=[
+                    client.RbacV1Subject(
+                        kind="ServiceAccount",
+                        name="bioaf-pipeline-runner",
+                        namespace=namespace,
+                    )
+                ],
+            ),
+        )
+        logger.info("Created role binding in %s", namespace)
+        self._namespace_ready = True
+
     # -- K8s API implementations (production) --
 
     _GKE_STATUS_MAP = {
