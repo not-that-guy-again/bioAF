@@ -6,7 +6,6 @@ and contain the expected resource definitions.
 
 from pathlib import Path
 
-import pytest
 
 # Project root is two levels above backend/
 REPO_ROOT = Path(__file__).parent.parent.parent

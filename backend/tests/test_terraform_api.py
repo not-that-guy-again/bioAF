@@ -12,7 +12,6 @@ Tests 17-25 from the spec:
 - 25: Plan 409 when run already in progress
 """
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,6 +23,7 @@ from app.services.terraform_executor import TerraformExecutor, TerraformProgress
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _seed_user_and_token(client, session, role="admin"):
     from app.models.organization import Organization

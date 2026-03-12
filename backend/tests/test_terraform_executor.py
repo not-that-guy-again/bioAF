@@ -10,13 +10,12 @@ Tests 1-12 from the spec:
 All subprocess calls are mocked. No real Terraform execution.
 """
 
-import asyncio
 import json
 import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import text
@@ -36,21 +35,26 @@ def _patch_work_dir():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_plan_output(adds: int = 1) -> str:
     """Fake streaming JSON from `terraform plan -json`."""
     lines = []
     for i in range(adds):
-        lines.append(json.dumps({
-            "type": "planned_change",
-            "change": {
-                "resource": {
-                    "resource_type": "google_storage_bucket",
-                    "resource_name": f"bucket_{i}",
-                    "addr": f"google_storage_bucket.bucket_{i}",
-                },
-                "action": "create",
-            },
-        }))
+        lines.append(
+            json.dumps(
+                {
+                    "type": "planned_change",
+                    "change": {
+                        "resource": {
+                            "resource_type": "google_storage_bucket",
+                            "resource_name": f"bucket_{i}",
+                            "addr": f"google_storage_bucket.bucket_{i}",
+                        },
+                        "action": "create",
+                    },
+                }
+            )
+        )
     return "\n".join(lines)
 
 
@@ -72,21 +76,29 @@ def _make_apply_output(n_resources: int = 1) -> str:
     """Fake streaming JSON from `terraform apply -json`."""
     lines = []
     for i in range(n_resources):
-        lines.append(json.dumps({
-            "type": "apply_complete",
-            "hook": {
-                "resource": {
-                    "addr": f"google_storage_bucket.bucket_{i}",
-                    "resource_type": "google_storage_bucket",
-                    "resource_name": f"bucket_{i}",
-                },
-            },
-        }))
-    lines.append(json.dumps({
-        "type": "apply_complete",
-        "@level": "info",
-        "@message": "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
-    }))
+        lines.append(
+            json.dumps(
+                {
+                    "type": "apply_complete",
+                    "hook": {
+                        "resource": {
+                            "addr": f"google_storage_bucket.bucket_{i}",
+                            "resource_type": "google_storage_bucket",
+                            "resource_name": f"bucket_{i}",
+                        },
+                    },
+                }
+            )
+        )
+    lines.append(
+        json.dumps(
+            {
+                "type": "apply_complete",
+                "@level": "info",
+                "@message": "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+            }
+        )
+    )
     return "\n".join(lines)
 
 
@@ -243,9 +255,7 @@ async def test_run_apply_yields_progress_events(session):
     events = []
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run_apply):
         with _patch_work_dir():
-            async for event in TerraformExecutor.run_apply(
-                session=session, run_id=plan_run.id, user_id=user_id
-            ):
+            async for event in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
                 events.append(event)
 
     assert len(events) > 0
@@ -285,9 +295,7 @@ async def test_run_apply_updates_resources_completed(session):
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply):
         with _patch_work_dir():
-            async for _ in TerraformExecutor.run_apply(
-                session=session, run_id=plan_run.id, user_id=user_id
-            ):
+            async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
                 pass
 
     await session.refresh(plan_run)
@@ -328,9 +336,7 @@ async def test_run_apply_handles_failure(session):
 
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply_fail):
         with _patch_work_dir():
-            async for _ in TerraformExecutor.run_apply(
-                session=session, run_id=plan_run.id, user_id=user_id
-            ):
+            async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
                 pass
 
     await session.refresh(plan_run)
@@ -359,9 +365,7 @@ async def test_concurrent_run_prevention(session):
     await session.commit()
 
     with pytest.raises(ValueError, match="in progress"):
-        await TerraformExecutor.run_plan(
-            session=session, user_id=user_id, module_name="foundation"
-        )
+        await TerraformExecutor.run_plan(session=session, user_id=user_id, module_name="foundation")
 
 
 # ---------------------------------------------------------------------------
@@ -394,9 +398,7 @@ async def test_stale_lock_recovery(session):
     # Should not raise - stale run gets cleared
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
         with _patch_work_dir():
-            run = await TerraformExecutor.run_plan(
-                session=session, user_id=user_id, module_name="foundation"
-            )
+            run = await TerraformExecutor.run_plan(session=session, user_id=user_id, module_name="foundation")
 
     assert run.id is not None
     assert run.status == "awaiting_confirmation"
@@ -414,9 +416,7 @@ async def test_bootstrap_requires_gcp_configured(session):
     await _seed_gcp_config(session, configured=False, initialized=False)
 
     with pytest.raises(ValueError, match="GCP"):
-        async for _ in TerraformExecutor.bootstrap_foundation(
-            session=session, user_id=user_id
-        ):
+        async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
             pass
 
 
@@ -432,9 +432,7 @@ async def test_bootstrap_requires_not_initialized(session):
     await _seed_gcp_config(session, configured=True, initialized=True)
 
     with pytest.raises(ValueError, match="already"):
-        async for _ in TerraformExecutor.bootstrap_foundation(
-            session=session, user_id=user_id
-        ):
+        async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
             pass
 
 
@@ -467,15 +465,11 @@ async def test_bootstrap_creates_state_bucket_key(session):
     with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
         with _patch_work_dir():
             events = []
-            async for event in TerraformExecutor.bootstrap_foundation(
-                session=session, user_id=user_id
-            ):
+            async for event in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
                 events.append(event)
 
     # Check platform_config updated
     row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'terraform_initialized'")
-        )
+        await session.execute(text("SELECT value FROM platform_config WHERE key = 'terraform_initialized'"))
     ).scalar()
     assert row == "true"

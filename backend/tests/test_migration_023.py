@@ -111,8 +111,7 @@ async def test_migration_platform_config_is_idempotent(session):
     count = (
         await session.execute(
             text(
-                "SELECT COUNT(*) FROM platform_config "
-                "WHERE key IN ('terraform_state_bucket', 'terraform_initialized')"
+                "SELECT COUNT(*) FROM platform_config WHERE key IN ('terraform_state_bucket', 'terraform_initialized')"
             )
         )
     ).scalar()

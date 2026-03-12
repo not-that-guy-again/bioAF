@@ -90,9 +90,7 @@ class TerraformExecutor:
         config = await TerraformExecutor._read_gcp_config(session)
 
         try:
-            work_dir = await asyncio.to_thread(
-                TerraformExecutor._prepare_work_dir, module_name
-            )
+            work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
 
             env, cleanup = await GCPCredentialInjector.build_env(config)
             try:
@@ -151,9 +149,7 @@ class TerraformExecutor:
 
         env, cleanup = await GCPCredentialInjector.build_env(config)
         try:
-            work_dir = await asyncio.to_thread(
-                TerraformExecutor._prepare_work_dir, module_name
-            )
+            work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
 
             apply_result = await asyncio.to_thread(
                 subprocess.run,
@@ -261,14 +257,10 @@ class TerraformExecutor:
         config = await TerraformExecutor._read_gcp_config(session)
 
         if config.get("gcp_credentials_configured", "false") != "true":
-            raise ValueError(
-                "GCP credentials are not configured. Configure GCP settings before bootstrapping."
-            )
+            raise ValueError("GCP credentials are not configured. Configure GCP settings before bootstrapping.")
 
         if config.get("terraform_initialized", "false") == "true":
-            raise ValueError(
-                "Infrastructure is already initialized. terraform_initialized = true."
-            )
+            raise ValueError("Infrastructure is already initialized. terraform_initialized = true.")
 
         yield TerraformProgressEvent(
             event_type="progress",
@@ -279,9 +271,7 @@ class TerraformExecutor:
         work_dir = None
 
         try:
-            work_dir = await asyncio.to_thread(
-                TerraformExecutor._prepare_work_dir, "foundation"
-            )
+            work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, "foundation")
 
             yield TerraformProgressEvent(event_type="progress", message="Running terraform init...")
             await TerraformExecutor._run_init(work_dir, env, config, local_backend=True)
@@ -411,10 +401,22 @@ class TerraformExecutor:
     def _base_env() -> dict:
         """Return a minimal safe environment for subprocesses."""
         import os
-        base = {k: v for k, v in os.environ.items() if k in (
-            "PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP",
-            "SSL_CERT_FILE", "CURL_CA_BUNDLE",
-        )}
+
+        base = {
+            k: v
+            for k, v in os.environ.items()
+            if k
+            in (
+                "PATH",
+                "HOME",
+                "USER",
+                "TMPDIR",
+                "TEMP",
+                "TMP",
+                "SSL_CERT_FILE",
+                "CURL_CA_BUNDLE",
+            )
+        }
         base["TF_IN_AUTOMATION"] = "1"
         return base
 
@@ -498,9 +500,7 @@ class TerraformExecutor:
         ]
         rows = (
             await session.execute(
-                text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(
-                    keys=keys
-                )
+                text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=keys)
             )
         ).fetchall()
         return {r[0]: r[1] for r in rows}
@@ -524,11 +524,7 @@ class TerraformExecutor:
     @staticmethod
     async def _check_no_active_run(session: AsyncSession) -> None:
         """Raise ValueError if any run is currently in progress."""
-        result = await session.execute(
-            select(TerraformRun).where(
-                TerraformRun.status.in_(["planning", "applying"])
-            )
-        )
+        result = await session.execute(select(TerraformRun).where(TerraformRun.status.in_(["planning", "applying"])))
         active = result.scalar_one_or_none()
         if active:
             raise ValueError(f"Another Terraform operation is in progress (run {active.id})")

@@ -7,9 +7,7 @@ Tests 8-9 from the spec:
 """
 
 import json
-import os
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -19,6 +17,7 @@ from app.services.credential_injector import GCPCredentialInjector
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _vm_default_config() -> dict:
     return {
@@ -39,12 +38,14 @@ def _sa_key_config(key_json: str) -> dict:
     }
 
 
-FAKE_SA_KEY = json.dumps({
-    "type": "service_account",
-    "project_id": "my-project",
-    "private_key_id": "abc123",
-    "client_email": "bioaf@my-project.iam.gserviceaccount.com",
-})
+FAKE_SA_KEY = json.dumps(
+    {
+        "type": "service_account",
+        "project_id": "my-project",
+        "private_key_id": "abc123",
+        "client_email": "bioaf@my-project.iam.gserviceaccount.com",
+    }
+)
 
 
 # ---------------------------------------------------------------------------

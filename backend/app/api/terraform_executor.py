@@ -212,9 +212,7 @@ async def get_terraform_status(
     config = {r[0]: r[1] for r in rows}
 
     # Check for active run
-    active_result = await session.execute(
-        select(TerraformRun).where(TerraformRun.status.in_(["planning", "applying"]))
-    )
+    active_result = await session.execute(select(TerraformRun).where(TerraformRun.status.in_(["planning", "applying"])))
     active_run = active_result.scalar_one_or_none()
 
     return TerraformStatusResponse(
@@ -232,9 +230,7 @@ async def list_runs(
     session: AsyncSession = Depends(get_session),
 ) -> TerraformRunListResponse:
     """Return the last 10 Terraform runs."""
-    result = await session.execute(
-        select(TerraformRun).order_by(TerraformRun.started_at.desc()).limit(10)
-    )
+    result = await session.execute(select(TerraformRun).order_by(TerraformRun.started_at.desc()).limit(10))
     runs = list(result.scalars().all())
     return TerraformRunListResponse(
         runs=[TerraformRunDetail.model_validate(r) for r in runs],

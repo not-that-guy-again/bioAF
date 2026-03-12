@@ -5,8 +5,6 @@ resource_changes[] with change.actions arrays, distinct from the streaming
 JSON produced by `terraform plan -json`.
 """
 
-import pytest
-
 from app.services.plan_parser import TerraformPlanParser
 
 
@@ -176,9 +174,7 @@ def test_parse_gcs_bucket_description():
     """GCS bucket resources get a user-friendly description."""
     result = TerraformPlanParser.parse(CREATES_ONLY_PLAN_JSON)
 
-    bucket_resource = next(
-        r for r in result["resources"] if r["type"] == "google_storage_bucket"
-    )
+    bucket_resource = next(r for r in result["resources"] if r["type"] == "google_storage_bucket")
     assert "GCS bucket" in bucket_resource["description"] or "bucket" in bucket_resource["description"].lower()
 
 

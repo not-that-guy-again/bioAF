@@ -54,8 +54,7 @@ class GCPCredentialInjector:
             sa_key = config.get("gcp_service_account_key")
             if not sa_key:
                 raise ValueError(
-                    "gcp_credential_source is 'service_account_key' but no "
-                    "service_account_key value found in config"
+                    "gcp_credential_source is 'service_account_key' but no service_account_key value found in config"
                 )
 
             # Write key to a named temp file
