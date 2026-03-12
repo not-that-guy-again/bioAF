@@ -1,6 +1,7 @@
 """Phase 19 - Stack deployment service.
 
 Orchestrates full stack deployment (storage + compute) and teardown.
+Provides cluster status via GKE API.
 """
 
 from __future__ import annotations
@@ -8,12 +9,149 @@ from __future__ import annotations
 import logging
 from typing import AsyncGenerator
 
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.terraform_executor import TerraformExecutor, TerraformProgressEvent
 
 logger = logging.getLogger("bioaf.stack_deployment")
+
+
+# -----------------------------------------------------------------------
+# Pydantic models for cluster status
+# -----------------------------------------------------------------------
+
+# GKE cluster status enum mapping
+_GKE_STATUS_MAP = {
+    0: "STATUS_UNSPECIFIED",
+    1: "PROVISIONING",
+    2: "RUNNING",
+    3: "RECONCILING",
+    4: "STOPPING",
+    5: "ERROR",
+    6: "DEGRADED",
+}
+
+
+class NodePoolStatus(BaseModel):
+    name: str
+    machine_type: str
+    min_nodes: int
+    max_nodes: int
+    current_nodes: int
+    spot: bool
+    status: str
+
+
+class ClusterInfo(BaseModel):
+    cluster_name: str
+    status: str
+    node_count: int
+    pipeline_pool: NodePoolStatus
+    interactive_pool: NodePoolStatus
+
+
+class StackStatus(BaseModel):
+    compute_stack: str | None
+    compute_deployed: bool
+    storage_deployed: bool
+    cluster: ClusterInfo | None = None
+
+
+def _get_gke_client():
+    """Get a GKE ClusterManager client. Tests mock this function."""
+    from google.cloud import container_v1
+
+    return container_v1.ClusterManagerClient()
+
+
+async def get_cluster_status(session: AsyncSession) -> StackStatus:
+    """Get the current stack and cluster status.
+
+    If compute is deployed, queries the GKE API for live cluster info.
+    """
+    compute_deployed = await _read_config(session, "compute_deployed")
+    compute_stack_val = await _read_config(session, "compute_stack")
+    storage_deployed = await _read_config(session, "storage_deployed")
+
+    is_deployed = compute_deployed == "true"
+    stack = compute_stack_val if compute_stack_val != "null" else None
+    storage = storage_deployed == "true"
+
+    if not is_deployed:
+        return StackStatus(
+            compute_stack=stack,
+            compute_deployed=False,
+            storage_deployed=storage,
+            cluster=None,
+        )
+
+    # Query GKE API for cluster details
+    cluster_name = await _read_config(session, "gke_cluster_name")
+    project_id = await _read_config(session, "gcp_project_id")
+    zone = await _read_config(session, "gcp_zone")
+
+    try:
+        client = _get_gke_client()
+        cluster = client.get_cluster(
+            name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}"
+        )
+
+        pipeline_pool = None
+        interactive_pool = None
+
+        for pool in cluster.node_pools:
+            pool_status = _GKE_STATUS_MAP.get(pool.status, "UNKNOWN")
+            pool_info = NodePoolStatus(
+                name=pool.name,
+                machine_type=pool.config.machine_type,
+                min_nodes=pool.autoscaling.min_node_count,
+                max_nodes=pool.autoscaling.max_node_count,
+                current_nodes=pool.initial_node_count,
+                spot=pool.config.spot,
+                status=pool_status,
+            )
+            if "pipeline" in pool.name:
+                pipeline_pool = pool_info
+            elif "interactive" in pool.name:
+                interactive_pool = pool_info
+
+        # Fallback if pools not found
+        if not pipeline_pool:
+            pipeline_pool = NodePoolStatus(
+                name="bioaf-pipelines", machine_type="unknown",
+                min_nodes=0, max_nodes=0, current_nodes=0, spot=False, status="UNKNOWN",
+            )
+        if not interactive_pool:
+            interactive_pool = NodePoolStatus(
+                name="bioaf-interactive", machine_type="unknown",
+                min_nodes=0, max_nodes=0, current_nodes=0, spot=False, status="UNKNOWN",
+            )
+
+        cluster_info = ClusterInfo(
+            cluster_name=cluster.name,
+            status=_GKE_STATUS_MAP.get(cluster.status, "UNKNOWN"),
+            node_count=cluster.current_node_count,
+            pipeline_pool=pipeline_pool,
+            interactive_pool=interactive_pool,
+        )
+
+        return StackStatus(
+            compute_stack=stack,
+            compute_deployed=True,
+            storage_deployed=storage,
+            cluster=cluster_info,
+        )
+
+    except Exception as exc:
+        logger.error("Failed to query GKE cluster status: %s", exc)
+        return StackStatus(
+            compute_stack=stack,
+            compute_deployed=True,
+            storage_deployed=storage,
+            cluster=None,
+        )
 
 
 async def _read_config(session: AsyncSession, key: str) -> str:
