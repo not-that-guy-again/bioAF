@@ -4,17 +4,33 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 
-interface BucketInfo {
-  name: string;
+interface BucketMetrics {
+  bucket_name: string;
   purpose: string;
-  is_ingest: boolean;
-  size_gb: number;
+  size_bytes: number;
   object_count: number;
+  storage_class: string;
+  versioning_enabled: boolean;
+  lifecycle_rules: string[];
+  created_at: string | null;
 }
 
-interface StorageBucketsResponse {
-  org_slug: string;
-  buckets: BucketInfo[];
+interface BucketMetricsResponse {
+  buckets: BucketMetrics[];
+}
+
+interface StorageSectionProps {
+  storageDeployed: boolean;
+  terraformInitialized: boolean;
+  onDeploy: () => void;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(value < 10 ? 2 : 1)} ${units[i]}`;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -38,21 +54,37 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function IngestGuidancePanel({ bucket }: { bucket: BucketInfo }) {
-  const gsUri = `gs://${bucket.name}/`;
+function IngestGuidancePanel({ bucket }: { bucket: BucketMetrics }) {
+  const gsUri = `gs://${bucket.bucket_name}/`;
   const gsutilCmd = `gsutil cp your_file.fastq.gz ${gsUri}`;
 
   return (
     <div className="mt-3 p-3 bg-teal-50 border border-teal-200 rounded text-sm space-y-2">
-      <p className="text-teal-800 font-medium text-xs uppercase tracking-wide">Upload Files</p>
+      <p className="text-teal-800 font-medium text-xs uppercase tracking-wide">
+        How to send data to bioAF
+      </p>
+      <p className="text-xs text-teal-700">
+        Upload files to this GCS bucket. bioAF automatically detects new files,
+        parses their filenames, and catalogs them.
+      </p>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-600">Bucket:</span>
+        <code className="text-xs bg-white border border-teal-200 rounded px-2 py-1 font-mono text-gray-800">
+          {bucket.bucket_name}
+        </code>
+        <CopyButton text={bucket.bucket_name} />
+      </div>
       <div className="flex items-center gap-2">
         <code className="flex-1 text-xs bg-white border border-teal-200 rounded px-2 py-1 font-mono text-gray-800 truncate">
           {gsutilCmd}
         </code>
-        <CopyButton text={gsUri} />
+        <CopyButton text={gsutilCmd} />
       </div>
       <div className="flex gap-4 text-xs text-teal-700">
-        <Link href="/settings/naming-profiles" className="underline hover:text-teal-900">
+        <Link
+          href="/settings/naming-profiles"
+          className="underline hover:text-teal-900"
+        >
           Configure naming profiles
         </Link>
         <Link href="/data/browser" className="underline hover:text-teal-900">
@@ -63,49 +95,120 @@ function IngestGuidancePanel({ bucket }: { bucket: BucketInfo }) {
   );
 }
 
-function BucketCard({ bucket }: { bucket: BucketInfo }) {
-  const isIngest = bucket.is_ingest;
+function BucketCard({ bucket }: { bucket: BucketMetrics }) {
+  const isIngest = bucket.purpose === "ingest";
   const cardClass = isIngest
     ? "bg-white rounded-lg border-2 border-teal-400 p-4 shadow-sm"
     : "bg-white rounded-lg border border-gray-200 p-4 shadow-sm";
 
   return (
-    <div data-testid={`bucket-card-${bucket.name}`} className={cardClass}>
+    <div
+      data-testid={`bucket-card-${bucket.bucket_name}`}
+      className={cardClass}
+    >
       <div className="flex items-start justify-between mb-1">
-        <h3 className="font-mono text-sm font-semibold text-gray-800">{bucket.name}</h3>
+        <h3 className="font-mono text-sm font-semibold text-gray-800">
+          {bucket.bucket_name}
+        </h3>
         {isIngest && (
           <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">
             Ingest
           </span>
         )}
       </div>
-      <p className="text-xs text-gray-500 mb-2">{bucket.purpose}</p>
+      <p className="text-xs text-gray-500 mb-2 capitalize">
+        {bucket.purpose.replace("_", " ")}
+      </p>
       <div className="flex gap-4 text-xs text-gray-400">
-        <span>{bucket.size_gb.toFixed(2)} GB</span>
+        <span>{formatBytes(bucket.size_bytes)}</span>
         <span>{bucket.object_count} objects</span>
+        <span>{bucket.storage_class}</span>
       </div>
+      {bucket.lifecycle_rules.length > 0 && (
+        <div className="mt-1 text-xs text-gray-400">
+          {bucket.lifecycle_rules.map((rule, i) => (
+            <span key={i} className="block">
+              {rule}
+            </span>
+          ))}
+        </div>
+      )}
       {isIngest && <IngestGuidancePanel bucket={bucket} />}
     </div>
   );
 }
 
-export function StorageSection() {
-  const [data, setData] = useState<StorageBucketsResponse | null>(null);
+function DeployStorageCard({
+  terraformInitialized,
+  onDeploy,
+}: {
+  terraformInitialized: boolean;
+  onDeploy: () => void;
+}) {
+  return (
+    <div className="bg-white rounded-lg border-2 border-dashed border-gray-300 p-6 text-center">
+      <h3 className="text-lg font-semibold text-gray-700 mb-2">
+        Storage Infrastructure
+      </h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Storage infrastructure has not been deployed. Deploy GCS buckets to
+        enable file storage.
+      </p>
+      {!terraformInitialized && (
+        <p className="text-xs text-amber-600 mb-3">
+          Terraform must be initialized before deploying storage.{" "}
+          <Link
+            href="/infrastructure/components"
+            className="underline hover:text-amber-800"
+          >
+            Run bootstrap first
+          </Link>
+          .
+        </p>
+      )}
+      <button
+        onClick={onDeploy}
+        disabled={!terraformInitialized}
+        className="px-4 py-2 bg-bioaf-600 text-white rounded-md text-sm hover:bg-bioaf-700 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Deploy Storage
+      </button>
+    </div>
+  );
+}
+
+export function StorageSection({
+  storageDeployed,
+  terraformInitialized,
+  onDeploy,
+}: StorageSectionProps) {
+  const [buckets, setBuckets] = useState<BucketMetrics[]>([]);
 
   useEffect(() => {
-    api
-      .get<StorageBucketsResponse>("/api/v1/infrastructure/storage/buckets")
-      .then(setData)
-      .catch(() => {});
-  }, []);
+    if (!storageDeployed) return;
 
-  if (!data) return null;
+    api
+      .get<BucketMetricsResponse>("/api/v1/infrastructure/storage/buckets")
+      .then((data) => setBuckets(data.buckets))
+      .catch(() => {});
+  }, [storageDeployed]);
+
+  if (!storageDeployed) {
+    return (
+      <DeployStorageCard
+        terraformInitialized={terraformInitialized}
+        onDeploy={onDeploy}
+      />
+    );
+  }
+
+  if (buckets.length === 0) return null;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data.buckets.map((bucket) => (
-          <BucketCard key={bucket.name} bucket={bucket} />
+        {buckets.map((bucket) => (
+          <BucketCard key={bucket.bucket_name} bucket={bucket} />
         ))}
       </div>
     </div>

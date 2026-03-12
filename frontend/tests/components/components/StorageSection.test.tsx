@@ -111,7 +111,8 @@ describe("StorageSection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("bioaf-ingest-demo")).toBeInTheDocument();
+      // Ingest bucket name appears multiple times (heading + guidance panel)
+      expect(screen.getAllByText("bioaf-ingest-demo").length).toBeGreaterThan(0);
       expect(screen.getByText("bioaf-raw-demo")).toBeInTheDocument();
       expect(screen.getByText("bioaf-working-demo")).toBeInTheDocument();
       expect(screen.getByText("bioaf-results-demo")).toBeInTheDocument();
@@ -188,8 +189,8 @@ describe("StorageSection", () => {
     await waitFor(() => {
       expect(screen.getByText(/gsutil cp/)).toBeInTheDocument();
       expect(
-        screen.getByText(/bioaf-ingest-demo/)
-      ).toBeInTheDocument();
+        screen.getAllByText(/bioaf-ingest-demo/).length
+      ).toBeGreaterThan(0);
     });
 
     // Should have copy buttons
