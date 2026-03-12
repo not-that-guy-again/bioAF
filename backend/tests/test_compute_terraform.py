@@ -7,7 +7,7 @@
 from pathlib import Path
 
 
-COMPUTE_MODULE_DIR = Path(__file__).resolve().parents[2] / "terraform" / "modules" / "compute"
+COMPUTE_MODULE_DIR = Path(__file__).resolve().parents[1] / "terraform" / "modules" / "compute"
 
 
 def test_compute_module_files_exist():

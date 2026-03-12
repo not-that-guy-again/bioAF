@@ -11,7 +11,7 @@ Tests:
 from pathlib import Path
 
 
-STORAGE_MODULE_DIR = Path(__file__).resolve().parent.parent.parent / "terraform" / "modules" / "storage"
+STORAGE_MODULE_DIR = Path(__file__).resolve().parent.parent / "terraform" / "modules" / "storage"
 
 
 def test_storage_module_files_exist():
