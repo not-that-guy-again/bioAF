@@ -6,9 +6,10 @@ entities, and catalogs files in the database.
 """
 
 import asyncio
+import logging
 from pathlib import PurePosixPath
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.experiment import Experiment
@@ -27,6 +28,8 @@ from app.services.event_types import (
 )
 from app.services.naming_profile_parser import match_filename, resolve_entities
 from app.services.naming_profile_service import NamingProfileService
+
+logger = logging.getLogger("bioaf.ingest_service")
 
 # File type mapping by extension
 FILE_TYPE_MAP = {
@@ -205,6 +208,53 @@ async def resolve_or_create_sample(
     return sample.id
 
 
+async def copy_to_raw_bucket(
+    source_bucket: str,
+    source_path: str,
+    raw_bucket: str,
+    destination_prefix: str,
+    filename: str,
+) -> str:
+    """Copy a file from the ingest bucket to the raw bucket.
+
+    Returns the destination GCS URI.
+    """
+    from app.services.gcs_storage import GcsStorageService
+
+    source_uri = f"gs://{source_bucket}/{source_path}"
+    destination_uri = f"gs://{raw_bucket}/{destination_prefix}{filename}"
+
+    await GcsStorageService.move_file(source_uri, destination_uri)
+    return destination_uri
+
+
+async def cleanup_ingest_file(
+    source_bucket: str,
+    source_path: str,
+    policy: str,
+) -> None:
+    """Apply the cleanup policy to the ingest bucket file.
+
+    With delete_after_copy, delete the object immediately.
+    With retain_* policies, leave it in place.
+    """
+    if policy == "delete_after_copy":
+        from google.cloud import storage
+
+        client = storage.Client()
+        bucket = client.get_bucket(source_bucket)
+        blob = bucket.blob(source_path)
+        blob.delete()
+        logger.info("Deleted ingest file gs://%s/%s", source_bucket, source_path)
+    else:
+        logger.info(
+            "Retaining ingest file gs://%s/%s (policy=%s)",
+            source_bucket,
+            source_path,
+            policy,
+        )
+
+
 async def process_ingest_event(
     filename: str,
     source_bucket: str,
@@ -214,6 +264,7 @@ async def process_ingest_event(
     user_id: int | None = None,
     file_size_bytes: int | None = None,
     content_md5: str | None = None,
+    ingest_source: str = "simulate",
 ) -> IngestEvent:
     """Main ingest pipeline orchestrator.
 
@@ -331,13 +382,41 @@ async def process_ingest_event(
         md5_checksum=content_md5,
         file_type=file_type,
         project_id=resolved_project_id,
-        ingest_source="auto_ingest",
+        ingest_source=ingest_source,
         version=file_version,
         file_date=file_date,
         uploader_user_id=user_id,
     )
     db.add(file_record)
     await db.flush()
+
+    # Step 5b: Copy file to raw bucket (real GCS only)
+    if ingest_source == "auto_ingest":
+        config = await _read_ingest_config(db)
+        raw_bucket = config.get("raw_bucket_name", "")
+        if raw_bucket and raw_bucket != "null":
+            if resolved_experiment_id:
+                from app.services.gcs_storage import GcsStorageService
+
+                prefix = GcsStorageService.build_experiment_prefix(resolved_experiment_id)
+            else:
+                from app.services.gcs_storage import GcsStorageService
+
+                prefix = GcsStorageService.build_unlinked_prefix()
+
+            new_uri = await copy_to_raw_bucket(
+                source_bucket,
+                source_path,
+                raw_bucket,
+                prefix,
+                filename,
+            )
+            file_record.gcs_uri = new_uri
+            await db.flush()
+
+            # Apply cleanup policy
+            cleanup_policy = config.get("ingest_cleanup_policy", "delete_after_copy")
+            await cleanup_ingest_file(source_bucket, source_path, policy=cleanup_policy)
 
     # Step 6: Create file_parse_result
     parse_result_record = FileParseResult(
@@ -451,7 +530,29 @@ async def process_ingest_event(
         },
     )
 
+    # Step 10: Evaluate pipeline triggers for cataloged files
+    if ingest_status == "cataloged" and event.file_id:
+        try:
+            from app.services.trigger_service import TriggerService
+
+            await TriggerService.evaluate_event_triggers(event, db)
+        except Exception:
+            logger.exception("Trigger evaluation failed for event %d", event.id)
+
     return event
+
+
+async def _read_ingest_config(db: AsyncSession) -> dict[str, str]:
+    """Read ingest-related config from platform_config."""
+    keys = [
+        "raw_bucket_name",
+        "ingest_cleanup_policy",
+        "storage_deployed",
+    ]
+    rows = (
+        await db.execute(text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=keys))
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
 
 
 async def get_unclaimed_entities(org_id: int, db: AsyncSession) -> list[dict]:

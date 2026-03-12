@@ -89,6 +89,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_review_reminder_loop()))
     background_tasks.append(asyncio.create_task(_trigger_batch_expiry_loop()))
     background_tasks.append(asyncio.create_task(_budget_queue_processing_loop()))
+    background_tasks.append(asyncio.create_task(_pubsub_listener_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -367,6 +368,24 @@ async def _budget_queue_processing_loop():
             break
         except Exception as e:
             logger.error("Budget queue processing error: %s", e)
+
+
+async def _pubsub_listener_loop():
+    """Run the Pub/Sub listener for auto-ingest if enabled."""
+    from app.database import async_session_factory
+    from app.services.pubsub_listener import start_pubsub_listener_task
+
+    try:
+        async with async_session_factory() as session:
+            await start_pubsub_listener_task(session)
+    except asyncio.CancelledError:
+        from app.services.pubsub_listener import get_listener
+
+        listener = get_listener()
+        if listener:
+            listener.stop()
+    except Exception as e:
+        logger.error("Pub/Sub listener error: %s", e)
 
 
 app = FastAPI(
