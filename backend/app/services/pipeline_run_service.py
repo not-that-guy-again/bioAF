@@ -133,6 +133,8 @@ class PipelineRunService:
             run.status = "running"
             run.started_at = datetime.now(timezone.utc)
             run.slurm_job_id = job_result.get("job_id", "")
+            run.k8s_job_name = job_result.get("job_id", "")
+            run.k8s_namespace = job_result.get("namespace", "")
 
         except Exception as e:
             run.status = "failed"
@@ -329,10 +331,11 @@ class PipelineRunService:
         old_status = run.status
 
         # Cancel via the compute adapter
-        if run.slurm_job_id:
+        job_id = run.k8s_job_name or run.slurm_job_id
+        if job_id:
             try:
                 compute_adapter = get_compute_adapter()
-                await compute_adapter.cancel_job(run.slurm_job_id)
+                await compute_adapter.cancel_job(job_id)
             except Exception as e:
                 logger.warning("Failed to cancel run %d: %s", run_id, e)
 
