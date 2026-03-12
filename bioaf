@@ -160,9 +160,8 @@ cmd_start() {
     bold "=== Starting Services ==="
 
     for svc in db backend frontend nginx; do
-        echo -n "  Starting $svc..."
-        $DC up -d "$svc" > /dev/null 2>&1
-        green " up"
+        echo "Starting $svc..."
+        $DC up -d "$svc"
 
         if [ "$svc" = "db" ]; then
             wait_for_db
@@ -170,7 +169,7 @@ cmd_start() {
 
         # Give backend time to bind before starting frontend
         if [ "$svc" = "backend" ]; then
-            echo "  Waiting for backend to initialize..."
+            echo "Waiting for backend to initialize..."
             sleep 3
         fi
     done
@@ -184,9 +183,8 @@ cmd_stop() {
     bold "=== Stopping Services ==="
 
     for svc in nginx frontend backend db; do
-        echo -n "  Stopping $svc..."
-        $DC stop "$svc" > /dev/null 2>&1
-        green " stopped"
+        echo "Stopping $svc..."
+        $DC stop "$svc"
     done
 
     echo ""
