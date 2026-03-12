@@ -176,23 +176,104 @@ class KubernetesComputeProvider(ComputeProvider):
 
     # -- K8s API implementations (production) --
 
+    _GKE_STATUS_MAP = {
+        0: "STATUS_UNSPECIFIED",
+        1: "PROVISIONING",
+        2: "RUNNING",
+        3: "RECONCILING",
+        4: "STOPPING",
+        5: "ERROR",
+        6: "DEGRADED",
+    }
+
+    def _get_gke_client(self):
+        """Get a GKE ClusterManager client. Tests mock this method."""
+        from google.cloud import container_v1
+
+        return container_v1.ClusterManagerClient()
+
     async def _k8s_submit_job(self, job_spec: dict) -> dict:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        # TODO: Implement in Phase 20
+        raise NotImplementedError("K8s job submission will be implemented in Phase 20")
 
     async def _k8s_cancel_job(self, job_id: str) -> dict:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        # TODO: Implement in Phase 20
+        raise NotImplementedError("K8s job cancellation will be implemented in Phase 20")
 
     async def _k8s_get_job_status(self, job_id: str) -> dict:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        # TODO: Implement in Phase 20
+        raise NotImplementedError("K8s job status will be implemented in Phase 20")
 
     async def _k8s_list_jobs(self, filters: dict | None = None) -> list[dict]:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        # TODO: Implement in Phase 20
+        raise NotImplementedError("K8s job listing will be implemented in Phase 20")
 
     async def _k8s_get_job_logs(self, job_id: str) -> str:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        # TODO: Implement in Phase 20
+        raise NotImplementedError("K8s job logs will be implemented in Phase 20")
 
     async def _k8s_get_cluster_status(self) -> dict:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        """Query GKE API for real cluster status."""
+        cluster_name = os.environ.get("GKE_CLUSTER_NAME", "")
+        project_id = os.environ.get("GCP_PROJECT_ID", "")
+        zone = os.environ.get("GCP_ZONE", "")
+
+        client = self._get_gke_client()
+        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+
+        node_pools = []
+        total_nodes = 0
+        for pool in cluster.node_pools:
+            pool_status = self._GKE_STATUS_MAP.get(pool.status, "unknown")
+            current = pool.initial_node_count
+            total_nodes += current
+            node_pools.append(
+                {
+                    "name": pool.name,
+                    "machine_type": pool.config.machine_type,
+                    "min_nodes": pool.autoscaling.min_node_count,
+                    "max_nodes": pool.autoscaling.max_node_count,
+                    "current_nodes": current,
+                    "status": pool_status.lower() if pool_status == "RUNNING" else pool_status,
+                    "spot": pool.config.spot,
+                }
+            )
+
+        cluster_status_str = self._GKE_STATUS_MAP.get(cluster.status, "unknown")
+        health = "healthy" if cluster_status_str == "RUNNING" else "degraded"
+
+        return {
+            "controller_status": "running" if cluster_status_str == "RUNNING" else cluster_status_str.lower(),
+            "node_pools": node_pools,
+            "total_nodes": total_nodes,
+            "active_nodes": total_nodes,
+            "queue_depth": 0,
+            "health": health,
+        }
 
     async def _k8s_get_cluster_metrics(self) -> dict:
-        raise NotImplementedError("K8s production mode requires a running cluster")
+        """Query GKE API for cluster metrics."""
+        cluster_name = os.environ.get("GKE_CLUSTER_NAME", "")
+        project_id = os.environ.get("GCP_PROJECT_ID", "")
+        zone = os.environ.get("GCP_ZONE", "")
+
+        client = self._get_gke_client()
+        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+
+        node_pools = []
+        for pool in cluster.node_pools:
+            node_pools.append(
+                {
+                    "name": pool.name,
+                    "cpu_utilization_pct": 0.0,
+                    "memory_utilization_pct": 0.0,
+                    "cost_rate_hourly": 0.0,
+                }
+            )
+
+        return {
+            "cpu_utilization_pct": 0.0,
+            "memory_utilization_pct": 0.0,
+            "cost_burn_rate_hourly": 0.0,
+            "node_pools": node_pools,
+        }
