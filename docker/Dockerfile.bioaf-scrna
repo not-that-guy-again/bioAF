@@ -1,64 +1,47 @@
-# bioAF scRNA-seq base image
+# bioAF scRNA-seq notebook environment
 #
-# Provides a reproducible environment for single-cell RNA-seq pipelines
-# running on Kubernetes. Includes Nextflow, Scanpy, and common bioinformatics
-# tools pre-installed for pipeline execution on GKE node pools.
+# Provides Jupyter Lab, RStudio Server, and core scRNA-seq packages
+# (Python: scanpy, anndata, scvi-tools; R: Seurat, Bioconductor) for
+# interactive analysis on GKE notebook pods. Includes gsutil for GCS
+# home directory sync.
 #
 # Build:
 #   docker build -f docker/Dockerfile.bioaf-scrna -t bioaf-scrna:latest .
 #
-# Usage:
-#   Used as the base image for pipeline Jobs submitted by the BAL compute adapter.
-#   The KubernetesComputeProvider references this image when constructing Job specs.
+# Push to Artifact Registry:
+#   ./scripts/build-scrna-image.sh <registry_url>
 
-FROM python:3.11-slim AS base
+FROM jupyter/scipy-notebook:latest
 
-LABEL maintainer="bioAF <team@bioaf.io>"
-LABEL description="bioAF scRNA-seq pipeline base image"
+USER root
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    LANG=C.UTF-8
-
-# System dependencies for bioinformatics tools
+# System dependencies for R and HDF5
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    wget \
-    git \
-    procps \
-    openjdk-17-jre-headless \
-    libhdf5-dev \
-    libffi-dev \
+    libhdf5-dev libcurl4-openssl-dev libssl-dev libxml2-dev \
+    r-base r-base-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Nextflow
-ENV NXF_VER=24.04.0
-RUN curl -fsSL https://get.nextflow.io | bash \
-    && mv nextflow /usr/local/bin/ \
-    && chmod +x /usr/local/bin/nextflow
-
-# Python scientific stack for scRNA-seq
+# Python scRNA-seq packages
 RUN pip install --no-cache-dir \
-    scanpy==1.10.* \
-    anndata==0.10.* \
-    leidenalg==0.10.* \
-    scrublet==0.2.* \
-    scvi-tools==1.1.* \
-    cellxgene==1.1.* \
-    pandas>=2.0 \
-    numpy>=1.24 \
-    scipy>=1.11 \
-    matplotlib>=3.7 \
-    seaborn>=0.12 \
-    h5py>=3.9
+    scanpy anndata scvi-tools leidenalg \
+    pandas numpy matplotlib seaborn plotly \
+    umap-learn louvain bbknn scrublet \
+    google-cloud-storage
 
-# Working directory for pipeline execution
-WORKDIR /pipeline
+# R packages (core set for Seurat and Bioconductor)
+RUN R -e "install.packages(c('Seurat', 'ggplot2', 'tidyverse', 'pheatmap', 'devtools'), repos='https://cloud.r-project.org')"
+RUN R -e "if (!requireNamespace('BiocManager', quietly=TRUE)) install.packages('BiocManager', repos='https://cloud.r-project.org'); BiocManager::install(c('SingleCellExperiment', 'scater', 'scran'))"
 
-# Non-root user for pipeline execution
-RUN groupadd -r bioaf && useradd -r -g bioaf -d /pipeline bioaf \
-    && chown -R bioaf:bioaf /pipeline
-USER bioaf
+# RStudio Server
+RUN apt-get update && apt-get install -y --no-install-recommends gdebi-core wget \
+    && wget -q https://download2.rstudio.org/server/jammy/amd64/rstudio-server-2024.04.2-764-amd64.deb \
+    && gdebi -n rstudio-server-2024.04.2-764-amd64.deb \
+    && rm rstudio-server-*.deb \
+    && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["nextflow"]
-CMD ["run", "--help"]
+# gsutil for GCS home directory sync
+RUN pip install --no-cache-dir gsutil
+
+USER ${NB_UID}
+
+WORKDIR /home/jovyan
