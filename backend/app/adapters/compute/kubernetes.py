@@ -219,9 +219,7 @@ class KubernetesComputeProvider(ComputeProvider):
         zone = os.environ.get("GCP_ZONE", "")
 
         client = self._get_gke_client()
-        cluster = client.get_cluster(
-            name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}"
-        )
+        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
 
         node_pools = []
         total_nodes = 0
@@ -229,15 +227,17 @@ class KubernetesComputeProvider(ComputeProvider):
             pool_status = self._GKE_STATUS_MAP.get(pool.status, "unknown")
             current = pool.initial_node_count
             total_nodes += current
-            node_pools.append({
-                "name": pool.name,
-                "machine_type": pool.config.machine_type,
-                "min_nodes": pool.autoscaling.min_node_count,
-                "max_nodes": pool.autoscaling.max_node_count,
-                "current_nodes": current,
-                "status": pool_status.lower() if pool_status == "RUNNING" else pool_status,
-                "spot": pool.config.spot,
-            })
+            node_pools.append(
+                {
+                    "name": pool.name,
+                    "machine_type": pool.config.machine_type,
+                    "min_nodes": pool.autoscaling.min_node_count,
+                    "max_nodes": pool.autoscaling.max_node_count,
+                    "current_nodes": current,
+                    "status": pool_status.lower() if pool_status == "RUNNING" else pool_status,
+                    "spot": pool.config.spot,
+                }
+            )
 
         cluster_status_str = self._GKE_STATUS_MAP.get(cluster.status, "unknown")
         health = "healthy" if cluster_status_str == "RUNNING" else "degraded"
@@ -258,18 +258,18 @@ class KubernetesComputeProvider(ComputeProvider):
         zone = os.environ.get("GCP_ZONE", "")
 
         client = self._get_gke_client()
-        cluster = client.get_cluster(
-            name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}"
-        )
+        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
 
         node_pools = []
         for pool in cluster.node_pools:
-            node_pools.append({
-                "name": pool.name,
-                "cpu_utilization_pct": 0.0,
-                "memory_utilization_pct": 0.0,
-                "cost_rate_hourly": 0.0,
-            })
+            node_pools.append(
+                {
+                    "name": pool.name,
+                    "cpu_utilization_pct": 0.0,
+                    "memory_utilization_pct": 0.0,
+                    "cost_rate_hourly": 0.0,
+                }
+            )
 
         return {
             "cpu_utilization_pct": 0.0,

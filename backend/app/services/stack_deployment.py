@@ -94,9 +94,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
 
     try:
         client = _get_gke_client()
-        cluster = client.get_cluster(
-            name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}"
-        )
+        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
 
         pipeline_pool = None
         interactive_pool = None
@@ -120,13 +118,23 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
         # Fallback if pools not found
         if not pipeline_pool:
             pipeline_pool = NodePoolStatus(
-                name="bioaf-pipelines", machine_type="unknown",
-                min_nodes=0, max_nodes=0, current_nodes=0, spot=False, status="UNKNOWN",
+                name="bioaf-pipelines",
+                machine_type="unknown",
+                min_nodes=0,
+                max_nodes=0,
+                current_nodes=0,
+                spot=False,
+                status="UNKNOWN",
             )
         if not interactive_pool:
             interactive_pool = NodePoolStatus(
-                name="bioaf-interactive", machine_type="unknown",
-                min_nodes=0, max_nodes=0, current_nodes=0, spot=False, status="UNKNOWN",
+                name="bioaf-interactive",
+                machine_type="unknown",
+                min_nodes=0,
+                max_nodes=0,
+                current_nodes=0,
+                spot=False,
+                status="UNKNOWN",
             )
 
         cluster_info = ClusterInfo(
@@ -156,11 +164,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
 
 async def _read_config(session: AsyncSession, key: str) -> str:
     """Read a single platform_config value, defaulting to 'null'."""
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key = :k").bindparams(k=key)
-        )
-    ).fetchone()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key = :k").bindparams(k=key))).fetchone()
     return row[0] if row else "null"
 
 

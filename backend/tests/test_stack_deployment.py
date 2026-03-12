@@ -11,7 +11,7 @@
 11. test_teardown_stack_clears_config
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import text
@@ -30,11 +30,7 @@ async def _set_config(session, key: str, value: str):
 
 async def _get_config(session, key: str) -> str | None:
     """Helper to read a platform_config key."""
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key = :k").bindparams(k=key)
-        )
-    ).fetchone()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key = :k").bindparams(k=key))).fetchone()
     return row[0] if row else None
 
 
@@ -113,11 +109,15 @@ async def test_deploy_stack_deploys_storage_then_compute(session):
         yield _make_progress_event(
             "apply_complete",
             f"{module_name} done",
-            extra={"outputs": {
-                "cluster_name": {"value": "bioaf-test"},
-                "cluster_endpoint": {"value": "https://1.2.3.4"},
-                "cluster_ca_cert": {"value": "Y2VydA=="},
-            }} if module_name == "compute" else {},
+            extra={
+                "outputs": {
+                    "cluster_name": {"value": "bioaf-test"},
+                    "cluster_endpoint": {"value": "https://1.2.3.4"},
+                    "cluster_ca_cert": {"value": "Y2VydA=="},
+                }
+            }
+            if module_name == "compute"
+            else {},
         )
 
     with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
@@ -147,11 +147,13 @@ async def test_deploy_stack_skips_storage_if_already_deployed(session):
         yield _make_progress_event(
             "apply_complete",
             f"{module_name} done",
-            extra={"outputs": {
-                "cluster_name": {"value": "bioaf-test"},
-                "cluster_endpoint": {"value": "https://1.2.3.4"},
-                "cluster_ca_cert": {"value": "Y2VydA=="},
-            }},
+            extra={
+                "outputs": {
+                    "cluster_name": {"value": "bioaf-test"},
+                    "cluster_endpoint": {"value": "https://1.2.3.4"},
+                    "cluster_ca_cert": {"value": "Y2VydA=="},
+                }
+            },
         )
 
     with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
@@ -177,11 +179,13 @@ async def test_deploy_stack_stores_cluster_config_on_success(session):
         yield _make_progress_event(
             "apply_complete",
             "done",
-            extra={"outputs": {
-                "cluster_name": {"value": "bioaf-myorg"},
-                "cluster_endpoint": {"value": "https://10.0.0.1"},
-                "cluster_ca_cert": {"value": "dGVzdC1jZXJ0"},
-            }},
+            extra={
+                "outputs": {
+                    "cluster_name": {"value": "bioaf-myorg"},
+                    "cluster_endpoint": {"value": "https://10.0.0.1"},
+                    "cluster_ca_cert": {"value": "dGVzdC1jZXJ0"},
+                }
+            },
         )
 
     with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):

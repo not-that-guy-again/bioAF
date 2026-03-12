@@ -4,7 +4,7 @@
 13. test_get_cluster_status_returns_pool_info
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import text

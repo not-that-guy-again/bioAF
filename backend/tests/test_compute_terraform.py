@@ -6,8 +6,6 @@
 
 from pathlib import Path
 
-import pytest
-
 
 COMPUTE_MODULE_DIR = Path(__file__).resolve().parents[2] / "terraform" / "modules" / "compute"
 

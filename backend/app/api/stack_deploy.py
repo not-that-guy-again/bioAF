@@ -181,13 +181,15 @@ async def stack_deploy_endpoint(
     async def event_generator():
         try:
             async for event in deploy_stack(session, body.stack_type, user_id):
-                data = json.dumps({
-                    "event_type": event.event_type,
-                    "message": event.message,
-                    "resource_address": event.resource_address,
-                    "resources_completed": event.resources_completed,
-                    "resources_total": event.resources_total,
-                })
+                data = json.dumps(
+                    {
+                        "event_type": event.event_type,
+                        "message": event.message,
+                        "resource_address": event.resource_address,
+                        "resources_completed": event.resources_completed,
+                        "resources_total": event.resources_total,
+                    }
+                )
                 yield f"data: {data}\n\n"
         except ValueError as exc:
             error_data = json.dumps({"event_type": "stack_error", "message": str(exc)})
@@ -213,10 +215,12 @@ async def stack_teardown_endpoint(
     async def event_generator():
         try:
             async for event in teardown_stack(session, user_id):
-                data = json.dumps({
-                    "event_type": event.event_type,
-                    "message": event.message,
-                })
+                data = json.dumps(
+                    {
+                        "event_type": event.event_type,
+                        "message": event.message,
+                    }
+                )
                 yield f"data: {data}\n\n"
         except ValueError as exc:
             error_data = json.dumps({"event_type": "stack_error", "message": str(exc)})
@@ -272,9 +276,7 @@ async def stack_components_list(
         )
 
     # Get current component states from DB
-    state_rows = (
-        await session.execute(text("SELECT component_key, enabled, status FROM component_states"))
-    ).fetchall()
+    state_rows = (await session.execute(text("SELECT component_key, enabled, status FROM component_states"))).fetchall()
     state_map = {r[0]: {"enabled": r[1], "status": r[2]} for r in state_rows}
 
     components = []
@@ -285,16 +287,18 @@ async def stack_components_list(
         else:
             status = "disabled"
 
-        components.append(ComponentInfo(
-            key=comp_def["key"],
-            name=comp_def["name"],
-            category=comp_def["category"],
-            description=comp_def["description"],
-            cost_estimate=comp_def["cost_estimate"],
-            dependencies=comp_def["dependencies"],
-            status=status,
-            configurable=comp_def["configurable"],
-        ))
+        components.append(
+            ComponentInfo(
+                key=comp_def["key"],
+                name=comp_def["name"],
+                category=comp_def["category"],
+                description=comp_def["description"],
+                cost_estimate=comp_def["cost_estimate"],
+                dependencies=comp_def["dependencies"],
+                status=status,
+                configurable=comp_def["configurable"],
+            )
+        )
 
     return ComponentListResponse(
         compute_stack=compute_stack,
@@ -331,7 +335,9 @@ async def stack_component_toggle(
     # Get current state
     row = (
         await session.execute(
-            text("SELECT enabled, status FROM component_states WHERE component_key = :key").bindparams(key=component_key)
+            text("SELECT enabled, status FROM component_states WHERE component_key = :key").bindparams(
+                key=component_key
+            )
         )
     ).fetchone()
 
@@ -343,8 +349,7 @@ async def stack_component_toggle(
             dep_rows = (
                 await session.execute(
                     text(
-                        "SELECT component_key, enabled FROM component_states "
-                        "WHERE component_key = ANY(:keys)"
+                        "SELECT component_key, enabled FROM component_states WHERE component_key = ANY(:keys)"
                     ).bindparams(keys=comp_def["dependencies"])
                 )
             ).fetchall()
@@ -428,9 +433,7 @@ async def update_cluster_config(
     """Update cluster config by generating a Terraform plan."""
     # Verify compute is deployed
     deployed = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'compute_deployed'")
-        )
+        await session.execute(text("SELECT value FROM platform_config WHERE key = 'compute_deployed'"))
     ).fetchone()
     if not deployed or deployed[0] != "true":
         raise HTTPException(status_code=400, detail="Compute stack is not deployed")
@@ -439,9 +442,9 @@ async def update_cluster_config(
     updates = body.model_dump(exclude_none=True)
     for key, value in updates.items():
         await session.execute(
-            text(
-                "UPDATE platform_config SET value = :v, updated_at = now() WHERE key = :k"
-            ).bindparams(k=key, v=str(value).lower() if isinstance(value, bool) else str(value))
+            text("UPDATE platform_config SET value = :v, updated_at = now() WHERE key = :k").bindparams(
+                k=key, v=str(value).lower() if isinstance(value, bool) else str(value)
+            )
         )
     await session.flush()
 
