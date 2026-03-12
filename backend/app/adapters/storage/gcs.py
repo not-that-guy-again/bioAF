@@ -181,20 +181,26 @@ class GcsStorageProvider(StorageProvider):
             metrics = await GcsStorageService.get_bucket_metrics(session)
 
         # Convert to the dict format expected by the adapter interface
-        buckets = []
+        buckets: list[dict[str, object]] = []
+        total_gb = 0.0
+        total_cost = 0.0
         for m in metrics:
             size_gb = m.size_bytes / (1024**3)
-            buckets.append({
-                "name": m.bucket_name,
-                "size_gb": round(size_gb, 2),
-                "object_count": m.object_count,
-                "storage_class": m.storage_class,
-                "cost_monthly_usd": round(size_gb * 0.026, 2),
-            })
+            cost = round(size_gb * 0.026, 2)
+            total_gb += size_gb
+            total_cost += cost
+            buckets.append(
+                {
+                    "name": m.bucket_name,
+                    "size_gb": round(size_gb, 2),
+                    "object_count": m.object_count,
+                    "storage_class": m.storage_class,
+                    "cost_monthly_usd": cost,
+                }
+            )
 
-        total_gb = sum(b["size_gb"] for b in buckets)
         return {
             "buckets": buckets,
             "total_size_gb": round(total_gb, 2),
-            "total_cost_monthly_usd": round(sum(b["cost_monthly_usd"] for b in buckets), 2),
+            "total_cost_monthly_usd": round(total_cost, 2),
         }

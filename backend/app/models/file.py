@@ -27,9 +27,7 @@ class File(Base):
     experiment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("experiments.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        Index("idx_files_experiment_id", "experiment_id"),
-    )
+    __table_args__ = (Index("idx_files_experiment_id", "experiment_id"),)
 
     organization = relationship("Organization")
     uploader = relationship("User")

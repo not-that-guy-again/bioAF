@@ -35,9 +35,7 @@ class FileOrganizationService:
         """
         row = (
             await session.execute(
-                text("SELECT gcs_uri, experiment_id, filename FROM files WHERE id = :fid").bindparams(
-                    fid=file_id
-                )
+                text("SELECT gcs_uri, experiment_id, filename FROM files WHERE id = :fid").bindparams(fid=file_id)
             )
         ).fetchone()
 
@@ -48,9 +46,7 @@ class FileOrganizationService:
 
         if current_exp_id is not None and current_exp_id != experiment_id:
             # Already assigned to a different experiment - treat as reassign
-            await FileOrganizationService.reassign_file_to_experiment(
-                session, file_id, experiment_id, user_id
-            )
+            await FileOrganizationService.reassign_file_to_experiment(session, file_id, experiment_id, user_id)
             return
 
         # Build new URI in the experiment prefix
@@ -64,9 +60,9 @@ class FileOrganizationService:
 
         # Update DB
         await session.execute(
-            text(
-                "UPDATE files SET experiment_id = :exp_id, gcs_uri = :uri WHERE id = :fid"
-            ).bindparams(exp_id=experiment_id, uri=new_uri, fid=file_id)
+            text("UPDATE files SET experiment_id = :exp_id, gcs_uri = :uri WHERE id = :fid").bindparams(
+                exp_id=experiment_id, uri=new_uri, fid=file_id
+            )
         )
 
         await log_action(
@@ -93,9 +89,7 @@ class FileOrganizationService:
         """Move a file from one experiment to another."""
         row = (
             await session.execute(
-                text("SELECT gcs_uri, experiment_id, filename FROM files WHERE id = :fid").bindparams(
-                    fid=file_id
-                )
+                text("SELECT gcs_uri, experiment_id, filename FROM files WHERE id = :fid").bindparams(fid=file_id)
             )
         ).fetchone()
 
@@ -115,9 +109,9 @@ class FileOrganizationService:
 
         # Update DB
         await session.execute(
-            text(
-                "UPDATE files SET experiment_id = :exp_id, gcs_uri = :uri WHERE id = :fid"
-            ).bindparams(exp_id=new_experiment_id, uri=new_uri, fid=file_id)
+            text("UPDATE files SET experiment_id = :exp_id, gcs_uri = :uri WHERE id = :fid").bindparams(
+                exp_id=new_experiment_id, uri=new_uri, fid=file_id
+            )
         )
 
         await log_action(
@@ -144,9 +138,7 @@ class FileOrganizationService:
         """Unlink a file from its experiment, moving to unlinked prefix."""
         row = (
             await session.execute(
-                text("SELECT gcs_uri, experiment_id, filename FROM files WHERE id = :fid").bindparams(
-                    fid=file_id
-                )
+                text("SELECT gcs_uri, experiment_id, filename FROM files WHERE id = :fid").bindparams(fid=file_id)
             )
         ).fetchone()
 
@@ -166,9 +158,9 @@ class FileOrganizationService:
 
         # Update DB
         await session.execute(
-            text(
-                "UPDATE files SET experiment_id = NULL, gcs_uri = :uri WHERE id = :fid"
-            ).bindparams(uri=new_uri, fid=file_id)
+            text("UPDATE files SET experiment_id = NULL, gcs_uri = :uri WHERE id = :fid").bindparams(
+                uri=new_uri, fid=file_id
+            )
         )
 
         await log_action(

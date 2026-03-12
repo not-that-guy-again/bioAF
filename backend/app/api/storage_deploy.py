@@ -84,10 +84,7 @@ async def deploy_storage(
     # Read preconditions
     rows = (
         await session.execute(
-            text(
-                "SELECT key, value FROM platform_config "
-                "WHERE key IN ('terraform_initialized', 'storage_deployed')"
-            )
+            text("SELECT key, value FROM platform_config WHERE key IN ('terraform_initialized', 'storage_deployed')")
         )
     ).fetchall()
     config = {r[0]: r[1] for r in rows}
@@ -122,11 +119,7 @@ async def get_storage_buckets(
 ) -> BucketMetricsResponse:
     """Return live bucket metrics from the GCS API."""
     # Check deployment status
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'storage_deployed'")
-        )
-    ).fetchone()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key = 'storage_deployed'"))).fetchone()
 
     if not row or row[0] != "true":
         raise HTTPException(
@@ -153,9 +146,7 @@ async def assign_file(
     """Assign or reassign a file to an experiment."""
     user_id = int(current_user["sub"])
     try:
-        await FileOrganizationService.assign_file_to_experiment(
-            session, file_id, body.experiment_id, user_id
-        )
+        await FileOrganizationService.assign_file_to_experiment(session, file_id, body.experiment_id, user_id)
     except ValueError as exc:
         if "not found" in str(exc).lower():
             raise HTTPException(status_code=404, detail=str(exc))
@@ -172,9 +163,7 @@ async def unlink_file(
     """Unlink a file from its experiment."""
     user_id = int(current_user["sub"])
     try:
-        await FileOrganizationService.unlink_file_from_experiment(
-            session, file_id, user_id
-        )
+        await FileOrganizationService.unlink_file_from_experiment(session, file_id, user_id)
     except ValueError as exc:
         if "not found" in str(exc).lower():
             raise HTTPException(status_code=404, detail=str(exc))

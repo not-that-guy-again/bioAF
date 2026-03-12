@@ -117,9 +117,7 @@ class GcsStorageService:
         # Verify the copy succeeded before deleting
         dst_blob = dst_bucket.blob(dst_blob_path)
         if not dst_blob.exists():
-            raise RuntimeError(
-                f"Copy verification failed: {destination_uri} does not exist after copy"
-            )
+            raise RuntimeError(f"Copy verification failed: {destination_uri} does not exist after copy")
 
         # Safe to delete source now
         src_blob.delete()

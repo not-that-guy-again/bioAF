@@ -144,14 +144,17 @@ async def test_get_buckets_requires_storage_deployed(client, session, admin_user
 @pytest.mark.asyncio
 async def test_get_buckets_returns_live_data(client, session, admin_user, admin_token):
     """Mock GCS service, call endpoint. Assert 200 with 5 buckets."""
-    await _seed_platform_config(session, {
-        "storage_deployed": "true",
-        "ingest_bucket_name": "bioaf-ingest-demo",
-        "raw_bucket_name": "bioaf-raw-demo",
-        "working_bucket_name": "bioaf-working-demo",
-        "results_bucket_name": "bioaf-results-demo",
-        "config_backups_bucket_name": "bioaf-config-backups-demo",
-    })
+    await _seed_platform_config(
+        session,
+        {
+            "storage_deployed": "true",
+            "ingest_bucket_name": "bioaf-ingest-demo",
+            "raw_bucket_name": "bioaf-raw-demo",
+            "working_bucket_name": "bioaf-working-demo",
+            "results_bucket_name": "bioaf-results-demo",
+            "config_backups_bucket_name": "bioaf-config-backups-demo",
+        },
+    )
 
     from app.services.gcs_storage import BucketMetrics
 
@@ -219,9 +222,7 @@ async def test_file_assign_endpoint(client, session, admin_user, admin_token):
 async def test_file_assign_nonexistent_file(client, session, admin_user, admin_token):
     """Assign nonexistent file returns 404."""
     with patch("app.api.storage_deploy.FileOrganizationService") as mock_svc:
-        mock_svc.assign_file_to_experiment = AsyncMock(
-            side_effect=ValueError("File 99999 not found")
-        )
+        mock_svc.assign_file_to_experiment = AsyncMock(side_effect=ValueError("File 99999 not found"))
         resp = await client.post(
             "/api/v1/files/99999/assign",
             json={"experiment_id": 1},

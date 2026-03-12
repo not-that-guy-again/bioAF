@@ -7,7 +7,7 @@ Tests:
 9. move_file does NOT delete on copy failure
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import text

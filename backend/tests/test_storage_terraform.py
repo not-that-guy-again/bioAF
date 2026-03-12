@@ -8,7 +8,6 @@ Tests:
 5. Deploy stores bucket names on success (mocked executor)
 """
 
-import pytest
 from pathlib import Path
 
 
@@ -53,16 +52,12 @@ def test_storage_module_files_exist():
         "results_bucket_name",
         "config_backups_bucket_name",
     ]:
-        assert f'output "{output_name}"' in outputs_content, (
-            f"outputs.tf should define {output_name}"
-        )
+        assert f'output "{output_name}"' in outputs_content, f"outputs.tf should define {output_name}"
 
     # Verify variables
     variables_content = variables_tf.read_text()
     for var_name in ["project_id", "region", "org_slug"]:
-        assert f'variable "{var_name}"' in variables_content, (
-            f"variables.tf should define {var_name}"
-        )
+        assert f'variable "{var_name}"' in variables_content, f"variables.tf should define {var_name}"
 
 
 def test_storage_module_raw_bucket_has_lifecycle_rule():

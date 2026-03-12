@@ -35,12 +35,8 @@ async def _seed_org_user_exp(session):
     session.add(user)
     await session.flush()
 
-    exp1 = Experiment(
-        name="Exp One", owner_user_id=user.id, organization_id=org.id, status="registered"
-    )
-    exp2 = Experiment(
-        name="Exp Two", owner_user_id=user.id, organization_id=org.id, status="registered"
-    )
+    exp1 = Experiment(name="Exp One", owner_user_id=user.id, organization_id=org.id, status="registered")
+    exp2 = Experiment(name="Exp Two", owner_user_id=user.id, organization_id=org.id, status="registered")
     session.add_all([exp1, exp2])
     await session.flush()
 
@@ -83,27 +79,19 @@ async def test_assign_file_to_experiment_moves_from_unlinked(session):
     """Create file in unlinked prefix. Assign. Assert moved and DB updated."""
     org, user, exp1, _ = await _seed_org_user_exp(session)
 
-    file_id = await _create_file(
-        session, org.id, "gs://bioaf-raw-demo/unlinked/sample.fastq.gz"
-    )
+    file_id = await _create_file(session, org.id, "gs://bioaf-raw-demo/unlinked/sample.fastq.gz")
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
-        mock_gcs.move_file = AsyncMock(
-            return_value="gs://bioaf-raw-demo/experiments/1/sample.fastq.gz"
-        )
+        mock_gcs.move_file = AsyncMock(return_value="gs://bioaf-raw-demo/experiments/1/sample.fastq.gz")
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp1.id}/"
         mock_gcs.build_unlinked_prefix.return_value = "unlinked/"
 
         from app.services.file_organization import FileOrganizationService
 
-        await FileOrganizationService.assign_file_to_experiment(
-            session, file_id, exp1.id, user.id
-        )
+        await FileOrganizationService.assign_file_to_experiment(session, file_id, exp1.id, user.id)
 
     row = (
-        await session.execute(
-            text("SELECT experiment_id, gcs_uri FROM files WHERE id = :fid").bindparams(fid=file_id)
-        )
+        await session.execute(text("SELECT experiment_id, gcs_uri FROM files WHERE id = :fid").bindparams(fid=file_id))
     ).fetchone()
     assert row[0] == exp1.id
     assert "experiments/" in row[1]
@@ -114,28 +102,21 @@ async def test_assign_file_to_experiment_writes_audit_log(session):
     """Assign a file. Assert audit log entry created."""
     org, user, exp1, _ = await _seed_org_user_exp(session)
 
-    file_id = await _create_file(
-        session, org.id, "gs://bioaf-raw-demo/unlinked/audit.fastq.gz"
-    )
+    file_id = await _create_file(session, org.id, "gs://bioaf-raw-demo/unlinked/audit.fastq.gz")
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
-        mock_gcs.move_file = AsyncMock(
-            return_value="gs://bioaf-raw-demo/experiments/1/audit.fastq.gz"
-        )
+        mock_gcs.move_file = AsyncMock(return_value="gs://bioaf-raw-demo/experiments/1/audit.fastq.gz")
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp1.id}/"
         mock_gcs.build_unlinked_prefix.return_value = "unlinked/"
 
         from app.services.file_organization import FileOrganizationService
 
-        await FileOrganizationService.assign_file_to_experiment(
-            session, file_id, exp1.id, user.id
-        )
+        await FileOrganizationService.assign_file_to_experiment(session, file_id, exp1.id, user.id)
 
     audit_row = (
         await session.execute(
             text(
-                "SELECT action, entity_type FROM audit_log "
-                "WHERE entity_type = 'file' AND entity_id = :fid"
+                "SELECT action, entity_type FROM audit_log WHERE entity_type = 'file' AND entity_id = :fid"
             ).bindparams(fid=file_id)
         )
     ).fetchone()
@@ -156,21 +137,15 @@ async def test_reassign_file_between_experiments(session):
     )
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
-        mock_gcs.move_file = AsyncMock(
-            return_value=f"gs://bioaf-raw-demo/experiments/{exp2.id}/data.fastq.gz"
-        )
+        mock_gcs.move_file = AsyncMock(return_value=f"gs://bioaf-raw-demo/experiments/{exp2.id}/data.fastq.gz")
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp2.id}/"
 
         from app.services.file_organization import FileOrganizationService
 
-        await FileOrganizationService.reassign_file_to_experiment(
-            session, file_id, exp2.id, user.id
-        )
+        await FileOrganizationService.reassign_file_to_experiment(session, file_id, exp2.id, user.id)
 
     row = (
-        await session.execute(
-            text("SELECT experiment_id, gcs_uri FROM files WHERE id = :fid").bindparams(fid=file_id)
-        )
+        await session.execute(text("SELECT experiment_id, gcs_uri FROM files WHERE id = :fid").bindparams(fid=file_id))
     ).fetchone()
     assert row[0] == exp2.id
     assert f"experiments/{exp2.id}/" in row[1]
@@ -189,21 +164,15 @@ async def test_unlink_file_moves_to_unlinked(session):
     )
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
-        mock_gcs.move_file = AsyncMock(
-            return_value="gs://bioaf-raw-demo/unlinked/unlink.fastq.gz"
-        )
+        mock_gcs.move_file = AsyncMock(return_value="gs://bioaf-raw-demo/unlinked/unlink.fastq.gz")
         mock_gcs.build_unlinked_prefix.return_value = "unlinked/"
 
         from app.services.file_organization import FileOrganizationService
 
-        await FileOrganizationService.unlink_file_from_experiment(
-            session, file_id, user.id
-        )
+        await FileOrganizationService.unlink_file_from_experiment(session, file_id, user.id)
 
     row = (
-        await session.execute(
-            text("SELECT experiment_id, gcs_uri FROM files WHERE id = :fid").bindparams(fid=file_id)
-        )
+        await session.execute(text("SELECT experiment_id, gcs_uri FROM files WHERE id = :fid").bindparams(fid=file_id))
     ).fetchone()
     assert row[0] is None
     assert "unlinked/" in row[1]
@@ -222,20 +191,14 @@ async def test_assign_file_already_in_experiment_is_reassign(session):
     )
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
-        mock_gcs.move_file = AsyncMock(
-            return_value=f"gs://bioaf-raw-demo/experiments/{exp2.id}/reassign.fastq.gz"
-        )
+        mock_gcs.move_file = AsyncMock(return_value=f"gs://bioaf-raw-demo/experiments/{exp2.id}/reassign.fastq.gz")
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp2.id}/"
 
         from app.services.file_organization import FileOrganizationService
 
-        await FileOrganizationService.assign_file_to_experiment(
-            session, file_id, exp2.id, user.id
-        )
+        await FileOrganizationService.assign_file_to_experiment(session, file_id, exp2.id, user.id)
 
     row = (
-        await session.execute(
-            text("SELECT experiment_id FROM files WHERE id = :fid").bindparams(fid=file_id)
-        )
+        await session.execute(text("SELECT experiment_id FROM files WHERE id = :fid").bindparams(fid=file_id))
     ).fetchone()
     assert row[0] == exp2.id

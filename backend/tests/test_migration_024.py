@@ -92,12 +92,7 @@ async def test_migration_adds_experiment_id_to_files(session):
     await session.commit()
 
     row = (
-        await session.execute(
-            text(
-                "SELECT experiment_id FROM files "
-                "WHERE gcs_uri = 'gs://test/file.fastq.gz'"
-            )
-        )
+        await session.execute(text("SELECT experiment_id FROM files WHERE gcs_uri = 'gs://test/file.fastq.gz'"))
     ).fetchone()
 
     assert row is not None
@@ -115,12 +110,7 @@ async def test_migration_adds_experiment_id_to_files(session):
     await session.commit()
 
     row2 = (
-        await session.execute(
-            text(
-                "SELECT experiment_id FROM files "
-                "WHERE gcs_uri = 'gs://test/unlinked.fastq.gz'"
-            )
-        )
+        await session.execute(text("SELECT experiment_id FROM files WHERE gcs_uri = 'gs://test/unlinked.fastq.gz'"))
     ).fetchone()
     assert row2 is not None
     assert row2[0] is None
@@ -130,10 +120,7 @@ async def test_migration_adds_experiment_id_to_files(session):
 async def test_migration_experiment_id_index_exists(session):
     """Migration 024 creates idx_files_experiment_id index."""
     result = await session.execute(
-        text(
-            "SELECT indexname FROM pg_indexes "
-            "WHERE tablename = 'files' AND indexname = 'idx_files_experiment_id'"
-        )
+        text("SELECT indexname FROM pg_indexes WHERE tablename = 'files' AND indexname = 'idx_files_experiment_id'")
     )
     row = result.fetchone()
     assert row is not None, "Index idx_files_experiment_id should exist on files table"
