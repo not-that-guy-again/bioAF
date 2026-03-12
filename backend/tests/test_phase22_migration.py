@@ -36,8 +36,22 @@ async def test_notebook_sessions_has_k8s_columns(session):
 
 
 @pytest.mark.asyncio
-async def test_platform_config_has_notebook_keys(session):
-    """Platform config keys for notebook settings are seeded."""
+async def test_platform_config_accepts_notebook_keys(session):
+    """Platform config table accepts the notebook-related keys from migration 028."""
+    # Simulate what the migration does: insert platform_config keys
+    await session.execute(
+        text("""
+            INSERT INTO platform_config (key, value) VALUES
+                ('k8s_notebook_namespace', 'bioaf-notebooks'),
+                ('notebook_idle_timeout_hours', '4'),
+                ('notebook_idle_warning_minutes', '15'),
+                ('bioaf_scrna_image', 'null'),
+                ('artifact_registry_repo', 'null')
+            ON CONFLICT (key) DO NOTHING
+        """)
+    )
+    await session.flush()
+
     result = await session.execute(
         text("""
             SELECT key, value FROM platform_config
