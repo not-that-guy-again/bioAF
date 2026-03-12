@@ -33,6 +33,13 @@ class TerraformRun(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 17 columns
+    module_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plan_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    resources_planned: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resources_completed: Mapped[int] = mapped_column(Integer, server_default="0", default=0)
+    apply_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    terraform_state_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class VerificationCode(Base):
