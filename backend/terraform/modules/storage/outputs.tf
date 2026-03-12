@@ -22,3 +22,13 @@ output "config_backups_bucket_name" {
   description = "Name of the config backups GCS bucket"
   value       = google_storage_bucket.config_backups.name
 }
+
+output "pubsub_topic_name" {
+  description = "Name of the Pub/Sub topic for ingest bucket notifications"
+  value       = google_pubsub_topic.ingest_events.name
+}
+
+output "pubsub_subscription_name" {
+  description = "Name of the Pub/Sub subscription for the ingest worker"
+  value       = google_pubsub_subscription.ingest_worker.name
+}
