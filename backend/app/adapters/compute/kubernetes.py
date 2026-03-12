@@ -284,8 +284,87 @@ class KubernetesComputeProvider(ComputeProvider):
         return container_v1.ClusterManagerClient()
 
     async def _k8s_submit_job(self, job_spec: dict) -> dict:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job submission will be implemented in Phase 20")
+        """Submit a real Kubernetes Job to the GKE cluster."""
+        run_id = job_spec.get("run_id", 0)
+        pipeline_name = job_spec.get("pipeline_name", "unknown")
+        namespace = job_spec.get("namespace", "bioaf-pipelines")
+        container_image = job_spec.get("container_image", "alpine:3.19")
+        command = job_spec.get("command", [])
+        stage_commands = job_spec.get("stage_commands", [])
+        input_files = job_spec.get("input_files", [])
+
+        job_name = f"bioaf-pipeline-{run_id}"
+
+        # Build init containers for GCS input staging
+        init_containers = []
+        if stage_commands:
+            stage_script = " && ".join(stage_commands)
+            init_containers.append({
+                "name": "stage-inputs",
+                "image": "google/cloud-sdk:slim",
+                "command": ["/bin/sh", "-c", stage_script],
+                "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+            })
+
+        # Build main container
+        main_container = {
+            "name": "pipeline",
+            "image": container_image,
+            "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+        }
+        if command:
+            main_container["command"] = command
+
+        # Build job manifest
+        job_manifest = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": {
+                "name": job_name,
+                "namespace": namespace,
+                "labels": {
+                    "bioaf.io/pipeline-run": str(run_id),
+                    "bioaf.io/pipeline": pipeline_name,
+                    "bioaf.io/pool": "pipelines",
+                },
+            },
+            "spec": {
+                "backoffLimit": 0,
+                "template": {
+                    "spec": {
+                        "nodeSelector": {"bioaf.io/pool": "pipelines"},
+                        "tolerations": [
+                            {
+                                "key": "bioaf.io/pool",
+                                "value": "pipelines",
+                                "effect": "NoSchedule",
+                            }
+                        ],
+                        "serviceAccountName": "bioaf-pipeline-runner",
+                        "containers": [main_container],
+                        "volumes": [
+                            {"name": "data", "emptyDir": {"sizeLimit": "50Gi"}},
+                        ],
+                        "restartPolicy": "Never",
+                    }
+                },
+            },
+        }
+
+        if init_containers:
+            job_manifest["spec"]["template"]["spec"]["initContainers"] = init_containers
+
+        batch_client = self._get_k8s_batch_client()
+        batch_client.create_namespaced_job(namespace=namespace, body=job_manifest)
+
+        cost_estimate = await self.get_cost_estimate(job_spec)
+
+        return {
+            "job_id": job_name,
+            "namespace": namespace,
+            "status": "queued",
+            "estimated_cost": cost_estimate,
+        }
 
     async def _k8s_cancel_job(self, job_id: str) -> dict:
         # TODO: Implement in Phase 20
