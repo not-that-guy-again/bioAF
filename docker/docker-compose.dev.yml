@@ -3,8 +3,10 @@ version: "3.8"
 services:
   backend:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile.backend
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend
+      additional_contexts:
+        terraform-modules: ../terraform
     ports:
       - "8000:8000"
     volumes:

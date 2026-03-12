@@ -13,14 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 ENV PYTHONPATH=/app
 
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/app/ app/
-COPY backend/alembic/ alembic/
-COPY terraform/ terraform/
+COPY app/ app/
+COPY alembic/ alembic/
+COPY --from=terraform-modules / terraform/
 
-COPY backend/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
