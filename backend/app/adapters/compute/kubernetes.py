@@ -174,6 +174,97 @@ class KubernetesComputeProvider(ComputeProvider):
             ],
         }
 
+    # -- K8s client helpers --
+
+    def _get_k8s_core_client(self):
+        """Get a Kubernetes CoreV1Api client. Tests mock this method."""
+        from kubernetes import client, config
+
+        config.load_incluster_config()
+        return client.CoreV1Api()
+
+    def _get_k8s_batch_client(self):
+        """Get a Kubernetes BatchV1Api client. Tests mock this method."""
+        from kubernetes import client, config
+
+        config.load_incluster_config()
+        return client.BatchV1Api()
+
+    def _get_k8s_rbac_client(self):
+        """Get a Kubernetes RbacAuthorizationV1Api client. Tests mock this method."""
+        from kubernetes import client, config
+
+        config.load_incluster_config()
+        return client.RbacAuthorizationV1Api()
+
+    _namespace_ready = False
+
+    async def ensure_pipeline_namespace(self, namespace: str = "bioaf-pipelines") -> None:
+        """Ensure the pipeline namespace, service account, and role binding exist."""
+        from kubernetes import client
+        from kubernetes.client.rest import ApiException
+
+        core_v1 = self._get_k8s_core_client()
+        rbac_v1 = self._get_k8s_rbac_client()
+
+        # Check if namespace already exists
+        try:
+            core_v1.read_namespace(name=namespace)
+            logger.info("Namespace %s already exists, skipping setup", namespace)
+            self._namespace_ready = True
+            return
+        except ApiException as e:
+            if e.status != 404:
+                raise
+
+        # Create namespace
+        core_v1.create_namespace(
+            body=client.V1Namespace(
+                metadata=client.V1ObjectMeta(
+                    name=namespace,
+                    labels={"bioaf.io/managed": "true"},
+                )
+            )
+        )
+        logger.info("Created namespace %s", namespace)
+
+        # Create service account
+        core_v1.create_namespaced_service_account(
+            namespace=namespace,
+            body=client.V1ServiceAccount(
+                metadata=client.V1ObjectMeta(
+                    name="bioaf-pipeline-runner",
+                    labels={"bioaf.io/managed": "true"},
+                )
+            ),
+        )
+        logger.info("Created service account bioaf-pipeline-runner in %s", namespace)
+
+        # Create role binding
+        rbac_v1.create_namespaced_role_binding(
+            namespace=namespace,
+            body=client.V1RoleBinding(
+                metadata=client.V1ObjectMeta(
+                    name="bioaf-pipeline-runner-binding",
+                    labels={"bioaf.io/managed": "true"},
+                ),
+                role_ref=client.V1RoleRef(
+                    api_group="rbac.authorization.k8s.io",
+                    kind="ClusterRole",
+                    name="edit",
+                ),
+                subjects=[
+                    client.RbacV1Subject(
+                        kind="ServiceAccount",
+                        name="bioaf-pipeline-runner",
+                        namespace=namespace,
+                    )
+                ],
+            ),
+        )
+        logger.info("Created role binding in %s", namespace)
+        self._namespace_ready = True
+
     # -- K8s API implementations (production) --
 
     _GKE_STATUS_MAP = {
@@ -193,24 +284,183 @@ class KubernetesComputeProvider(ComputeProvider):
         return container_v1.ClusterManagerClient()
 
     async def _k8s_submit_job(self, job_spec: dict) -> dict:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job submission will be implemented in Phase 20")
+        """Submit a real Kubernetes Job to the GKE cluster."""
+        run_id = job_spec.get("run_id", 0)
+        pipeline_name = job_spec.get("pipeline_name", "unknown")
+        namespace = job_spec.get("namespace", "bioaf-pipelines")
+        container_image = job_spec.get("container_image", "alpine:3.19")
+        command = job_spec.get("command", [])
+        stage_commands = job_spec.get("stage_commands", [])
+        _ = job_spec.get("input_files", [])  # reserved for future use
+
+        job_name = f"bioaf-pipeline-{run_id}"
+
+        # Build init containers for GCS input staging
+        init_containers = []
+        if stage_commands:
+            stage_script = " && ".join(stage_commands)
+            init_containers.append(
+                {
+                    "name": "stage-inputs",
+                    "image": "google/cloud-sdk:slim",
+                    "command": ["/bin/sh", "-c", stage_script],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                }
+            )
+
+        # Build main container
+        main_container = {
+            "name": "pipeline",
+            "image": container_image,
+            "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+        }
+        if command:
+            main_container["command"] = command
+
+        # Build job manifest
+        job_manifest = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": {
+                "name": job_name,
+                "namespace": namespace,
+                "labels": {
+                    "bioaf.io/pipeline-run": str(run_id),
+                    "bioaf.io/pipeline": pipeline_name,
+                    "bioaf.io/pool": "pipelines",
+                },
+            },
+            "spec": {
+                "backoffLimit": 0,
+                "template": {
+                    "spec": {
+                        "nodeSelector": {"bioaf.io/pool": "pipelines"},
+                        "tolerations": [
+                            {
+                                "key": "bioaf.io/pool",
+                                "value": "pipelines",
+                                "effect": "NoSchedule",
+                            }
+                        ],
+                        "serviceAccountName": "bioaf-pipeline-runner",
+                        "containers": [main_container],
+                        "volumes": [
+                            {"name": "data", "emptyDir": {"sizeLimit": "50Gi"}},
+                        ],
+                        "restartPolicy": "Never",
+                    }
+                },
+            },
+        }
+
+        if init_containers:
+            job_manifest["spec"]["template"]["spec"]["initContainers"] = init_containers  # type: ignore[index]
+
+        batch_client = self._get_k8s_batch_client()
+        batch_client.create_namespaced_job(namespace=namespace, body=job_manifest)
+
+        cost_estimate = await self.get_cost_estimate(job_spec)
+
+        return {
+            "job_id": job_name,
+            "namespace": namespace,
+            "status": "queued",
+            "estimated_cost": cost_estimate,
+        }
 
     async def _k8s_cancel_job(self, job_id: str) -> dict:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job cancellation will be implemented in Phase 20")
+        """Delete a Kubernetes Job with background propagation."""
+        batch_client = self._get_k8s_batch_client()
+        namespace = "bioaf-pipelines"
+        batch_client.delete_namespaced_job(
+            name=job_id,
+            namespace=namespace,
+            propagation_policy="Background",
+        )
+        return {
+            "job_id": job_id,
+            "status": "cancelled",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     async def _k8s_get_job_status(self, job_id: str) -> dict:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job status will be implemented in Phase 20")
+        """Query the K8s API for Job status and translate to normalized model."""
+        batch_client = self._get_k8s_batch_client()
+        core_client = self._get_k8s_core_client()
+        namespace = "bioaf-pipelines"
+
+        job = batch_client.read_namespaced_job(name=job_id, namespace=namespace)
+
+        # Get pod info
+        pod_list = core_client.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"job-name={job_id}",
+        )
+        pod_name = pod_list.items[0].metadata.name if pod_list.items else None
+        node_name = pod_list.items[0].spec.node_name if pod_list.items else None
+
+        # Determine status from Job conditions
+        status = "queued"
+        if job.status.conditions:
+            for condition in job.status.conditions:
+                if condition.type == "Complete" and condition.status == "True":
+                    status = "completed"
+                    break
+                if condition.type == "Failed" and condition.status == "True":
+                    status = "failed"
+                    break
+        elif job.status.active and job.status.active > 0:
+            status = "running"
+
+        return {
+            "job_id": job_id,
+            "status": status,
+            "pod_name": pod_name,
+            "node_name": node_name,
+        }
 
     async def _k8s_list_jobs(self, filters: dict | None = None) -> list[dict]:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job listing will be implemented in Phase 20")
+        """List K8s Jobs in the pipeline namespace."""
+        batch_client = self._get_k8s_batch_client()
+        namespace = "bioaf-pipelines"
+
+        job_list = batch_client.list_namespaced_job(
+            namespace=namespace,
+            label_selector="bioaf.io/pool=pipelines",
+        )
+
+        jobs = []
+        for job in job_list.items:
+            jobs.append(
+                {
+                    "job_id": job.metadata.name,
+                    "status": "running" if job.status.active else "completed",
+                    "created_at": job.metadata.creation_timestamp.isoformat()
+                    if job.metadata.creation_timestamp
+                    else None,
+                }
+            )
+        return jobs
 
     async def _k8s_get_job_logs(self, job_id: str) -> str:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job logs will be implemented in Phase 20")
+        """Retrieve logs from the pipeline pod."""
+        core_client = self._get_k8s_core_client()
+        namespace = "bioaf-pipelines"
+
+        pod_list = core_client.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"job-name={job_id}",
+        )
+        if not pod_list.items:
+            return f"No pods found for job {job_id}"
+
+        pod_name = pod_list.items[0].metadata.name
+        logs = core_client.read_namespaced_pod_log(
+            name=pod_name,
+            namespace=namespace,
+            container="pipeline",
+        )
+        return logs
 
     async def _k8s_get_cluster_status(self) -> dict:
         """Query GKE API for real cluster status."""

@@ -574,6 +574,10 @@ export interface PipelineRun {
   error_message: string | null;
   work_dir: string | null;
   slurm_job_id: string | null;
+  k8s_job_name: string | null;
+  k8s_namespace: string | null;
+  k8s_pod_name: string | null;
+  actual_cost: number | null;
   reference_genome: string | null;
   alignment_algorithm: string | null;
   resume_from_run_id: number | null;
