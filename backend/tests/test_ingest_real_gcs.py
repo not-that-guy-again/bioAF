@@ -60,7 +60,7 @@ async def test_ingest_copies_file_to_raw_bucket(client, admin_token, session, _s
     """Process an ingest event and verify file is copied from ingest to raw bucket."""
     from app.services.ingest_service import process_ingest_event
 
-    mock_copy = AsyncMock()
+    mock_copy = AsyncMock(return_value="gs://bioaf-raw-testorg/experiments/1/PROJ1_EXP1_S001.fastq.gz")
     mock_delete = AsyncMock()
 
     with (
@@ -91,7 +91,7 @@ async def test_ingest_deletes_from_ingest_on_cleanup(client, admin_token, sessio
     """With delete_after_copy policy, ingest bucket object is deleted after copy."""
     from app.services.ingest_service import process_ingest_event
 
-    mock_copy = AsyncMock()
+    mock_copy = AsyncMock(return_value="gs://bioaf-raw-testorg/experiments/1/PROJ1_EXP1_S001.fastq.gz")
     mock_cleanup = AsyncMock()
 
     with (
@@ -123,7 +123,7 @@ async def test_ingest_retains_on_retain_policy(client, admin_token, session, _se
 
     from app.services.ingest_service import process_ingest_event
 
-    mock_copy = AsyncMock()
+    mock_copy = AsyncMock(return_value="gs://bioaf-raw-testorg/experiments/1/PROJ1_EXP1_S001.fastq.gz")
     mock_cleanup = AsyncMock()
 
     with (
@@ -143,10 +143,10 @@ async def test_ingest_retains_on_retain_policy(client, admin_token, session, _se
         )
         await session.commit()
 
-    # cleanup should not delete when policy is retain
-    if mock_cleanup.called:
-        call_args = mock_cleanup.call_args
-        assert "retain" in str(call_args)
+    # cleanup should be called with retain policy
+    mock_cleanup.assert_called_once()
+    call_args = mock_cleanup.call_args
+    assert "retain_7d" in str(call_args)
 
 
 @pytest.mark.asyncio

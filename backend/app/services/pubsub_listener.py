@@ -131,6 +131,7 @@ class PubSubListener:
             user_id=None,
             file_size_bytes=size,
             content_md5=md5_hash,
+            ingest_source="auto_ingest",
         )
         await session.commit()
 
