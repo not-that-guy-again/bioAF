@@ -114,9 +114,7 @@ class PubSubListener:
         md5_hash = msg_data.get("md5Hash")
 
         # Read org_id from platform_config (single-tenant assumption)
-        row = await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'default_org_id'")
-        )
+        row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'default_org_id'"))
         org_id_row = row.fetchone()
         org_id = int(org_id_row[0]) if org_id_row else 1
 

@@ -249,7 +249,9 @@ async def cleanup_ingest_file(
     else:
         logger.info(
             "Retaining ingest file gs://%s/%s (policy=%s)",
-            source_bucket, source_path, policy,
+            source_bucket,
+            source_path,
+            policy,
         )
 
 
@@ -403,7 +405,11 @@ async def process_ingest_event(
                 prefix = GcsStorageService.build_unlinked_prefix()
 
             new_uri = await copy_to_raw_bucket(
-                source_bucket, source_path, raw_bucket, prefix, filename,
+                source_bucket,
+                source_path,
+                raw_bucket,
+                prefix,
+                filename,
             )
             file_record.gcs_uri = new_uri
             await db.flush()
@@ -544,9 +550,7 @@ async def _read_ingest_config(db: AsyncSession) -> dict[str, str]:
         "storage_deployed",
     ]
     rows = (
-        await db.execute(
-            text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=keys)
-        )
+        await db.execute(text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=keys))
     ).fetchall()
     return {r[0]: r[1] for r in rows}
 

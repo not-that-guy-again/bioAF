@@ -44,15 +44,17 @@ def _make_pubsub_message(
     """Build a mock Pub/Sub ReceivedMessage."""
     if md5_hash is None:
         md5_hash = base64.b64encode(b"\x00" * 16).decode()
-    data = json.dumps({
-        "bucket": bucket,
-        "name": name,
-        "size": size,
-        "md5Hash": md5_hash,
-        "timeCreated": "2026-03-12T10:00:00Z",
-        "contentType": "application/gzip",
-        "metageneration": "1",
-    }).encode()
+    data = json.dumps(
+        {
+            "bucket": bucket,
+            "name": name,
+            "size": size,
+            "md5Hash": md5_hash,
+            "timeCreated": "2026-03-12T10:00:00Z",
+            "contentType": "application/gzip",
+            "metageneration": "1",
+        }
+    ).encode()
 
     msg = MagicMock()
     msg.message.data = data
@@ -63,10 +65,13 @@ def _make_pubsub_message(
 @pytest.mark.asyncio
 async def test_listener_starts_when_enabled(session):
     """Listener enters pull loop when auto_ingest_enabled=true and subscription exists."""
-    await _seed_config(session, {
-        "auto_ingest_enabled": "true",
-        "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
-    })
+    await _seed_config(
+        session,
+        {
+            "auto_ingest_enabled": "true",
+            "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
+        },
+    )
 
     from app.services.pubsub_listener import PubSubListener
 
@@ -103,10 +108,13 @@ async def test_listener_skips_when_disabled(session):
 @pytest.mark.asyncio
 async def test_listener_skips_when_no_subscription(session):
     """Listener returns when pubsub_subscription_name is null."""
-    await _seed_config(session, {
-        "auto_ingest_enabled": "true",
-        "pubsub_subscription_name": "null",
-    })
+    await _seed_config(
+        session,
+        {
+            "auto_ingest_enabled": "true",
+            "pubsub_subscription_name": "null",
+        },
+    )
 
     from app.services.pubsub_listener import PubSubListener
 
@@ -118,10 +126,13 @@ async def test_listener_skips_when_no_subscription(session):
 @pytest.mark.asyncio
 async def test_listener_processes_message(session):
     """Listener extracts GCS object metadata and calls ingest pipeline."""
-    await _seed_config(session, {
-        "auto_ingest_enabled": "true",
-        "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
-    })
+    await _seed_config(
+        session,
+        {
+            "auto_ingest_enabled": "true",
+            "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
+        },
+    )
 
     from app.services.pubsub_listener import PubSubListener
 
@@ -161,10 +172,13 @@ async def test_listener_processes_message(session):
 @pytest.mark.asyncio
 async def test_listener_acks_on_success(session):
     """Listener acknowledges message after successful processing."""
-    await _seed_config(session, {
-        "auto_ingest_enabled": "true",
-        "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
-    })
+    await _seed_config(
+        session,
+        {
+            "auto_ingest_enabled": "true",
+            "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
+        },
+    )
 
     from app.services.pubsub_listener import PubSubListener
 
@@ -201,10 +215,13 @@ async def test_listener_acks_on_success(session):
 @pytest.mark.asyncio
 async def test_listener_nacks_on_failure(session):
     """Listener nacks message when processing raises an exception."""
-    await _seed_config(session, {
-        "auto_ingest_enabled": "true",
-        "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
-    })
+    await _seed_config(
+        session,
+        {
+            "auto_ingest_enabled": "true",
+            "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
+        },
+    )
 
     from app.services.pubsub_listener import PubSubListener
 
@@ -240,10 +257,13 @@ async def test_listener_nacks_on_failure(session):
 @pytest.mark.asyncio
 async def test_listener_retries_on_connection_error(session):
     """Listener retries with backoff when Pub/Sub client raises connection error."""
-    await _seed_config(session, {
-        "auto_ingest_enabled": "true",
-        "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
-    })
+    await _seed_config(
+        session,
+        {
+            "auto_ingest_enabled": "true",
+            "pubsub_subscription_name": "bioaf-ingest-worker-testorg",
+        },
+    )
 
     from app.services.pubsub_listener import PubSubListener
 

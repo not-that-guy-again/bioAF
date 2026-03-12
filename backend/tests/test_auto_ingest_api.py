@@ -66,9 +66,7 @@ async def test_enable_auto_ingest_sets_config(client, session, admin_user, admin
     )
     assert resp.status_code == 200
 
-    row = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'auto_ingest_enabled'")
-    )
+    row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'auto_ingest_enabled'"))
     assert row.scalar() == "true"
 
 
@@ -83,9 +81,7 @@ async def test_disable_auto_ingest_sets_config(client, session, admin_user, admi
     )
     assert resp.status_code == 200
 
-    row = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'auto_ingest_enabled'")
-    )
+    row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'auto_ingest_enabled'"))
     assert row.scalar() == "false"
 
 
@@ -118,10 +114,7 @@ async def test_enable_writes_audit_log(client, session, admin_user, admin_token)
     )
 
     result = await session.execute(
-        text(
-            "SELECT action FROM audit_log WHERE entity_type = 'auto_ingest' "
-            "ORDER BY timestamp DESC LIMIT 1"
-        )
+        text("SELECT action FROM audit_log WHERE entity_type = 'auto_ingest' ORDER BY timestamp DESC LIMIT 1")
     )
     row = result.fetchone()
     assert row is not None
@@ -139,7 +132,5 @@ async def test_cleanup_policy_update(client, session, admin_user, admin_token):
     )
     assert resp.status_code == 200
 
-    row = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'ingest_cleanup_policy'")
-    )
+    row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'ingest_cleanup_policy'"))
     assert row.scalar() == "retain_7d"

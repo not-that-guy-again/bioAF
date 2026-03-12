@@ -34,12 +34,8 @@ def test_storage_module_includes_pubsub_resources():
     assert 'resource "google_pubsub_topic_iam_member" "gcs_publisher"' in content, (
         "main.tf should define IAM binding for GCS publisher"
     )
-    assert "OBJECT_FINALIZE" in content, (
-        "Notification should filter on OBJECT_FINALIZE events"
-    )
-    assert "ack_deadline_seconds" in content, (
-        "Subscription should set ack_deadline_seconds"
-    )
+    assert "OBJECT_FINALIZE" in content, "Notification should filter on OBJECT_FINALIZE events"
+    assert "ack_deadline_seconds" in content, "Subscription should set ack_deadline_seconds"
 
 
 def test_storage_module_pubsub_outputs():
@@ -47,9 +43,5 @@ def test_storage_module_pubsub_outputs():
     outputs_tf = STORAGE_MODULE_DIR / "outputs.tf"
     content = outputs_tf.read_text()
 
-    assert 'output "pubsub_topic_name"' in content, (
-        "outputs.tf should define pubsub_topic_name"
-    )
-    assert 'output "pubsub_subscription_name"' in content, (
-        "outputs.tf should define pubsub_subscription_name"
-    )
+    assert 'output "pubsub_topic_name"' in content, "outputs.tf should define pubsub_topic_name"
+    assert 'output "pubsub_subscription_name"' in content, "outputs.tf should define pubsub_subscription_name"

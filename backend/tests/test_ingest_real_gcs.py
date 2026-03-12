@@ -4,8 +4,7 @@ Tests 8-14: File copy, cleanup, gcs_uri, experiment prefix, unlinked prefix,
 MD5 from Pub/Sub, pipeline trigger evaluation.
 """
 
-import base64
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -67,7 +66,7 @@ async def test_ingest_copies_file_to_raw_bucket(client, admin_token, session, _s
         patch("app.services.ingest_service.copy_to_raw_bucket", mock_copy),
         patch("app.services.ingest_service.cleanup_ingest_file", mock_delete),
     ):
-        event = await process_ingest_event(
+        await process_ingest_event(
             filename="PROJ1_EXP1_S001.fastq.gz",
             source_bucket="bioaf-ingest-testorg",
             source_path="PROJ1_EXP1_S001.fastq.gz",
@@ -195,7 +194,7 @@ async def test_ingest_uses_experiment_prefix(client, admin_token, session, _setu
         patch("app.services.ingest_service.copy_to_raw_bucket", mock_copy),
         patch("app.services.ingest_service.cleanup_ingest_file", mock_cleanup),
     ):
-        event = await process_ingest_event(
+        await process_ingest_event(
             filename="PROJ1_EXP1_S001.fastq.gz",
             source_bucket="bioaf-ingest-testorg",
             source_path="PROJ1_EXP1_S001.fastq.gz",
@@ -226,7 +225,7 @@ async def test_ingest_uses_unlinked_prefix_when_no_experiment(client, admin_toke
         patch("app.services.ingest_service.copy_to_raw_bucket", mock_copy),
         patch("app.services.ingest_service.cleanup_ingest_file", mock_cleanup),
     ):
-        event = await process_ingest_event(
+        await process_ingest_event(
             filename="random_file.bam",
             source_bucket="bioaf-ingest-testorg",
             source_path="random_file.bam",
@@ -259,7 +258,7 @@ async def test_ingest_md5_from_pubsub_message(client, admin_token, session, _set
         patch("app.services.ingest_service.cleanup_ingest_file", mock_cleanup),
     ):
         # First ingest
-        event1 = await process_ingest_event(
+        await process_ingest_event(
             filename="file1.fastq",
             source_bucket="bioaf-ingest-testorg",
             source_path="file1.fastq",

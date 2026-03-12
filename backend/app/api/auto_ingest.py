@@ -50,9 +50,7 @@ async def configure_auto_ingest(
 
     # Check storage is deployed
     if body.enabled:
-        row = await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'storage_deployed'")
-        )
+        row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'storage_deployed'"))
         storage = row.scalar()
         if not storage or storage != "true":
             raise HTTPException(
