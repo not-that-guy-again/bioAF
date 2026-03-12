@@ -49,6 +49,7 @@ from app.api.pipeline_triggers import budget_router
 from app.api.ssh_connect import router as ssh_connect_router
 from app.api.gcp_config import router as gcp_config_router
 from app.api.terraform_executor import router as terraform_executor_router
+from app.api.storage_deploy import router as storage_deploy_router
 
 api_router = APIRouter()
 
@@ -101,3 +102,4 @@ api_router.include_router(budget_router)
 api_router.include_router(ssh_connect_router)
 api_router.include_router(gcp_config_router)
 api_router.include_router(terraform_executor_router)
+api_router.include_router(storage_deploy_router)
