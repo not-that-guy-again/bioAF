@@ -212,14 +212,16 @@ class GcsStorageProvider(StorageProvider):
                 continue
 
             gcs_uri = f"gs://{bucket_name}/{blob.name}"
-            collected.append({
-                "filename": filename,
-                "gcs_uri": gcs_uri,
-                "size_bytes": blob.size,
-                "md5_hash": blob.md5_hash,
-                "experiment_id": experiment_id,
-                "pipeline_run_id": run_id,
-            })
+            collected.append(
+                {
+                    "filename": filename,
+                    "gcs_uri": gcs_uri,
+                    "size_bytes": blob.size,
+                    "md5_hash": blob.md5_hash,
+                    "experiment_id": experiment_id,
+                    "pipeline_run_id": run_id,
+                }
+            )
 
         return collected
 

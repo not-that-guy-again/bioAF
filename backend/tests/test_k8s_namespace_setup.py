@@ -4,7 +4,7 @@ Tests that the compute adapter creates namespace, service account, and role bind
 and skips creation if they already exist.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 

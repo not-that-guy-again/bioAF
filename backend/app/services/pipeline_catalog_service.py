@@ -43,7 +43,7 @@ BUILTIN_PIPELINES = [
         "name": "bioAF System Test",
         "description": "Verifies end-to-end pipeline execution: reads input files from GCS, processes them, writes output files to GCS.",
         "source_type": "builtin",
-        "source_url": None,
+        "source_url": "",
         "version": "1.0.0",
         "defaults_file": "bioaf-system-test.json",
     },

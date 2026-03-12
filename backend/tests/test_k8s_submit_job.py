@@ -72,10 +72,7 @@ class TestSubmitJobCreatesK8sJob:
         # Check node selector and tolerations
         pod_spec = body["spec"]["template"]["spec"]
         assert pod_spec["nodeSelector"]["bioaf.io/pool"] == "pipelines"
-        assert any(
-            t["key"] == "bioaf.io/pool" and t["value"] == "pipelines"
-            for t in pod_spec["tolerations"]
-        )
+        assert any(t["key"] == "bioaf.io/pool" and t["value"] == "pipelines" for t in pod_spec["tolerations"])
 
         # Check job name
         assert body["metadata"]["name"] == "bioaf-pipeline-42"

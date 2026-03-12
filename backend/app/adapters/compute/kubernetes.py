@@ -291,7 +291,7 @@ class KubernetesComputeProvider(ComputeProvider):
         container_image = job_spec.get("container_image", "alpine:3.19")
         command = job_spec.get("command", [])
         stage_commands = job_spec.get("stage_commands", [])
-        input_files = job_spec.get("input_files", [])
+        _ = job_spec.get("input_files", [])  # reserved for future use
 
         job_name = f"bioaf-pipeline-{run_id}"
 
@@ -299,12 +299,14 @@ class KubernetesComputeProvider(ComputeProvider):
         init_containers = []
         if stage_commands:
             stage_script = " && ".join(stage_commands)
-            init_containers.append({
-                "name": "stage-inputs",
-                "image": "google/cloud-sdk:slim",
-                "command": ["/bin/sh", "-c", stage_script],
-                "volumeMounts": [{"name": "data", "mountPath": "/data"}],
-            })
+            init_containers.append(
+                {
+                    "name": "stage-inputs",
+                    "image": "google/cloud-sdk:slim",
+                    "command": ["/bin/sh", "-c", stage_script],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                }
+            )
 
         # Build main container
         main_container = {
@@ -352,7 +354,7 @@ class KubernetesComputeProvider(ComputeProvider):
         }
 
         if init_containers:
-            job_manifest["spec"]["template"]["spec"]["initContainers"] = init_containers
+            job_manifest["spec"]["template"]["spec"]["initContainers"] = init_containers  # type: ignore[index]
 
         batch_client = self._get_k8s_batch_client()
         batch_client.create_namespaced_job(namespace=namespace, body=job_manifest)
@@ -429,11 +431,15 @@ class KubernetesComputeProvider(ComputeProvider):
 
         jobs = []
         for job in job_list.items:
-            jobs.append({
-                "job_id": job.metadata.name,
-                "status": "running" if job.status.active else "completed",
-                "created_at": job.metadata.creation_timestamp.isoformat() if job.metadata.creation_timestamp else None,
-            })
+            jobs.append(
+                {
+                    "job_id": job.metadata.name,
+                    "status": "running" if job.status.active else "completed",
+                    "created_at": job.metadata.creation_timestamp.isoformat()
+                    if job.metadata.creation_timestamp
+                    else None,
+                }
+            )
         return jobs
 
     async def _k8s_get_job_logs(self, job_id: str) -> str:

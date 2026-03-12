@@ -6,7 +6,6 @@ updates experiment status, and writes audit log.
 
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
 from sqlalchemy import text
 
 from app.models.experiment import Experiment
@@ -81,9 +80,7 @@ class TestSubmitCreatesRunRecord:
             experiment_id=data["experiment"].id,
         )
 
-        run = await PipelineRunService.launch_run(
-            session, data["org"].id, data["user"].id, request
-        )
+        run = await PipelineRunService.launch_run(session, data["org"].id, data["user"].id, request)
         await session.commit()
 
         assert run.id is not None
@@ -104,9 +101,7 @@ class TestSubmitCallsComputeAdapter:
         )
 
         # The adapter is called in local mode by default, which succeeds
-        run = await PipelineRunService.launch_run(
-            session, data["org"].id, data["user"].id, request
-        )
+        run = await PipelineRunService.launch_run(session, data["org"].id, data["user"].id, request)
         await session.commit()
 
         # In local mode, slurm_job_id gets set to the mock job_id
@@ -126,15 +121,15 @@ class TestSubmitUpdatesExperimentStatus:
             experiment_id=data["experiment"].id,
         )
 
-        await PipelineRunService.launch_run(
-            session, data["org"].id, data["user"].id, request
-        )
+        await PipelineRunService.launch_run(session, data["org"].id, data["user"].id, request)
         await session.commit()
 
         # Reload experiment
-        row = (await session.execute(
-            text("SELECT status FROM experiments WHERE id = :id").bindparams(id=data["experiment"].id)
-        )).fetchone()
+        row = (
+            await session.execute(
+                text("SELECT status FROM experiments WHERE id = :id").bindparams(id=data["experiment"].id)
+            )
+        ).fetchone()
         assert row[0] == "processing"
 
 
@@ -148,18 +143,18 @@ class TestSubmitWritesAuditLog:
             experiment_id=data["experiment"].id,
         )
 
-        run = await PipelineRunService.launch_run(
-            session, data["org"].id, data["user"].id, request
-        )
+        run = await PipelineRunService.launch_run(session, data["org"].id, data["user"].id, request)
         await session.commit()
 
         # Check audit log
-        row = (await session.execute(
-            text(
-                "SELECT action, entity_type, entity_id FROM audit_log "
-                "WHERE entity_type = 'pipeline_run' AND entity_id = :id AND action = 'launch'"
-            ).bindparams(id=run.id)
-        )).fetchone()
+        row = (
+            await session.execute(
+                text(
+                    "SELECT action, entity_type, entity_id FROM audit_log "
+                    "WHERE entity_type = 'pipeline_run' AND entity_id = :id AND action = 'launch'"
+                ).bindparams(id=run.id)
+            )
+        ).fetchone()
 
         assert row is not None
         assert row[0] == "launch"

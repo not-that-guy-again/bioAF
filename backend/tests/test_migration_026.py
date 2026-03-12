@@ -73,11 +73,7 @@ async def test_migration_seeds_k8s_pipeline_namespace_config(session):
     await session.commit()
 
     row = (
-        await session.execute(
-            text(
-                "SELECT value FROM platform_config WHERE key = 'k8s_pipeline_namespace'"
-            )
-        )
+        await session.execute(text("SELECT value FROM platform_config WHERE key = 'k8s_pipeline_namespace'"))
     ).fetchone()
 
     assert row is not None

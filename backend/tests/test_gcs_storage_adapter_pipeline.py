@@ -3,8 +3,7 @@
 Tests generate_stage_commands and collect_outputs for real GCS mode.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-import hashlib
+from unittest.mock import MagicMock, patch
 
 import pytest
 

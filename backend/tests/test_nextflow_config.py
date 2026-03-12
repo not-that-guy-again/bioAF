@@ -4,7 +4,6 @@ Tests that the generator produces valid config with correct executor,
 namespace, and GCS paths.
 """
 
-import pytest
 
 from app.services.nextflow_config import generate_nextflow_config
 

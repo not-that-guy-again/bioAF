@@ -216,12 +216,14 @@ async def test_k8s_monitor_sends_completion_audit(session, k8s_running_run):
 
     from sqlalchemy import text as sql_text
 
-    row = (await session.execute(
-        sql_text(
-            "SELECT action, entity_type FROM audit_log "
-            "WHERE entity_type = 'pipeline_run' AND entity_id = :id AND action = 'complete'"
-        ).bindparams(id=k8s_running_run.id)
-    )).fetchone()
+    row = (
+        await session.execute(
+            sql_text(
+                "SELECT action, entity_type FROM audit_log "
+                "WHERE entity_type = 'pipeline_run' AND entity_id = :id AND action = 'complete'"
+            ).bindparams(id=k8s_running_run.id)
+        )
+    ).fetchone()
     assert row is not None
     assert row[0] == "complete"
 
