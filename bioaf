@@ -158,27 +158,61 @@ ENVEOF
 
 cmd_start() {
     bold "=== Starting Services ==="
-    $DC up -d
+
+    for svc in db backend frontend nginx; do
+        echo -n "  Starting $svc..."
+        $DC up -d "$svc" > /dev/null 2>&1
+        green " up"
+
+        if [ "$svc" = "db" ]; then
+            wait_for_db
+        fi
+
+        # Give backend time to bind before starting frontend
+        if [ "$svc" = "backend" ]; then
+            echo "  Waiting for backend to initialize..."
+            sleep 3
+        fi
+    done
+
+    echo ""
     green "All services started."
     cmd_status
 }
 
 cmd_stop() {
     bold "=== Stopping Services ==="
-    $DC stop
+
+    for svc in nginx frontend backend db; do
+        echo -n "  Stopping $svc..."
+        $DC stop "$svc" > /dev/null 2>&1
+        green " stopped"
+    done
+
+    echo ""
     green "All services stopped."
 }
 
 cmd_restart() {
-    bold "=== Restarting Services ==="
-    $DC restart
-    green "All services restarted."
+    cmd_stop
+    echo ""
+    cmd_start
 }
 
 cmd_status() {
     bold "=== Service Status ==="
     echo ""
-    $DC ps --format "table {{.Service}}\t{{.Status}}\t{{.Ports}}"
+
+    for svc in db backend frontend nginx; do
+        local state
+        state=$($DC ps --format "{{.State}}" "$svc" 2>/dev/null || echo "not created")
+        case "$state" in
+            running) green "  $svc: running" ;;
+            exited)  red   "  $svc: exited" ;;
+            *)       yellow "  $svc: $state" ;;
+        esac
+    done
+
     echo ""
 }
 
