@@ -113,6 +113,23 @@ ENVEOF
     green "Environment file written to docker/.env"
     echo ""
 
+    # Remove stale database volume if it exists. The volume holds the
+    # old password from a previous install, which won't match the newly
+    # generated credentials.
+    local vol_name
+    vol_name=$($DC config --format json 2>/dev/null | python3 -c "
+import sys, json
+cfg = json.load(sys.stdin)
+for v in cfg.get('volumes', {}).values():
+    print(v.get('name', ''))
+    break
+" 2>/dev/null || echo "")
+
+    if [ -n "$vol_name" ] && docker volume inspect "$vol_name" > /dev/null 2>&1; then
+        yellow "Removing existing database volume ($vol_name) to avoid password mismatch..."
+        $DC down -v 2>/dev/null || true
+    fi
+
     # Build and start
     bold "Building and starting containers..."
     $DC up -d --build

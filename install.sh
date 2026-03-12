@@ -173,6 +173,31 @@ ENVEOF
     fi
 
     green "Environment file written to docker/.env"
+
+    # Warn about stale database volume when regenerating secrets
+    if [ "$force" = true ] && command -v docker &>/dev/null; then
+        local compose_file="$SCRIPT_DIR/docker/docker-compose.yml"
+        if [ -f "$compose_file" ]; then
+            local dc="docker compose -f $compose_file --env-file $ENV_FILE"
+            local vol_name
+            vol_name=$($dc config --format json 2>/dev/null | python3 -c "
+import sys, json
+cfg = json.load(sys.stdin)
+for v in cfg.get('volumes', {}).values():
+    print(v.get('name', ''))
+    break
+" 2>/dev/null || echo "")
+
+            if [ -n "$vol_name" ] && docker volume inspect "$vol_name" > /dev/null 2>&1; then
+                echo ""
+                yellow "WARNING: Database volume '$vol_name' exists from a previous install."
+                yellow "The old volume has a different password baked in."
+                yellow "Run './bioaf stop && docker volume rm $vol_name' before starting,"
+                yellow "or use './bioaf setup' which handles this automatically."
+            fi
+        fi
+    fi
+
     return 0
 }
 
