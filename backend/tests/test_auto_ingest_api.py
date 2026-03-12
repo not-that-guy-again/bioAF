@@ -120,7 +120,7 @@ async def test_enable_writes_audit_log(client, session, admin_user, admin_token)
     result = await session.execute(
         text(
             "SELECT action FROM audit_log WHERE entity_type = 'auto_ingest' "
-            "ORDER BY created_at DESC LIMIT 1"
+            "ORDER BY timestamp DESC LIMIT 1"
         )
     )
     row = result.fetchone()
