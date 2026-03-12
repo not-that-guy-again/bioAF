@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, patch
 
+from app.models.pipeline_run import PipelineRun
 from app.services.pipeline_monitor_service import PipelineMonitorService, _parse_memory_gb, _parse_duration
 
 
@@ -82,6 +83,150 @@ async def running_pipeline_run(session, admin_user):
     await session.flush()
     await session.commit()
     return run
+
+
+# --- Phase 20: K8s direct status polling tests ---
+
+
+@pytest_asyncio.fixture
+async def k8s_running_run(session, admin_user):
+    """Create a pipeline run with k8s_job_name set (K8s direct polling path)."""
+    from app.models.experiment import Experiment
+    from app.models.pipeline_run import PipelineRun
+    from datetime import datetime, timezone
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="K8s Monitor Test",
+        owner_user_id=admin_user.id,
+        status="processing",
+    )
+    session.add(exp)
+    await session.flush()
+
+    run = PipelineRun(
+        organization_id=admin_user.organization_id,
+        experiment_id=exp.id,
+        submitted_by_user_id=admin_user.id,
+        pipeline_name="bioAF System Test",
+        pipeline_version="1.0.0",
+        status="running",
+        k8s_job_name="bioaf-pipeline-99",
+        k8s_namespace="bioaf-pipelines",
+        started_at=datetime.now(timezone.utc),
+    )
+    session.add(run)
+    await session.flush()
+    await session.commit()
+    return run
+
+
+@pytest.mark.asyncio
+async def test_k8s_monitor_keeps_running(session, k8s_running_run):
+    """Test 20: monitor keeps running status when K8s reports running."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {
+        "status": "running",
+        "pod_name": "bioaf-pipeline-99-xyz",
+    }
+
+    with patch(
+        "app.services.pipeline_monitor_service.get_compute_adapter",
+        return_value=mock_compute,
+    ):
+        await PipelineMonitorService.sync_run_statuses(session)
+
+    from sqlalchemy import select
+
+    result = await session.execute(select(PipelineRun).where(PipelineRun.id == k8s_running_run.id))
+    run = result.scalar_one()
+    assert run.status == "running"
+    assert run.k8s_pod_name == "bioaf-pipeline-99-xyz"
+
+
+@pytest.mark.asyncio
+async def test_k8s_monitor_detects_completion(session, k8s_running_run):
+    """Test 21: monitor detects K8s job completion."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {
+        "status": "completed",
+        "pod_name": "bioaf-pipeline-99-xyz",
+    }
+
+    mock_storage = AsyncMock()
+    mock_storage.collect_outputs.return_value = []
+
+    with (
+        patch("app.services.pipeline_monitor_service.get_compute_adapter", return_value=mock_compute),
+        patch("app.services.pipeline_monitor_service.get_storage_adapter", return_value=mock_storage),
+        patch("app.services.experiment_service.ExperimentService.update_status", new_callable=AsyncMock),
+    ):
+        await PipelineMonitorService.sync_run_statuses(session)
+
+    from sqlalchemy import select
+
+    result = await session.execute(select(PipelineRun).where(PipelineRun.id == k8s_running_run.id))
+    run = result.scalar_one()
+    assert run.status == "completed"
+    assert run.completed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_k8s_monitor_detects_failure(session, k8s_running_run):
+    """Test 22: monitor detects K8s job failure and populates error_message."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {
+        "status": "failed",
+        "pod_name": "bioaf-pipeline-99-xyz",
+    }
+    mock_compute.get_job_logs.return_value = "Error: container exited with code 1"
+
+    with (
+        patch("app.services.pipeline_monitor_service.get_compute_adapter", return_value=mock_compute),
+        patch("app.services.experiment_service.ExperimentService.update_status", new_callable=AsyncMock),
+    ):
+        await PipelineMonitorService.sync_run_statuses(session)
+
+    from sqlalchemy import select
+
+    result = await session.execute(select(PipelineRun).where(PipelineRun.id == k8s_running_run.id))
+    run = result.scalar_one()
+    assert run.status == "failed"
+    assert "container exited" in run.error_message
+
+
+@pytest.mark.asyncio
+async def test_k8s_monitor_sends_completion_audit(session, k8s_running_run):
+    """Test 23: monitor writes audit log on completion."""
+    mock_compute = AsyncMock()
+    mock_compute.get_job_status.return_value = {
+        "status": "completed",
+        "pod_name": "bioaf-pipeline-99-xyz",
+    }
+
+    mock_storage = AsyncMock()
+    mock_storage.collect_outputs.return_value = []
+
+    with (
+        patch("app.services.pipeline_monitor_service.get_compute_adapter", return_value=mock_compute),
+        patch("app.services.pipeline_monitor_service.get_storage_adapter", return_value=mock_storage),
+        patch("app.services.experiment_service.ExperimentService.update_status", new_callable=AsyncMock),
+    ):
+        await PipelineMonitorService.sync_run_statuses(session)
+
+    from sqlalchemy import text as sql_text
+
+    row = (await session.execute(
+        sql_text(
+            "SELECT action, entity_type FROM audit_log "
+            "WHERE entity_type = 'pipeline_run' AND entity_id = :id AND action = 'complete'"
+        ).bindparams(id=k8s_running_run.id)
+    )).fetchone()
+    assert row is not None
+    assert row[0] == "complete"
+
+
+# --- Legacy Nextflow trace-based tests ---
 
 
 COMPLETED_TRACE = """task_id\thash\tnative_id\tprocess\ttag\tname\tstatus\texit\tsubmit\tstart\tcomplete\tduration\trealtime\t%cpu\tpeak_rss\tpeak_vmem\trchar\twchar

@@ -43,12 +43,23 @@ class PipelineMonitorService:
 
     @staticmethod
     async def _sync_single_run(session: AsyncSession, run: PipelineRun) -> None:
-        """Sync a single run's status from the compute adapter."""
-        # Use the compute adapter to get job status
+        """Sync a single run's status from the compute adapter.
+
+        For K8s jobs (k8s_job_name set), uses direct K8s Job status polling.
+        For Nextflow runs, falls back to trace file parsing.
+        """
+        job_id = run.k8s_job_name or run.slurm_job_id or str(run.id)
+
+        # K8s direct status polling
+        if run.k8s_job_name:
+            await PipelineMonitorService._sync_k8s_run(session, run, job_id)
+            return
+
+        # Nextflow trace-based polling (legacy path)
         try:
             compute_adapter = get_compute_adapter()
-            await compute_adapter.get_job_status(run.slurm_job_id or str(run.id))
-            trace_content = await compute_adapter.get_job_logs(run.slurm_job_id or str(run.id))
+            await compute_adapter.get_job_status(job_id)
+            trace_content = await compute_adapter.get_job_logs(job_id)
         except Exception:
             return
 
@@ -102,6 +113,53 @@ class PipelineMonitorService:
             else:
                 run.status = "completed"
             run.completed_at = datetime.now(timezone.utc)
+
+            await PipelineMonitorService._handle_completion(session, run)
+
+    @staticmethod
+    async def _sync_k8s_run(session: AsyncSession, run: PipelineRun, job_id: str) -> None:
+        """Sync a K8s Job run by querying the compute adapter for job status."""
+        try:
+            compute_adapter = get_compute_adapter()
+            status_result = await compute_adapter.get_job_status(job_id)
+        except Exception as e:
+            logger.warning("Failed to get K8s job status for run %d: %s", run.id, e)
+            return
+
+        k8s_status = status_result.get("status", "")
+        pod_name = status_result.get("pod_name")
+
+        # Update pod name if available
+        if pod_name:
+            run.k8s_pod_name = pod_name
+
+        if k8s_status == "completed" and run.status != "completed":
+            run.status = "completed"
+            run.completed_at = datetime.now(timezone.utc)
+            run.progress_json = {
+                "total_processes": 1,
+                "completed": 1,
+                "running": 0,
+                "failed": 0,
+                "cached": 0,
+                "percent_complete": 100.0,
+            }
+            await PipelineMonitorService._handle_completion(session, run)
+
+        elif k8s_status == "failed" and run.status != "failed":
+            run.status = "failed"
+            run.completed_at = datetime.now(timezone.utc)
+
+            # Try to get error info from logs
+            try:
+                log_content = await compute_adapter.get_job_logs(job_id)
+                if log_content:
+                    # Take last 500 chars of logs as error message
+                    run.error_message = log_content[-500:] if len(log_content) > 500 else log_content
+                else:
+                    run.error_message = "Job failed (no logs available)"
+            except Exception:
+                run.error_message = "Job failed (could not retrieve logs)"
 
             await PipelineMonitorService._handle_completion(session, run)
 
