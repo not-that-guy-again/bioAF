@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getToken } from "@/lib/auth";
 
 interface TerraformEvent {
   event_type: string;
@@ -20,6 +21,8 @@ interface TerraformProgressModalProps {
 
 type ModalStatus = "connecting" | "running" | "complete" | "error";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export function TerraformProgressModal({
   title,
   sseUrl,
@@ -33,49 +36,116 @@ export function TerraformProgressModal({
   const [logLines, setLogLines] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [showLog, setShowLog] = useState(false);
-  const esRef = useRef<EventSource | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const es = new EventSource(sseUrl);
-    esRef.current = es;
-    setStatus("running");
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-    es.onmessage = (ev: MessageEvent) => {
+    async function streamEvents() {
+      const token = getToken();
+      const headers: Record<string, string> = {
+        Accept: "text/event-stream",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      let response: Response;
       try {
-        const event: TerraformEvent = JSON.parse(ev.data);
-        setEvents((prev) => [...prev, event]);
-
-        if (event.resources_total) {
-          setResourcesTotal(event.resources_total);
-        }
-        if (event.resources_completed !== undefined) {
-          setResourcesCompleted(event.resources_completed);
-        }
-        if (event.log_line) {
-          setLogLines((prev) => [...prev, event.log_line!]);
-        }
-
-        if (event.event_type === "apply_complete") {
-          setStatus("complete");
-          es.close();
-        } else if (event.event_type === "apply_error") {
+        response = await fetch(`${API_URL}${sseUrl}`, {
+          method: "POST",
+          headers,
+          signal: controller.signal,
+        });
+      } catch {
+        if (!controller.signal.aborted) {
           setStatus("error");
-          setErrorMessage(event.message);
-          es.close();
+          setErrorMessage("Connection to server lost");
+        }
+        return;
+      }
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        let detail = `Server error (${response.status})`;
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed.detail) detail = parsed.detail;
+        } catch {
+          // use default detail
+        }
+        setStatus("error");
+        setErrorMessage(detail);
+        return;
+      }
+
+      setStatus("running");
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        setStatus("error");
+        setErrorMessage("No response stream available");
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const json = line.slice(6);
+            let event: TerraformEvent;
+            try {
+              event = JSON.parse(json);
+            } catch {
+              continue;
+            }
+
+            setEvents((prev) => [...prev, event]);
+
+            if (event.resources_total) {
+              setResourcesTotal(event.resources_total);
+            }
+            if (event.resources_completed !== undefined) {
+              setResourcesCompleted(event.resources_completed);
+            }
+            if (event.log_line) {
+              setLogLines((prev) => [...prev, event.log_line!]);
+            }
+
+            if (event.event_type === "apply_complete") {
+              setStatus("complete");
+              return;
+            } else if (event.event_type === "apply_error") {
+              setStatus("error");
+              setErrorMessage(event.message);
+              return;
+            }
+          }
         }
       } catch {
-        // ignore parse errors
+        if (!controller.signal.aborted) {
+          setStatus("error");
+          setErrorMessage("Connection to server lost");
+        }
       }
-    };
+    }
 
-    es.onerror = () => {
-      setStatus("error");
-      setErrorMessage("Connection to server lost");
-      es.close();
-    };
+    streamEvents();
 
     return () => {
-      es.close();
+      controller.abort();
     };
   }, [sseUrl]);
 
