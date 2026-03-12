@@ -72,7 +72,7 @@ export default function NotebooksPage() {
         resource_profile: selectedProfile,
         experiment_id: selectedExperiment,
       };
-      await api.post("/api/notebooks/sessions", req);
+      await api.post("/api/v1/notebooks/sessions", req);
       loadSessions();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to launch session");
@@ -82,9 +82,17 @@ export default function NotebooksPage() {
   }
 
   async function handleStop(sessionId: number) {
+    if (!confirm("Stop this notebook session? Unsaved work may be lost.")) return;
     try {
-      await api.post(`/api/notebooks/sessions/${sessionId}/stop`);
+      await api.post(`/api/v1/notebooks/sessions/${sessionId}/stop`);
       loadSessions();
+    } catch {}
+  }
+
+  async function handleSync(sessionId: number) {
+    try {
+      await api.post(`/api/v1/notebooks/sessions/${sessionId}/sync`);
+      alert("Sync triggered successfully");
     } catch {}
   }
 
@@ -188,31 +196,38 @@ export default function NotebooksPage() {
                   {sessions.map((s) => (
                     <tr key={s.id} className={s.status === "idle" ? "bg-yellow-50" : "hover:bg-gray-50"}>
                       <td className="px-4 py-3 text-sm capitalize font-medium">{s.session_type}</td>
-                      <td className="px-4 py-3 text-sm">{s.user?.name || s.user?.email || "—"}</td>
+                      <td className="px-4 py-3 text-sm">{s.user?.name || s.user?.email || "\u2014"}</td>
                       <td className="px-4 py-3 text-sm capitalize">
                         {s.resource_profile} ({s.cpu_cores} CPU, {s.memory_gb}GB)
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-1 rounded ${SESSION_STATUS_COLORS[s.status] || "bg-gray-100"}`}>
-                          {s.status}
-                        </span>
+                        {s.status === "starting" ? (
+                          <span className="flex items-center gap-1 text-xs text-blue-700">
+                            <LoadingSpinner size="sm" />
+                            Starting... this may take up to 2 minutes
+                          </span>
+                        ) : (
+                          <span className={`text-xs px-2 py-1 rounded ${SESSION_STATUS_COLORS[s.status] || "bg-gray-100"}`}>
+                            {s.status}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {s.started_at ? new Date(s.started_at).toLocaleString() : "—"}
+                        {s.started_at ? new Date(s.started_at).toLocaleString() : "\u2014"}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {s.idle_since ? (
                           <span className="text-yellow-700">
                             Since {new Date(s.idle_since).toLocaleTimeString()}
                           </span>
-                        ) : "—"}
+                        ) : "\u2014"}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         {s.experiment ? (
                           <Link href={`/experiments/${s.experiment.id}`} className="text-bioaf-600 hover:underline">
                             {s.experiment.name}
                           </Link>
-                        ) : "—"}
+                        ) : "\u2014"}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
@@ -225,6 +240,14 @@ export default function NotebooksPage() {
                             >
                               Open
                             </a>
+                          )}
+                          {s.status === "running" && (
+                            <button
+                              onClick={() => handleSync(s.id)}
+                              className="text-xs text-green-600 hover:text-green-800"
+                            >
+                              Sync
+                            </button>
                           )}
                           {["pending", "starting", "running", "idle"].includes(s.status) && (
                             <button

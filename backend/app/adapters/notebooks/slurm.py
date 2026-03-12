@@ -12,7 +12,7 @@ class SlurmNotebookProvider(NotebookProvider):
     async def launch_session(self, session_spec: dict) -> dict:
         raise NotImplementedError("SLURM compute backend coming soon. Select Kubernetes during setup.")
 
-    async def terminate_session(self, session_id: str) -> dict:
+    async def terminate_session(self, session_id: str, **kwargs) -> dict:  # type: ignore[override]
         raise NotImplementedError("SLURM compute backend coming soon. Select Kubernetes during setup.")
 
     async def get_session_status(self, session_id: str) -> dict:

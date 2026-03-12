@@ -106,5 +106,5 @@ class TestNotebookConnectionCommand:
     async def test_connection_command_format(self, adapter):
         cmd = await adapter.get_connection_command("abc123")
         assert "kubectl exec" in cmd
-        assert "bioaf-interactive" in cmd
-        assert "notebook-abc123" in cmd
+        assert "bioaf-notebooks" in cmd
+        assert "bioaf-notebook-abc123" in cmd

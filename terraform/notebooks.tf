@@ -61,3 +61,18 @@ locals {
     memory_limit = var.rstudio_memory_limit
   } : {}
 }
+
+# =============================================================================
+# Artifact Registry for bioAF container images (bioaf-scrna, etc.)
+# =============================================================================
+
+resource "google_artifact_registry_repository" "bioaf" {
+  repository_id = "bioaf-images"
+  location      = var.region
+  project       = var.project_id
+  format        = "DOCKER"
+
+  labels = {
+    managed_by = "bioaf"
+  }
+}
