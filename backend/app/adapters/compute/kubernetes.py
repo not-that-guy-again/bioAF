@@ -367,20 +367,94 @@ class KubernetesComputeProvider(ComputeProvider):
         }
 
     async def _k8s_cancel_job(self, job_id: str) -> dict:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job cancellation will be implemented in Phase 20")
+        """Delete a Kubernetes Job with background propagation."""
+        batch_client = self._get_k8s_batch_client()
+        namespace = "bioaf-pipelines"
+        batch_client.delete_namespaced_job(
+            name=job_id,
+            namespace=namespace,
+            propagation_policy="Background",
+        )
+        return {
+            "job_id": job_id,
+            "status": "cancelled",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     async def _k8s_get_job_status(self, job_id: str) -> dict:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job status will be implemented in Phase 20")
+        """Query the K8s API for Job status and translate to normalized model."""
+        batch_client = self._get_k8s_batch_client()
+        core_client = self._get_k8s_core_client()
+        namespace = "bioaf-pipelines"
+
+        job = batch_client.read_namespaced_job(name=job_id, namespace=namespace)
+
+        # Get pod info
+        pod_list = core_client.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"job-name={job_id}",
+        )
+        pod_name = pod_list.items[0].metadata.name if pod_list.items else None
+        node_name = pod_list.items[0].spec.node_name if pod_list.items else None
+
+        # Determine status from Job conditions
+        status = "queued"
+        if job.status.conditions:
+            for condition in job.status.conditions:
+                if condition.type == "Complete" and condition.status == "True":
+                    status = "completed"
+                    break
+                if condition.type == "Failed" and condition.status == "True":
+                    status = "failed"
+                    break
+        elif job.status.active and job.status.active > 0:
+            status = "running"
+
+        return {
+            "job_id": job_id,
+            "status": status,
+            "pod_name": pod_name,
+            "node_name": node_name,
+        }
 
     async def _k8s_list_jobs(self, filters: dict | None = None) -> list[dict]:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job listing will be implemented in Phase 20")
+        """List K8s Jobs in the pipeline namespace."""
+        batch_client = self._get_k8s_batch_client()
+        namespace = "bioaf-pipelines"
+
+        job_list = batch_client.list_namespaced_job(
+            namespace=namespace,
+            label_selector="bioaf.io/pool=pipelines",
+        )
+
+        jobs = []
+        for job in job_list.items:
+            jobs.append({
+                "job_id": job.metadata.name,
+                "status": "running" if job.status.active else "completed",
+                "created_at": job.metadata.creation_timestamp.isoformat() if job.metadata.creation_timestamp else None,
+            })
+        return jobs
 
     async def _k8s_get_job_logs(self, job_id: str) -> str:
-        # TODO: Implement in Phase 20
-        raise NotImplementedError("K8s job logs will be implemented in Phase 20")
+        """Retrieve logs from the pipeline pod."""
+        core_client = self._get_k8s_core_client()
+        namespace = "bioaf-pipelines"
+
+        pod_list = core_client.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"job-name={job_id}",
+        )
+        if not pod_list.items:
+            return f"No pods found for job {job_id}"
+
+        pod_name = pod_list.items[0].metadata.name
+        logs = core_client.read_namespaced_pod_log(
+            name=pod_name,
+            namespace=namespace,
+            container="pipeline",
+        )
+        return logs
 
     async def _k8s_get_cluster_status(self) -> dict:
         """Query GKE API for real cluster status."""
