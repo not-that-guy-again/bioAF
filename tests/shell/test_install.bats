@@ -124,3 +124,11 @@ teardown() {
     # Should have new generated content, not the old line
     ! grep -q "EXISTING=true" "$BIOAF_ROOT/docker/.env"
 }
+
+@test "generated .env does not contain NEXT_PUBLIC_API_URL" {
+    cd "$BIOAF_ROOT"
+    run bash install.sh generate-env --non-interactive
+    [ "$status" -eq 0 ]
+    # NEXT_PUBLIC_API_URL should not appear -- nginx handles routing
+    ! grep -q "NEXT_PUBLIC_API_URL" "$BIOAF_ROOT/docker/.env"
+}

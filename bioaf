@@ -40,6 +40,18 @@ slugify() {
     echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//'
 }
 
+get_access_url() {
+    # Try to detect the best URL for accessing the web UI.
+    # Prefer the machine's public/private IP; fall back to localhost.
+    local host
+    host=$(hostname -I 2>/dev/null | awk '{print $1}') || true
+    if [ -z "$host" ]; then
+        host=$(ipconfig getifaddr en0 2>/dev/null) || true
+    fi
+    host=${host:-localhost}
+    echo "http://${host}:8080"
+}
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -94,9 +106,6 @@ POSTGRES_DB=bioaf
 DATABASE_URL=postgresql+asyncpg://bioaf:${pg_password}@db:5432/bioaf
 SECRET_KEY=$secret_key
 
-# Frontend
-NEXT_PUBLIC_API_URL=
-
 # Environment
 BIOAF_ENVIRONMENT=production
 ENVEOF
@@ -127,13 +136,16 @@ ENVEOF
     green "Admin account created."
     echo ""
 
+    local access_url
+    access_url=$(get_access_url)
+
     bold "=== Setup Complete ==="
     echo ""
-    echo "Access bioAF at: http://localhost:8080"
+    echo "Access bioAF at: $access_url"
     echo "Log in with: $admin_email"
     echo ""
     echo "Next steps:"
-    echo "  - Open http://localhost:8080 in your browser"
+    echo "  - Open $access_url in your browser"
     echo "  - Log in with your admin credentials"
     echo "  - Configure SMTP, compute stack, and invite your team from Settings"
     echo ""
@@ -311,7 +323,7 @@ cmd_create_admin() {
         --org-slug "$org_slug"
     green "Admin account created."
     echo ""
-    echo "Log in at http://localhost:8080 with: $admin_email"
+    echo "Log in at $(get_access_url) with: $admin_email"
 }
 
 cmd_reset_db() {
