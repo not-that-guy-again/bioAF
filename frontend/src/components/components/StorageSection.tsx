@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { AutoIngestControls } from "./AutoIngestControls";
 
 interface BucketMetrics {
   bucket_name: string;
@@ -22,7 +23,9 @@ interface BucketMetricsResponse {
 interface StorageSectionProps {
   storageDeployed: boolean;
   terraformInitialized: boolean;
+  pubsubConfigured?: boolean;
   onDeploy: () => void;
+  onUpdateStorage?: () => void;
 }
 
 function formatBytes(bytes: number): string {
@@ -95,7 +98,15 @@ function IngestGuidancePanel({ bucket }: { bucket: BucketMetrics }) {
   );
 }
 
-function BucketCard({ bucket }: { bucket: BucketMetrics }) {
+function BucketCard({
+  bucket,
+  pubsubConfigured,
+  onUpdateStorage,
+}: {
+  bucket: BucketMetrics;
+  pubsubConfigured?: boolean;
+  onUpdateStorage?: () => void;
+}) {
   const isIngest = bucket.purpose === "ingest";
   const cardClass = isIngest
     ? "bg-white rounded-lg border-2 border-teal-400 p-4 shadow-sm"
@@ -134,6 +145,13 @@ function BucketCard({ bucket }: { bucket: BucketMetrics }) {
         </div>
       )}
       {isIngest && <IngestGuidancePanel bucket={bucket} />}
+      {isIngest && (
+        <AutoIngestControls
+          storageDeployed={true}
+          pubsubConfigured={pubsubConfigured ?? false}
+          onUpdateStorage={onUpdateStorage}
+        />
+      )}
     </div>
   );
 }
@@ -180,7 +198,9 @@ function DeployStorageCard({
 export function StorageSection({
   storageDeployed,
   terraformInitialized,
+  pubsubConfigured,
   onDeploy,
+  onUpdateStorage,
 }: StorageSectionProps) {
   const [buckets, setBuckets] = useState<BucketMetrics[]>([]);
 
@@ -208,7 +228,12 @@ export function StorageSection({
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {buckets.map((bucket) => (
-          <BucketCard key={bucket.bucket_name} bucket={bucket} />
+          <BucketCard
+            key={bucket.bucket_name}
+            bucket={bucket}
+            pubsubConfigured={pubsubConfigured}
+            onUpdateStorage={onUpdateStorage}
+          />
         ))}
       </div>
     </div>
