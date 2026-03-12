@@ -72,6 +72,10 @@ class PipelineRunResponse(BaseModel):
     error_message: str | None = None
     work_dir: str | None = None
     slurm_job_id: str | None = None
+    k8s_job_name: str | None = None
+    k8s_namespace: str | None = None
+    k8s_pod_name: str | None = None
+    actual_cost: float | None = None
     reference_genome: str | None = None
     alignment_algorithm: str | None = None
     resume_from_run_id: int | None = None

@@ -248,7 +248,23 @@ class PipelineMonitorService:
 
     @staticmethod
     async def get_run_logs(session: AsyncSession, run_id: int, process_name: str) -> dict:
-        """Get stdout/stderr for a specific process."""
+        """Get stdout/stderr for a specific process or K8s job."""
+        # Check if this is a K8s run - use k8s_job_name for direct log retrieval
+        run_result = await session.execute(
+            select(PipelineRun.k8s_job_name).where(PipelineRun.id == run_id)
+        )
+        k8s_job_name = run_result.scalar_one_or_none()
+
+        if k8s_job_name:
+            stdout = ""
+            try:
+                compute_adapter = get_compute_adapter()
+                stdout = await compute_adapter.get_job_logs(k8s_job_name)
+            except Exception as e:
+                logger.warning("Failed to read K8s logs for run %d: %s", run_id, e)
+            return {"stdout": stdout, "stderr": ""}
+
+        # Nextflow process-based log retrieval
         result = await session.execute(
             select(PipelineProcess).where(
                 PipelineProcess.pipeline_run_id == run_id,
