@@ -55,8 +55,6 @@ BIOAF_SCRIPT="$BATS_TEST_DIRNAME/../../bioaf"
 # ---------------------------------------------------------------------------
 
 @test "slugify converts uppercase to lowercase" {
-    source "$BIOAF_SCRIPT" __source_only 2>/dev/null || true
-    # Extract slugify and test it directly
     result=$(bash -c "
         slugify() {
             echo \"\$1\" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-\$//'
