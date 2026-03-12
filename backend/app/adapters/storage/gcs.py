@@ -158,15 +158,70 @@ class GcsStorageProvider(StorageProvider):
             "total_cost_monthly_usd": 0.11,
         }
 
+    # -- GCS stage/collect helpers --
+
+    def generate_stage_commands(self, file_records: list[dict], working_dir: str) -> list[str]:
+        """Generate gsutil cp commands for an init container to stage input files."""
+        commands = []
+        for record in file_records:
+            gcs_uri = record.get("gcs_uri", "")
+            filename = record.get("filename", "unknown")
+            dest = f"{working_dir}/{filename}"
+            commands.append(f"gsutil cp {gcs_uri} {dest}")
+        return commands
+
+    def _get_gcs_client(self):
+        """Get a Google Cloud Storage client. Tests mock this method."""
+        from google.cloud import storage
+
+        return storage.Client()
+
     # -- GCS API implementations (production) --
 
     async def _gcs_stage_inputs(self, file_records: list[dict], working_dir: str) -> list[str]:
-        # TODO: Wire to real GCS downloads in Phase 20 when pipeline execution goes live
-        raise NotImplementedError("GCS stage_inputs will be wired in Phase 20")
+        """Generate stage commands for the init container (GCS mode).
+
+        In GCS mode, staging is handled by the init container using gsutil,
+        so we return the list of commands that the init container will execute.
+        """
+        return self.generate_stage_commands(file_records, working_dir)
 
     async def _gcs_collect_outputs(self, working_dir: str, pipeline_run: dict) -> list[dict]:
-        # TODO: Wire to real GCS uploads in Phase 20 when pipeline execution goes live
-        raise NotImplementedError("GCS collect_outputs will be wired in Phase 20")
+        """List output objects in GCS and return file records."""
+        run_id = pipeline_run.get("id", "unknown")
+        experiment_id = pipeline_run.get("experiment_id", "unknown")
+
+        # Parse bucket and prefix from working_dir URI
+        if working_dir.startswith("gs://"):
+            parts = working_dir[5:].split("/", 1)
+            bucket_name = parts[0]
+            prefix = parts[1] if len(parts) > 1 else ""
+        else:
+            bucket_name = self.results_bucket
+            prefix = f"experiments/{experiment_id}/pipeline-runs/{run_id}/"
+
+        client = self._get_gcs_client()
+        bucket = client.bucket(bucket_name)
+        blobs = bucket.list_blobs(prefix=prefix)
+
+        collected = []
+        for blob in blobs:
+            # Extract filename from the full blob path
+            filename = blob.name.split("/")[-1]
+            if not filename:
+                continue
+
+            gcs_uri = f"gs://{bucket_name}/{blob.name}"
+            collected.append({
+                "filename": filename,
+                "gcs_uri": gcs_uri,
+                "size_bytes": blob.size,
+                "md5_hash": blob.md5_hash,
+                "experiment_id": experiment_id,
+                "pipeline_run_id": run_id,
+            })
+
+        return collected
 
     async def _gcs_storage_metrics(self) -> dict:
         """Delegate to GcsStorageService for live bucket metrics.
