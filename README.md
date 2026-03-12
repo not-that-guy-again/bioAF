@@ -63,11 +63,7 @@ See all ADRs in [decisions/README.md](decisions/README.md).
 
 - Docker and Docker Compose
 - Git
-
-For GCP infrastructure provisioning, you also need:
-
-- Google Cloud SDK (`gcloud`) authenticated
-- Terraform >= 1.7
+- openssl (for secret generation)
 
 ### Deploy
 
@@ -76,37 +72,49 @@ For GCP infrastructure provisioning, you also need:
 git clone https://github.com/not-that-guy-again/bioAF.git
 cd bioAF
 
-# Run the interactive setup (generates config, starts services, creates admin)
+# Option A: All-in-one setup (generates config, builds, migrates, creates admin)
 ./bioaf setup
 
-# Open http://localhost:8080 and log in with your admin credentials
+# Option B: Step-by-step
+./install.sh                    # Check prerequisites and generate docker/.env
+./bioaf build                   # Build container images
+./bioaf start                   # Start all services
+./bioaf migrate                 # Run database migrations
+./bioaf create-admin            # Create your admin account
 ```
 
 The `setup` command prompts for your organization name, admin email, and
 password. It generates all secrets, builds containers, runs database
-migrations, and creates the admin account automatically.
+migrations, and creates the admin account automatically. When setup
+completes, it prints the access URL for your instance.
+
+For step-by-step installs, `install.sh` checks that prerequisites are
+installed and generates `docker/.env` with auto-generated database
+credentials and secret keys. Run `./install.sh --help` for options
+including `--non-interactive` and `--force`.
 
 ### Management Commands
 
 | Command | Description |
 | ------- | ----------- |
-| `./bioaf setup` | Interactive first-run setup |
-| `./bioaf start` | Start all services |
+| `./bioaf setup` | Interactive first-run setup (all-in-one) |
+| `./bioaf start` | Start all services in dependency order |
 | `./bioaf stop` | Stop all services |
 | `./bioaf restart` | Restart all services |
 | `./bioaf status` | Show service status |
 | `./bioaf logs [service]` | Tail logs (all or one service) |
+| `./bioaf build [service]` | Build (or rebuild) container images |
 | `./bioaf migrate` | Run database migrations |
+| `./bioaf create-admin` | Create an admin user account |
+| `./bioaf seed <script.py>` | Run a seed/data script in the backend container |
 | `./bioaf backup` | Create a database backup |
 | `./bioaf update` | Pull latest code, rebuild, and migrate |
-| `./bioaf reset-db` | Destroy and recreate the database |
+| `./bioaf reset-db` | Destroy and recreate the database (with confirmation) |
+| `./bioaf shell [service]` | Open a shell in a container (default: backend) |
+| `./bioaf dbshell` | Open a psql session to the database |
 | `./bioaf help` | Show all commands |
 
 See the full [Deployment Guide](docs/deployment-guide.md) for detailed instructions.
-
-For VM provisioning on GCP, see the
-[bioaf-deploy-demo](https://github.com/not-that-guy-again/bioaf-deploy-demo)
-repository for Terraform modules.
 
 ## Documentation
 
@@ -187,16 +195,18 @@ bioAF manages these infrastructure components through its UI:
 
 ```text
 bioAF/
-  backend/        FastAPI application
-  frontend/       Next.js 14 application
-  terraform/      GCP infrastructure as code
-  helm/           Kubernetes deployment chart
-  cli/            Python CLI (bioaf deploy/destroy)
-  docker/         Dockerfiles and compose
-  decisions/      Architecture Decision Records
-  documentation/  Product and architecture specs
-  docs/           User-facing documentation
-  scripts/        Database and utility scripts
+  backend/           FastAPI application
+  frontend/          Next.js 14 application
+  docker/            Dockerfiles, compose, and nginx config
+  terraform/         GCP infrastructure as code
+  helm/              Kubernetes deployment chart
+  decisions/         Architecture Decision Records
+  documentation/     Product and architecture specs
+  docs/              User-facing documentation
+  scripts/           Database seed and utility scripts
+  tests/shell/       BATS tests for install.sh and bioaf scripts
+  bioaf              Management script (entry point)
+  install.sh         First-time installer (prereq checks + env generation)
 ```
 
 ## Contributing
