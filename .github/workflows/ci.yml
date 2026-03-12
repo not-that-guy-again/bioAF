@@ -167,7 +167,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check for secrets in code
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.88.8
         with:
           extra_args: --only-verified
 

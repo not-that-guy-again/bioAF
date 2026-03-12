@@ -1,5 +1,7 @@
 """Tests for the infrastructure components and storage buckets API endpoints."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from sqlalchemy import text
 
@@ -111,58 +113,122 @@ class TestComponentsEndpoint:
 
 
 class TestStorageBucketsEndpoint:
+    """Tests for GET /api/v1/infrastructure/storage/buckets.
+
+    Phase 18 changed this endpoint to require storage_deployed=true and
+    return live BucketMetrics from the GCS storage service.
+    """
+
     @pytest.mark.asyncio
-    async def test_returns_five_buckets(self, client, admin_token):
+    async def test_returns_400_when_not_deployed(self, client, admin_token, session):
+        await session.execute(
+            text(
+                "INSERT INTO platform_config (key, value) VALUES ('storage_deployed', 'false') "
+                "ON CONFLICT (key) DO UPDATE SET value = 'false'"
+            )
+        )
+        await session.commit()
+
         response = await client.get(
             "/api/v1/infrastructure/storage/buckets",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_returns_five_buckets_when_deployed(self, client, admin_token, session):
+        for key, value in [
+            ("storage_deployed", "true"),
+            ("ingest_bucket_name", "bioaf-ingest-demo"),
+            ("raw_bucket_name", "bioaf-raw-demo"),
+            ("working_bucket_name", "bioaf-working-demo"),
+            ("results_bucket_name", "bioaf-results-demo"),
+            ("config_backups_bucket_name", "bioaf-config-backups-demo"),
+        ]:
+            await session.execute(
+                text(
+                    "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                ).bindparams(k=key, v=value)
+            )
+        await session.commit()
+
+        from app.services.gcs_storage import BucketMetrics
+
+        mock_metrics = [
+            BucketMetrics(
+                bucket_name=f"bioaf-{p}-demo",
+                purpose=p,
+                size_bytes=1024,
+                object_count=5,
+                storage_class="STANDARD",
+                versioning_enabled=True,
+                lifecycle_rules=[],
+            )
+            for p in ["ingest", "raw", "working", "results", "config_backups"]
+        ]
+
+        with patch("app.api.storage_deploy.GcsStorageService") as mock_svc:
+            mock_svc.get_bucket_metrics = AsyncMock(return_value=mock_metrics)
+            response = await client.get(
+                "/api/v1/infrastructure/storage/buckets",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
         assert response.status_code == 200
         data = response.json()
         assert "buckets" in data
         assert len(data["buckets"]) == 5
 
     @pytest.mark.asyncio
-    async def test_ingest_bucket_has_is_ingest_true(self, client, admin_token):
-        response = await client.get(
-            "/api/v1/infrastructure/storage/buckets",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+    async def test_each_bucket_has_required_fields(self, client, admin_token, session):
+        for key, value in [
+            ("storage_deployed", "true"),
+            ("ingest_bucket_name", "bioaf-ingest-demo"),
+            ("raw_bucket_name", "bioaf-raw-demo"),
+            ("working_bucket_name", "bioaf-working-demo"),
+            ("results_bucket_name", "bioaf-results-demo"),
+            ("config_backups_bucket_name", "bioaf-config-backups-demo"),
+        ]:
+            await session.execute(
+                text(
+                    "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                ).bindparams(k=key, v=value)
+            )
+        await session.commit()
+
+        from app.services.gcs_storage import BucketMetrics
+
+        mock_metrics = [
+            BucketMetrics(
+                bucket_name=f"bioaf-{p}-demo",
+                purpose=p,
+                size_bytes=2048,
+                object_count=10,
+                storage_class="STANDARD",
+                versioning_enabled=True,
+                lifecycle_rules=[],
+            )
+            for p in ["ingest", "raw", "working", "results", "config_backups"]
+        ]
+
+        with patch("app.api.storage_deploy.GcsStorageService") as mock_svc:
+            mock_svc.get_bucket_metrics = AsyncMock(return_value=mock_metrics)
+            response = await client.get(
+                "/api/v1/infrastructure/storage/buckets",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
         assert response.status_code == 200
         data = response.json()
 
-        ingest = next((b for b in data["buckets"] if b["is_ingest"]), None)
-        assert ingest is not None
-        assert "ingest" in ingest["name"]
-
-    @pytest.mark.asyncio
-    async def test_bucket_names_include_org_slug(self, client, admin_token):
-        response = await client.get(
-            "/api/v1/infrastructure/storage/buckets",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-
-        # All bucket names should follow the bioaf-<type>-<org> pattern
         for bucket in data["buckets"]:
-            assert bucket["name"].startswith("bioaf-")
-
-    @pytest.mark.asyncio
-    async def test_each_bucket_has_required_fields(self, client, admin_token):
-        response = await client.get(
-            "/api/v1/infrastructure/storage/buckets",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-
-        for bucket in data["buckets"]:
-            assert "name" in bucket
+            assert "bucket_name" in bucket
             assert "purpose" in bucket
-            assert "is_ingest" in bucket
-            assert "size_gb" in bucket
+            assert "size_bytes" in bucket
             assert "object_count" in bucket
+            assert "storage_class" in bucket
 
     @pytest.mark.asyncio
     async def test_requires_admin_or_comp_bio_role(self, client, viewer_token):
