@@ -32,8 +32,7 @@ def _validate_slug(slug: str) -> None:
     pattern = r"^[a-z0-9]+(?:-[a-z0-9]+)*$"
     if not re.match(pattern, slug):
         raise ValueError(
-            f"Invalid org slug: {slug}. "
-            "Must be lowercase alphanumeric with hyphens, no spaces or special characters."
+            f"Invalid org slug: {slug}. Must be lowercase alphanumeric with hyphens, no spaces or special characters."
         )
 
 

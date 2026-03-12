@@ -65,6 +65,7 @@ See all ADRs in [decisions/README.md](decisions/README.md).
 - Git
 
 For GCP infrastructure provisioning, you also need:
+
 - Google Cloud SDK (`gcloud`) authenticated
 - Terraform >= 1.7
 
@@ -88,7 +89,7 @@ migrations, and creates the admin account automatically.
 ### Management Commands
 
 | Command | Description |
-|---------|-------------|
+| ------- | ----------- |
 | `./bioaf setup` | Interactive first-run setup |
 | `./bioaf start` | Start all services |
 | `./bioaf stop` | Stop all services |
@@ -169,7 +170,7 @@ cd frontend && npm test
 bioAF manages these infrastructure components through its UI:
 
 | Component | Category | Compute Stack | Dependencies |
-|-----------|----------|---------------|-------------|
+| --------- | -------- | ------------- | ----------- |
 | GKE Cluster | Compute | Kubernetes | None |
 | GCS Buckets | Storage | Kubernetes | GKE |
 | SLURM HPC Cluster | Compute | SLURM (coming soon) | None |

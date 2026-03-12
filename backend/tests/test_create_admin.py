@@ -37,9 +37,7 @@ async def test_create_admin_creates_user(session):
         org_slug="acme-biotech",
     )
 
-    result = await session.execute(
-        text("SELECT email, role, status FROM users WHERE email = 'admin@example.com'")
-    )
+    result = await session.execute(text("SELECT email, role, status FROM users WHERE email = 'admin@example.com'"))
     row = result.fetchone()
     assert row is not None
     assert row[0] == "admin@example.com"
@@ -60,9 +58,7 @@ async def test_create_admin_hashes_password(session):
         org_slug="acme-biotech",
     )
 
-    result = await session.execute(
-        text("SELECT password_hash FROM users WHERE email = 'admin@example.com'")
-    )
+    result = await session.execute(text("SELECT password_hash FROM users WHERE email = 'admin@example.com'"))
     row = result.fetchone()
     assert row is not None
     password_hash = row[0]
@@ -84,9 +80,7 @@ async def test_create_admin_sets_org_slug(session):
         org_slug="acme-biotech",
     )
 
-    result = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'org_slug'")
-    )
+    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'org_slug'"))
     row = result.fetchone()
     assert row is not None
     assert row[0] == "acme-biotech"
@@ -105,9 +99,7 @@ async def test_create_admin_sets_setup_complete(session):
         org_slug="acme-biotech",
     )
 
-    result = await session.execute(
-        text("SELECT setup_complete FROM organizations LIMIT 1")
-    )
+    result = await session.execute(text("SELECT setup_complete FROM organizations LIMIT 1"))
     row = result.fetchone()
     assert row is not None
     assert row[0] is True
@@ -136,9 +128,7 @@ async def test_create_admin_idempotent(session):
     )
 
     # Should still be exactly one user
-    result = await session.execute(
-        text("SELECT count(*) FROM users WHERE email = 'admin@example.com'")
-    )
+    result = await session.execute(text("SELECT count(*) FROM users WHERE email = 'admin@example.com'"))
     assert result.scalar() == 1
 
 
