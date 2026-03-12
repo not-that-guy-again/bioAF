@@ -1,0 +1,241 @@
+"""Tests for K8s notebook adapter production mode (mocked K8s API).
+
+Tests 1-12 from Phase 22 spec: pod creation, commands, service,
+DB updates, GCS sync init, terminate, status, namespace setup.
+"""
+
+import pytest
+from unittest.mock import MagicMock, patch, AsyncMock
+
+from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
+
+
+@pytest.fixture
+def adapter():
+    provider = KubernetesNotebookProvider()
+    provider._mode = "k8s"
+    provider._namespace_ready = False
+    return provider
+
+
+@pytest.fixture
+def mock_k8s_clients():
+    """Set up mocked K8s API clients."""
+    mock_core = MagicMock()
+    mock_rbac = MagicMock()
+
+    # Namespace exists by default
+    mock_core.read_namespace.return_value = MagicMock()
+    # Pod becomes ready
+    mock_pod = MagicMock()
+    mock_pod.status.phase = "Running"
+    mock_pod.status.conditions = [MagicMock(type="Ready", status="True")]
+    mock_core.read_namespaced_pod.return_value = mock_pod
+    # Service creation succeeds
+    mock_core.create_namespaced_service.return_value = MagicMock()
+    mock_core.create_namespaced_pod.return_value = MagicMock()
+
+    return mock_core, mock_rbac
+
+
+def _session_spec(session_type="jupyter", session_id=42, user_id=7):
+    return {
+        "session_type": session_type,
+        "session_id": session_id,
+        "user_id": user_id,
+        "resource_profile": "small",
+        "cpu_cores": 2,
+        "memory_gb": 4,
+        "experiment_id": None,
+    }
+
+
+class TestLaunchSession:
+    @pytest.mark.asyncio
+    async def test_launch_creates_pod(self, adapter, mock_k8s_clients):
+        """Test 1: launch_session submits a Pod manifest to K8s."""
+        mock_core, mock_rbac = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        result = await adapter._k8s_launch_session(_session_spec())
+
+        mock_core.create_namespaced_pod.assert_called_once()
+        pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]
+        assert pod_body["metadata"]["labels"]["bioaf.io/pool"] == "interactive"
+        assert pod_body["metadata"]["labels"]["bioaf.io/session"] == "42"
+        assert pod_body["spec"]["nodeSelector"]["bioaf.io/pool"] == "interactive"
+
+    @pytest.mark.asyncio
+    async def test_launch_jupyter_command(self, adapter, mock_k8s_clients):
+        """Test 2: Jupyter session uses jupyter lab command."""
+        mock_core, mock_rbac = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        await adapter._k8s_launch_session(_session_spec("jupyter"))
+
+        pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]
+        containers = pod_body["spec"]["containers"]
+        cmd_str = " ".join(containers[0].get("command", []))
+        assert "jupyter" in cmd_str
+
+    @pytest.mark.asyncio
+    async def test_launch_rstudio_command(self, adapter, mock_k8s_clients):
+        """Test 3: RStudio session uses rserver command."""
+        mock_core, mock_rbac = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        await adapter._k8s_launch_session(_session_spec("rstudio"))
+
+        pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]
+        containers = pod_body["spec"]["containers"]
+        cmd_str = " ".join(containers[0].get("command", []))
+        assert "rserver" in cmd_str
+
+    @pytest.mark.asyncio
+    async def test_launch_creates_service(self, adapter, mock_k8s_clients):
+        """Test 4: launch_session creates a K8s Service for the pod."""
+        mock_core, mock_rbac = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        await adapter._k8s_launch_session(_session_spec())
+
+        mock_core.create_namespaced_service.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_launch_returns_session_data(self, adapter, mock_k8s_clients):
+        """Test 5: launch_session returns pod name, access URL, and status."""
+        mock_core, mock_rbac = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        result = await adapter._k8s_launch_session(_session_spec())
+
+        assert "pod_name" in result
+        assert "access_url" in result
+        assert result["status"] == "running"
+        assert result["pod_name"] == "bioaf-notebook-42"
+
+    @pytest.mark.asyncio
+    async def test_launch_includes_gcs_sync_init(self, adapter, mock_k8s_clients):
+        """Test 6: Pod manifest includes GCS sync init container."""
+        mock_core, mock_rbac = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        await adapter._k8s_launch_session(_session_spec())
+
+        pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]
+        init_containers = pod_body["spec"].get("initContainers", [])
+        assert len(init_containers) >= 1
+        init_cmd = " ".join(init_containers[0].get("command", []))
+        assert "gsutil" in init_cmd
+        assert "rsync" in init_cmd
+
+
+class TestTerminateSession:
+    @pytest.mark.asyncio
+    async def test_terminate_syncs_to_gcs(self, adapter, mock_k8s_clients):
+        """Test 7: terminate syncs to GCS before pod deletion."""
+        mock_core, _ = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+
+        with patch("kubernetes.stream.stream") as mock_stream:
+            await adapter._k8s_terminate_session(
+                session_id=42,
+                pod_name="bioaf-notebook-42",
+                namespace="bioaf-notebooks",
+                gcs_home_prefix="gs://bucket/notebooks/7/",
+            )
+
+        mock_stream.assert_called_once()
+        assert "gsutil" in str(mock_stream.call_args)
+
+    @pytest.mark.asyncio
+    async def test_terminate_deletes_pod(self, adapter, mock_k8s_clients):
+        """Test 8: terminate deletes Pod and Service."""
+        mock_core, _ = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+
+        with patch("kubernetes.stream.stream"):
+            await adapter._k8s_terminate_session(
+                session_id=42,
+                pod_name="bioaf-notebook-42",
+                namespace="bioaf-notebooks",
+                gcs_home_prefix="gs://bucket/notebooks/7/",
+            )
+
+        mock_core.delete_namespaced_pod.assert_called_once()
+        mock_core.delete_namespaced_service.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_terminate_returns_stopped(self, adapter, mock_k8s_clients):
+        """Test 9: terminate returns stopped status."""
+        mock_core, _ = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+
+        with patch("kubernetes.stream.stream"):
+            result = await adapter._k8s_terminate_session(
+                session_id=42,
+                pod_name="bioaf-notebook-42",
+                namespace="bioaf-notebooks",
+                gcs_home_prefix="gs://bucket/notebooks/7/",
+            )
+
+        assert result["status"] == "stopped"
+        assert "stopped_at" in result
+
+
+class TestGetSessionStatus:
+    @pytest.mark.asyncio
+    async def test_running_status(self, adapter, mock_k8s_clients):
+        """Test 10: running pod returns running status with access URL."""
+        mock_core, _ = mock_k8s_clients
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+
+        result = await adapter._k8s_get_session_status(
+            session_id=42,
+            pod_name="bioaf-notebook-42",
+            namespace="bioaf-notebooks",
+        )
+
+        assert result["status"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_error_status(self, adapter, mock_k8s_clients):
+        """Test 11: failed pod returns error status."""
+        mock_core, _ = mock_k8s_clients
+        mock_pod = MagicMock()
+        mock_pod.status.phase = "Failed"
+        mock_pod.status.conditions = []
+        mock_core.read_namespaced_pod.return_value = mock_pod
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+
+        result = await adapter._k8s_get_session_status(
+            session_id=42,
+            pod_name="bioaf-notebook-42",
+            namespace="bioaf-notebooks",
+        )
+
+        assert result["status"] == "error"
+
+
+class TestNamespaceSetup:
+    @pytest.mark.asyncio
+    async def test_namespace_created_on_first_launch(self, adapter, mock_k8s_clients):
+        """Test 12: namespace and service account created on first launch."""
+        mock_core, mock_rbac = mock_k8s_clients
+        from kubernetes.client.rest import ApiException
+
+        # Namespace does not exist
+        mock_core.read_namespace.side_effect = ApiException(status=404)
+        adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
+        adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        await adapter.ensure_notebook_namespace()
+
+        mock_core.create_namespace.assert_called_once()
+        mock_core.create_namespaced_service_account.assert_called_once()
