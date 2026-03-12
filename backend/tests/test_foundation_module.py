@@ -1,15 +1,16 @@
 """Tests for the Terraform foundation module files (Step 3 - Phase 17).
 
-Verifies that the required HCL files exist in terraform/modules/foundation/
+Verifies that the required HCL files exist in backend/terraform/modules/foundation/
 and contain the expected resource definitions.
 """
 
 from pathlib import Path
 
 
-# Project root is two levels above backend/
-REPO_ROOT = Path(__file__).parent.parent.parent
-FOUNDATION_DIR = REPO_ROOT / "terraform" / "modules" / "foundation"
+# backend/ is one level above tests/
+BACKEND_DIR = Path(__file__).parent.parent
+MODULES_DIR = BACKEND_DIR / "terraform" / "modules"
+FOUNDATION_DIR = MODULES_DIR / "foundation"
 
 
 def test_foundation_main_tf_exists():
@@ -58,10 +59,10 @@ def test_foundation_outputs_tf_defines_state_bucket_name():
 
 
 def test_storage_module_main_tf_exists():
-    """terraform/modules/storage/main.tf must exist (replaced .gitkeep in Phase 18)."""
-    assert (REPO_ROOT / "terraform" / "modules" / "storage" / "main.tf").exists()
+    """terraform/modules/storage/main.tf must exist."""
+    assert (MODULES_DIR / "storage" / "main.tf").exists()
 
 
-def test_compute_module_gitkeep_exists():
-    """terraform/modules/compute/.gitkeep must exist as a placeholder."""
-    assert (REPO_ROOT / "terraform" / "modules" / "compute" / ".gitkeep").exists()
+def test_compute_module_main_tf_exists():
+    """terraform/modules/compute/main.tf must exist."""
+    assert (MODULES_DIR / "compute" / "main.tf").exists()
