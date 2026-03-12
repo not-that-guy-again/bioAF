@@ -41,10 +41,11 @@ jest.mock("@/lib/auth", () => ({
   getCurrentUser: () => ({ role: "admin", email: "test@test.com" }),
 }));
 
-// Mock router
+// Mock router - return stable reference to avoid infinite useEffect loops
 const mockPush = jest.fn();
+const mockRouter = { push: mockPush };
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => mockRouter,
   usePathname: () => "/infrastructure/components",
 }));
 
@@ -441,10 +442,12 @@ describe("InfraComponentsPage", () => {
       expect(screen.getByText(/Teardown Compute Stack/i)).toBeInTheDocument();
     });
 
-    // Teardown confirm button should be disabled
-    const confirmBtn = screen.getAllByRole("button").find(
-      (btn) => btn.textContent?.includes("Teardown") && btn !== screen.getByText("Teardown")
+    // Find all buttons with "Teardown" text - the confirm button in the modal
+    const teardownButtons = screen.getAllByRole("button").filter(
+      (btn) => btn.textContent === "Teardown"
     );
+    // The last one is the confirm button inside the modal
+    const confirmBtn = teardownButtons[teardownButtons.length - 1];
     expect(confirmBtn).toBeDisabled();
 
     // Check the checkbox
