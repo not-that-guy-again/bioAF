@@ -65,3 +65,8 @@ output "jwt_signing_key_secret_id" {
   value       = google_secret_manager_secret.jwt_signing_key.secret_id
   sensitive   = true
 }
+
+output "artifact_registry_repo" {
+  description = "Artifact Registry repository URL for bioAF container images"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.bioaf.repository_id}"
+}

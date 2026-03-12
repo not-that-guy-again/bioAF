@@ -1,0 +1,258 @@
+"""Phase 22 notebook session API endpoints.
+
+Provides launch, stop, list, detail, sync, and settings endpoints
+under /api/v1/notebooks/sessions and /api/v1/settings/.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_session
+from app.api.dependencies import require_role
+from app.schemas.notebook_session import (
+    SessionResponse,
+    SessionListResponse,
+    UserSummary,
+    ExperimentSummary,
+)
+from app.services.notebook_service import NotebookService
+
+router = APIRouter(prefix="/api/v1/notebooks", tags=["notebook-sessions"])
+settings_router = APIRouter(prefix="/api/v1/settings", tags=["notebook-settings"])
+
+
+class NotebookLaunchRequest(BaseModel):
+    session_type: str
+    resource_profile: str = "small"
+    experiment_id: int | None = None
+
+
+class NotebookSettings(BaseModel):
+    idle_timeout_hours: int = 4
+    idle_warning_minutes: int = 15
+    max_sessions_per_user: int = 2
+
+
+class ContainerRegistryConfig(BaseModel):
+    bioaf_scrna_image: str
+
+
+def _user_summary(user) -> UserSummary | None:
+    if not user:
+        return None
+    return UserSummary(id=user.id, name=user.name, email=user.email)
+
+
+def _experiment_summary(experiment) -> ExperimentSummary | None:
+    if not experiment:
+        return None
+    return ExperimentSummary(id=experiment.id, name=experiment.name)
+
+
+def _session_response(ns) -> SessionResponse:
+    return SessionResponse(
+        id=ns.id,
+        session_type=ns.session_type,
+        user=_user_summary(ns.user),
+        experiment=_experiment_summary(ns.experiment),
+        resource_profile=ns.resource_profile,
+        cpu_cores=ns.cpu_cores,
+        memory_gb=ns.memory_gb,
+        status=ns.status,
+        idle_since=ns.idle_since,
+        proxy_url=ns.access_url or ns.proxy_url,
+        started_at=ns.started_at,
+        stopped_at=ns.stopped_at,
+        created_at=ns.created_at,
+    )
+
+
+async def _get_config_value(session: AsyncSession, key: str) -> str | None:
+    result = await session.execute(
+        text("SELECT value FROM platform_config WHERE key = :k"),
+        {"k": key},
+    )
+    row = result.first()
+    return row[0] if row else None
+
+
+# -- Session endpoints --
+
+
+@router.get("/sessions", response_model=SessionListResponse)
+async def list_sessions(
+    session_type: str | None = None,
+    status: str | None = None,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+    role = current_user["role"]
+
+    filter_user_id = None if role == "admin" else user_id
+
+    sessions, total = await NotebookService.list_sessions(
+        session,
+        org_id,
+        user_id=filter_user_id,
+        session_type=session_type,
+        status=status,
+    )
+    return SessionListResponse(
+        sessions=[_session_response(s) for s in sessions],
+        total=total,
+    )
+
+
+@router.post("/sessions", response_model=SessionResponse)
+async def launch_session(
+    body: NotebookLaunchRequest,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    user_id = int(current_user["sub"])
+    org_id = int(current_user["org_id"])
+
+    # Check preconditions
+    compute_deployed = await _get_config_value(session, "compute_deployed")
+    if compute_deployed != "true":
+        raise HTTPException(
+            400,
+            "Compute infrastructure is not deployed. Deploy it from Infrastructure > Components first.",
+        )
+
+    scrna_image = await _get_config_value(session, "bioaf_scrna_image")
+    if not scrna_image or scrna_image == "null":
+        raise HTTPException(
+            400,
+            "The notebook environment image has not been built yet. Contact your administrator.",
+        )
+
+    try:
+        notebook_session = await NotebookService.launch_session(
+            session,
+            user_id=user_id,
+            org_id=org_id,
+            session_type=body.session_type,
+            resource_profile=body.resource_profile,
+            experiment_id=body.experiment_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    await session.commit()
+
+    notebook_session = await NotebookService.get_session(session, notebook_session.id)
+    return _session_response(notebook_session)
+
+
+@router.get("/sessions/{session_id}", response_model=SessionResponse)
+async def get_session_detail(
+    session_id: int,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    notebook_session = await NotebookService.get_session(session, session_id)
+    if not notebook_session:
+        raise HTTPException(404, "Session not found")
+    return _session_response(notebook_session)
+
+
+@router.post("/sessions/{session_id}/stop", response_model=SessionResponse)
+async def stop_session(
+    session_id: int,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    user_id = int(current_user["sub"])
+    role = current_user["role"]
+
+    notebook_session = await NotebookService.get_session(session, session_id)
+    if not notebook_session:
+        raise HTTPException(404, "Session not found")
+
+    if role == "comp_bio" and notebook_session.user_id != user_id:
+        raise HTTPException(403, "Can only stop your own sessions")
+
+    try:
+        notebook_session = await NotebookService.stop_session(session, session_id, user_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    await session.commit()
+    notebook_session = await NotebookService.get_session(session, notebook_session.id)
+    return _session_response(notebook_session)
+
+
+@router.post("/sessions/{session_id}/sync")
+async def sync_session(
+    session_id: int,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    notebook_session = await NotebookService.get_session(session, session_id)
+    if not notebook_session:
+        raise HTTPException(404, "Session not found")
+
+    if notebook_session.status != "running":
+        raise HTTPException(400, "Session is not running")
+
+    # Attempt GCS sync (best-effort)
+    if notebook_session.k8s_pod_name and notebook_session.gcs_home_prefix:
+        try:
+            from app.services.session_persistence import sync_session_to_gcs
+
+            await sync_session_to_gcs(
+                pod_name=notebook_session.k8s_pod_name,
+                namespace=notebook_session.k8s_namespace or "bioaf-notebooks",
+                gcs_prefix=notebook_session.gcs_home_prefix,
+            )
+        except Exception:
+            pass  # Best effort in local/test mode
+
+    return {"status": "ok", "message": "Sync triggered"}
+
+
+# -- Settings endpoints --
+
+
+@settings_router.put("/notebooks")
+async def update_notebook_settings(
+    body: NotebookSettings,
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+):
+    for key, value in [
+        ("notebook_idle_timeout_hours", str(body.idle_timeout_hours)),
+        ("notebook_idle_warning_minutes", str(body.idle_warning_minutes)),
+        ("notebook_max_sessions_per_user", str(body.max_sessions_per_user)),
+    ]:
+        await session.execute(
+            text("""
+                INSERT INTO platform_config (key, value) VALUES (:k, :v)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+            """),
+            {"k": key, "v": value},
+        )
+    await session.commit()
+    return {"status": "ok"}
+
+
+@settings_router.put("/container-registry")
+async def update_container_registry(
+    body: ContainerRegistryConfig,
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+):
+    await session.execute(
+        text("""
+            INSERT INTO platform_config (key, value) VALUES (:k, :v)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """),
+        {"k": "bioaf_scrna_image", "v": body.bioaf_scrna_image},
+    )
+    await session.commit()
+    return {"status": "ok"}

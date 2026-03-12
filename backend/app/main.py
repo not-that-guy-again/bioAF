@@ -90,6 +90,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_trigger_batch_expiry_loop()))
     background_tasks.append(asyncio.create_task(_budget_queue_processing_loop()))
     background_tasks.append(asyncio.create_task(_pubsub_listener_loop()))
+    background_tasks.append(asyncio.create_task(_session_monitor_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -386,6 +387,22 @@ async def _pubsub_listener_loop():
             listener.stop()
     except Exception as e:
         logger.error("Pub/Sub listener error: %s", e)
+
+
+async def _session_monitor_loop():
+    """Poll notebook sessions for idle timeout every 60 seconds."""
+    from app.database import async_session_factory
+    from app.services.session_monitor import SessionMonitorService
+
+    while True:
+        try:
+            await asyncio.sleep(60)
+            async with async_session_factory() as session:
+                await SessionMonitorService.poll_notebook_sessions(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Session monitor error: %s", e)
 
 
 app = FastAPI(
