@@ -51,7 +51,8 @@ class StorageDeployResponse(BaseModel):
 async def deploy_storage_module(session: AsyncSession, user_id: int) -> dict:
     """Run Terraform plan + apply for the storage module.
 
-    On success, reads outputs and stores bucket names in platform_config.
+    On success, reads outputs and stores bucket names plus Pub/Sub
+    topic and subscription names in platform_config.
     This is the default implementation; tests mock this function.
     """
     from app.services.terraform_executor import TerraformExecutor

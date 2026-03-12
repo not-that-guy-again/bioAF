@@ -102,3 +102,69 @@ resource "google_storage_bucket" "config_backups" {
     purpose    = "config-backups"
   }
 }
+
+# --- Pub/Sub for ingest bucket notifications ---
+
+resource "google_pubsub_topic" "ingest_events" {
+  name    = "bioaf-ingest-events-${var.org_slug}"
+  project = var.project_id
+
+  labels = {
+    managed_by = "bioaf"
+    purpose    = "ingest-notifications"
+  }
+}
+
+resource "google_pubsub_subscription" "ingest_worker" {
+  name    = "bioaf-ingest-worker-${var.org_slug}"
+  topic   = google_pubsub_topic.ingest_events.id
+  project = var.project_id
+
+  ack_deadline_seconds = 600 # 10 min for large files
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  expiration_policy {
+    ttl = "" # Never expire
+  }
+
+  labels = {
+    managed_by = "bioaf"
+  }
+}
+
+resource "google_pubsub_topic" "ingest_dead_letter" {
+  name    = "bioaf-ingest-dead-letter-${var.org_slug}"
+  project = var.project_id
+}
+
+resource "google_pubsub_subscription" "ingest_dead_letter_sub" {
+  name    = "bioaf-ingest-dead-letter-sub-${var.org_slug}"
+  topic   = google_pubsub_topic.ingest_dead_letter.id
+  project = var.project_id
+}
+
+# Bucket notification -> Pub/Sub
+resource "google_storage_notification" "ingest_notification" {
+  bucket         = google_storage_bucket.ingest.name
+  payload_format = "JSON_API_V1"
+  topic          = google_pubsub_topic.ingest_events.id
+  event_types    = ["OBJECT_FINALIZE"]
+
+  depends_on = [google_pubsub_topic_iam_member.gcs_publisher]
+}
+
+# Allow GCS to publish to the Pub/Sub topic
+data "google_storage_project_service_account" "gcs_account" {
+  project = var.project_id
+}
+
+resource "google_pubsub_topic_iam_member" "gcs_publisher" {
+  topic   = google_pubsub_topic.ingest_events.id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"
+  project = var.project_id
+}
