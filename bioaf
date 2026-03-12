@@ -268,6 +268,52 @@ cmd_seed() {
     green "Seed script complete."
 }
 
+cmd_create_admin() {
+    bold "=== Create Admin Account ==="
+    echo ""
+
+    # Prompt for org name
+    read -rp "Organization name: " org_name
+    if [ -z "$org_name" ]; then
+        red "Organization name cannot be empty."
+        exit 1
+    fi
+
+    org_slug=$(slugify "$org_name")
+    echo "  Org slug: $org_slug"
+    echo ""
+
+    # Prompt for admin email
+    read -rp "Admin email: " admin_email
+    if [ -z "$admin_email" ]; then
+        red "Admin email cannot be empty."
+        exit 1
+    fi
+
+    # Prompt for admin password (hidden)
+    while true; do
+        read -rsp "Admin password: " admin_password
+        echo ""
+        read -rsp "Confirm password: " admin_password_confirm
+        echo ""
+        if [ "$admin_password" = "$admin_password_confirm" ]; then
+            break
+        fi
+        red "Passwords do not match. Try again."
+    done
+    echo ""
+
+    bold "Creating admin account..."
+    $DC exec -T backend python -m app.cli.create_admin \
+        --email "$admin_email" \
+        --password "$admin_password" \
+        --org-name "$org_name" \
+        --org-slug "$org_slug"
+    green "Admin account created."
+    echo ""
+    echo "Log in at http://localhost:8080 with: $admin_email"
+}
+
 cmd_reset_db() {
     bold "=== Database Reset ==="
     red "WARNING: This will destroy ALL data in the database."
@@ -302,6 +348,7 @@ cmd_help() {
     echo ""
     bold "First-Run:"
     echo "  setup               Interactive setup wizard (generates .env, starts services, creates admin)"
+    echo "  create-admin        Create an admin user account (services must be running)"
     echo ""
     bold "Service Management:"
     echo "  start               Start all services"
@@ -345,8 +392,9 @@ command="${1:-help}"
 shift || true
 
 case "$command" in
-    setup)    cmd_setup ;;
-    start)    cmd_start ;;
+    setup)        cmd_setup ;;
+    create-admin) cmd_create_admin ;;
+    start)        cmd_start ;;
     stop)     cmd_stop ;;
     restart)  cmd_restart ;;
     status)   cmd_status ;;

@@ -30,6 +30,7 @@ BIOAF_SCRIPT="$BATS_TEST_DIRNAME/../../bioaf"
     [[ "$output" == *"shell"* ]]
     [[ "$output" == *"dbshell"* ]]
     [[ "$output" == *"seed"* ]]
+    [[ "$output" == *"create-admin"* ]]
 }
 
 @test "bioaf unknown command exits nonzero" {
