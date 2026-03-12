@@ -134,7 +134,7 @@ async def test_assign_file_to_experiment_writes_audit_log(session):
     audit_row = (
         await session.execute(
             text(
-                "SELECT action, entity_type FROM audit_logs "
+                "SELECT action, entity_type FROM audit_log "
                 "WHERE entity_type = 'file' AND entity_id = :fid"
             ).bindparams(fid=file_id)
         )
