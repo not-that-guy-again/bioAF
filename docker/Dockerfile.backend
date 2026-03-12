@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ app/
 COPY alembic/ alembic/
-COPY --from=terraform-modules / terraform/
+COPY terraform/ terraform/
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

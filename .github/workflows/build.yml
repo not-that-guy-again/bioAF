@@ -6,7 +6,6 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
-      - "terraform/**"
       - "Dockerfile*"
       - "docker-compose*"
 
@@ -25,8 +24,6 @@ jobs:
         with:
           context: ./backend
           file: docker/Dockerfile.backend
-          build-contexts: |
-            terraform-modules=./terraform
           push: false
           tags: bioaf/bioaf:pr-${{ github.event.pull_request.number }}
           cache-from: type=gha
