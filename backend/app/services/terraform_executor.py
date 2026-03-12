@@ -91,6 +91,7 @@ class TerraformExecutor:
 
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
+            TerraformExecutor._write_tfvars(work_dir, module_name, config)
 
             env, cleanup = await GCPCredentialInjector.build_env(config)
             try:
@@ -272,6 +273,7 @@ class TerraformExecutor:
 
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, "foundation")
+            TerraformExecutor._write_tfvars(work_dir, "foundation", config)
 
             yield TerraformProgressEvent(event_type="progress", message="Running terraform init...")
             await TerraformExecutor._run_init(work_dir, env, config, local_backend=True)
@@ -430,6 +432,32 @@ class TerraformExecutor:
         return tmp
 
     @staticmethod
+    def _write_tfvars(work_dir: Path, module_name: str, config: dict) -> None:
+        """Write terraform.tfvars.json into work_dir from platform_config values."""
+        project_id = config.get("gcp_project_id", "")
+        region = config.get("gcp_region", "us-central1")
+        zone = config.get("gcp_zone", f"{region}-a")
+        org_slug = config.get("org_slug", "bioaf")
+        state_bucket = config.get("terraform_state_bucket", f"bioaf-tfstate-{project_id}")
+
+        # Common variables shared by all modules
+        tfvars: dict = {
+            "project_id": project_id,
+            "region": region,
+        }
+
+        if module_name == "foundation":
+            tfvars["state_bucket_name"] = state_bucket
+        elif module_name == "storage":
+            tfvars["org_slug"] = org_slug
+        elif module_name == "compute":
+            tfvars["zone"] = zone
+            tfvars["org_slug"] = org_slug
+
+        tfvars_path = work_dir / "terraform.tfvars.json"
+        tfvars_path.write_text(json.dumps(tfvars, indent=2))
+
+    @staticmethod
     async def _run_init(
         work_dir: Path,
         env: dict,
@@ -495,6 +523,7 @@ class TerraformExecutor:
             "gcp_region",
             "gcp_zone",
             "gcp_service_account_key",
+            "org_slug",
             "terraform_initialized",
             "terraform_state_bucket",
         ]

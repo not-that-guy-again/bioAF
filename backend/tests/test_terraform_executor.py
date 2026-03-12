@@ -473,3 +473,71 @@ async def test_bootstrap_creates_state_bucket_key(session):
         await session.execute(text("SELECT value FROM platform_config WHERE key = 'terraform_initialized'"))
     ).scalar()
     assert row == "true"
+
+
+# ---------------------------------------------------------------------------
+# Test 13: _write_tfvars writes correct variables for each module
+# ---------------------------------------------------------------------------
+
+
+def test_write_tfvars_foundation():
+    """_write_tfvars writes project_id, region, and state_bucket_name for foundation."""
+    tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
+    config = {
+        "gcp_project_id": "my-project",
+        "gcp_region": "us-east1",
+        "terraform_state_bucket": "my-bucket",
+    }
+    TerraformExecutor._write_tfvars(tmp, "foundation", config)
+
+    tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
+    assert tfvars["project_id"] == "my-project"
+    assert tfvars["region"] == "us-east1"
+    assert tfvars["state_bucket_name"] == "my-bucket"
+    assert "org_slug" not in tfvars
+
+
+def test_write_tfvars_storage():
+    """_write_tfvars writes project_id, region, and org_slug for storage."""
+    tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
+    config = {
+        "gcp_project_id": "my-project",
+        "gcp_region": "us-west1",
+        "org_slug": "my-lab",
+    }
+    TerraformExecutor._write_tfvars(tmp, "storage", config)
+
+    tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
+    assert tfvars["project_id"] == "my-project"
+    assert tfvars["region"] == "us-west1"
+    assert tfvars["org_slug"] == "my-lab"
+    assert "state_bucket_name" not in tfvars
+
+
+def test_write_tfvars_compute():
+    """_write_tfvars writes project_id, region, zone, and org_slug for compute."""
+    tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
+    config = {
+        "gcp_project_id": "my-project",
+        "gcp_region": "europe-west1",
+        "gcp_zone": "europe-west1-b",
+        "org_slug": "acme",
+    }
+    TerraformExecutor._write_tfvars(tmp, "compute", config)
+
+    tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
+    assert tfvars["project_id"] == "my-project"
+    assert tfvars["region"] == "europe-west1"
+    assert tfvars["zone"] == "europe-west1-b"
+    assert tfvars["org_slug"] == "acme"
+
+
+def test_write_tfvars_defaults():
+    """_write_tfvars uses sensible defaults for missing config values."""
+    tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
+    config = {"gcp_project_id": "proj-123"}
+    TerraformExecutor._write_tfvars(tmp, "foundation", config)
+
+    tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
+    assert tfvars["region"] == "us-central1"
+    assert tfvars["state_bucket_name"] == "bioaf-tfstate-proj-123"
