@@ -177,11 +177,12 @@ async def stack_deploy_endpoint(
 ):
     """Deploy the full compute stack via SSE stream."""
     user_id = int(current_user["sub"])
+    org_id = int(current_user["org_id"]) if current_user.get("org_id") else None
     stack_type = body.stack_type if body else "kubernetes"
 
     async def event_generator():
         try:
-            async for event in deploy_stack(session, stack_type, user_id):
+            async for event in deploy_stack(session, stack_type, user_id, org_id=org_id):
                 data = json.dumps(
                     {
                         "event_type": event.event_type,

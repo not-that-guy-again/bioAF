@@ -141,6 +141,7 @@ class TerraformExecutor:
         if run.status != "awaiting_confirmation":
             raise ValueError(f"Run {run_id} is not awaiting confirmation (status: {run.status})")
 
+        run.action = "apply"
         run.status = "applying"
         await session.flush()
 

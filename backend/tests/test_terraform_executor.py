@@ -300,6 +300,7 @@ async def test_run_apply_updates_resources_completed(session):
 
     await session.refresh(plan_run)
     assert plan_run.status == "completed"
+    assert plan_run.action == "apply"
 
 
 # ---------------------------------------------------------------------------
