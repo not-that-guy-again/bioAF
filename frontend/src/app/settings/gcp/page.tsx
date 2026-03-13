@@ -81,6 +81,7 @@ const REQUIRED_ROLES = [
   "roles/secretmanager.admin",
   "roles/cloudsql.admin",
   "roles/serviceusage.serviceUsageViewer",
+  "roles/resourcemanager.projectIamAdmin",
 ];
 
 export default function GcpSettingsPage() {

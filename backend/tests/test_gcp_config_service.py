@@ -59,6 +59,8 @@ ALL_REQUIRED_PERMISSIONS = [
     "container.clusters.create",
     "iam.serviceAccounts.actAs",
     "compute.instances.create",
+    "resourcemanager.projects.getIamPolicy",
+    "resourcemanager.projects.setIamPolicy",
 ]
 
 

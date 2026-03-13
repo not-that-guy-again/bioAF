@@ -215,6 +215,8 @@ def validate_gcp_credentials(
         "container.clusters.create",
         "iam.serviceAccounts.actAs",
         "compute.instances.create",
+        "resourcemanager.projects.getIamPolicy",
+        "resourcemanager.projects.setIamPolicy",
     ]
     try:
         rm_client = resourcemanager_v3.ProjectsClient(credentials=creds)
