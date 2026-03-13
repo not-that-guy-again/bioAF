@@ -210,6 +210,8 @@ def validate_gcp_credentials(
     required_permissions = [
         "storage.buckets.create",
         "pubsub.topics.create",
+        "pubsub.topics.getIamPolicy",
+        "pubsub.topics.setIamPolicy",
         "container.clusters.create",
         "iam.serviceAccounts.actAs",
         "compute.instances.create",

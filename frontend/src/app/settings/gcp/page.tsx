@@ -77,7 +77,7 @@ const REQUIRED_ROLES = [
   "roles/compute.admin",
   "roles/iam.serviceAccountUser",
   "roles/storage.admin",
-  "roles/pubsub.editor",
+  "roles/pubsub.admin",
   "roles/secretmanager.admin",
   "roles/cloudsql.admin",
   "roles/serviceusage.serviceUsageViewer",

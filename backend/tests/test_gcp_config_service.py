@@ -54,6 +54,8 @@ ALL_REQUIRED_APIS = [
 ALL_REQUIRED_PERMISSIONS = [
     "storage.buckets.create",
     "pubsub.topics.create",
+    "pubsub.topics.getIamPolicy",
+    "pubsub.topics.setIamPolicy",
     "container.clusters.create",
     "iam.serviceAccounts.actAs",
     "compute.instances.create",
