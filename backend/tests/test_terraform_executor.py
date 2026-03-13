@@ -692,3 +692,88 @@ def test_write_tfvars_empty_strings_use_defaults():
     tfvars = json.loads((tmp / "terraform.tfvars.json").read_text())
     assert tfvars["region"] == "us-central1"
     assert tfvars["state_bucket_name"] == "bioaf-tfstate-proj-456"
+
+
+# ---------------------------------------------------------------------------
+# _run_init backend-config tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_init_passes_backend_config_bucket():
+    """_run_init passes -backend-config=bucket=<name> when local_backend=False."""
+    config = {"terraform_state_bucket": "my-tf-bucket"}
+    captured_cmd = None
+
+    def _fake_run(cmd, **kwargs):
+        nonlocal captured_cmd
+        captured_cmd = cmd
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=_fake_run):
+        await TerraformExecutor._run_init(
+            work_dir=Path("/tmp/fake"),
+            env={},
+            config=config,
+            local_backend=False,
+        )
+
+    assert captured_cmd is not None
+    assert "-backend-config=bucket=my-tf-bucket" in captured_cmd
+    assert "-backend=false" not in captured_cmd
+
+
+@pytest.mark.asyncio
+async def test_run_init_local_backend_skips_bucket_config():
+    """_run_init uses -backend=false and omits bucket config for local backend."""
+    config = {"terraform_state_bucket": "my-tf-bucket"}
+    captured_cmd = None
+
+    def _fake_run(cmd, **kwargs):
+        nonlocal captured_cmd
+        captured_cmd = cmd
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=_fake_run):
+        await TerraformExecutor._run_init(
+            work_dir=Path("/tmp/fake"),
+            env={},
+            config=config,
+            local_backend=True,
+        )
+
+    assert captured_cmd is not None
+    assert "-backend=false" in captured_cmd
+    assert not any("backend-config" in c for c in captured_cmd)
+
+
+@pytest.mark.asyncio
+async def test_run_init_no_bucket_in_config_skips_backend_config():
+    """_run_init omits -backend-config when bucket is not in config."""
+    config = {"gcp_project_id": "proj-1"}
+    captured_cmd = None
+
+    def _fake_run(cmd, **kwargs):
+        nonlocal captured_cmd
+        captured_cmd = cmd
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=_fake_run):
+        await TerraformExecutor._run_init(
+            work_dir=Path("/tmp/fake"),
+            env={},
+            config=config,
+            local_backend=False,
+        )
+
+    assert captured_cmd is not None
+    assert not any("backend-config" in c for c in captured_cmd)

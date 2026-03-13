@@ -493,6 +493,10 @@ class TerraformExecutor:
         cmd = ["terraform", "init", "-no-color", "-input=false"]
         if local_backend:
             cmd += ["-backend=false"]
+        else:
+            bucket = config.get("terraform_state_bucket")
+            if bucket:
+                cmd += [f"-backend-config=bucket={bucket}"]
 
         result = await asyncio.to_thread(
             subprocess.run,
