@@ -222,13 +222,8 @@ async def _run_destroy(
     session: AsyncSession, user_id: int, module_name: str
 ) -> AsyncGenerator[TerraformProgressEvent, None]:
     """Run destroy for a Terraform module. Tests mock this function."""
-    # In production, this would run terraform destroy via the executor.
-    # For now, we yield a completion event. The real implementation
-    # would use a dedicated destroy method on TerraformExecutor.
-    yield TerraformProgressEvent(
-        event_type="apply_complete",
-        message=f"Destroy complete for {module_name}",
-    )
+    async for event in TerraformExecutor.run_destroy(session, user_id, module_name):
+        yield event
 
 
 async def deploy_stack(
@@ -269,11 +264,12 @@ async def deploy_stack(
             message="Deploying storage infrastructure...",
         )
         async for event in _run_module(session, user_id, "storage"):
-            yield event
             if event.event_type == "apply_error":
                 storage_failed = True
+                yield event
             elif event.event_type == "apply_complete":
-                # Storage post-apply hook
+                # Storage post-apply hook -- remap to phase_complete so
+                # the frontend does not treat this as the final event.
                 await _set_config(session, "storage_deployed", "true")
                 await log_action(
                     session,
@@ -295,6 +291,14 @@ async def deploy_stack(
                         metadata={"module": "storage"},
                     )
                 await session.flush()
+                yield TerraformProgressEvent(
+                    event_type="phase_complete",
+                    message="Storage deployment complete",
+                    resources_completed=event.resources_completed,
+                    resources_total=event.resources_total,
+                )
+            else:
+                yield event
 
         if storage_failed:
             yield TerraformProgressEvent(
@@ -309,11 +313,12 @@ async def deploy_stack(
         message="Deploying compute infrastructure...",
     )
     async for event in _run_module(session, user_id, "compute"):
-        yield event
         if event.event_type == "apply_error":
             compute_failed = True
+            yield event
         elif event.event_type == "apply_complete":
-            # Compute post-apply hook: store cluster config
+            # Compute post-apply hook: store cluster config.
+            # Remap to phase_complete -- stack_complete is yielded below.
             outputs = event.extra.get("outputs", {})
             cluster_name = outputs.get("cluster_name", {}).get("value", "")
             cluster_endpoint = outputs.get("cluster_endpoint", {}).get("value", "")
@@ -353,6 +358,14 @@ async def deploy_stack(
                     metadata={"module": "compute", "stack_type": "kubernetes"},
                 )
             await session.flush()
+            yield TerraformProgressEvent(
+                event_type="phase_complete",
+                message="Compute deployment complete",
+                resources_completed=event.resources_completed,
+                resources_total=event.resources_total,
+            )
+        else:
+            yield event
 
     if compute_failed:
         yield TerraformProgressEvent(
@@ -370,6 +383,7 @@ async def deploy_stack(
 async def teardown_stack(
     session: AsyncSession,
     user_id: int,
+    org_id: int | None = None,
 ) -> AsyncGenerator[TerraformProgressEvent, None]:
     """Teardown the compute stack (preserves storage).
 
@@ -411,6 +425,26 @@ async def teardown_stack(
         WHERE component_key = 'kubernetes_cluster'
         """)
     )
+
+    await log_action(
+        session,
+        user_id=user_id,
+        entity_type="infrastructure",
+        entity_id=0,
+        action="teardown_compute",
+        details={"module": "compute", "status": "completed"},
+    )
+    if org_id is not None:
+        await ActivityFeedService.add_event(
+            session,
+            org_id=org_id,
+            user_id=user_id,
+            event_type="infrastructure.compute_teardown",
+            summary="Kubernetes cluster and node pools destroyed",
+            entity_type="infrastructure",
+            entity_id=0,
+            metadata={"module": "compute"},
+        )
     await session.flush()
 
     yield TerraformProgressEvent(

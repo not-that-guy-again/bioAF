@@ -124,12 +124,20 @@ export function TerraformProgressModal({
               setLogLines((prev) => [...prev, event.log_line!]);
             }
 
-            if (
-              event.event_type === "apply_complete" ||
-              event.event_type === "stack_complete"
-            ) {
+            if (event.event_type === "stack_complete") {
               setStatus("complete");
               return;
+            } else if (
+              event.event_type === "apply_complete"
+            ) {
+              // apply_complete from a standalone (non-stack) operation
+              setStatus("complete");
+              return;
+            } else if (
+              event.event_type === "phase_complete"
+            ) {
+              // Intermediate phase (e.g. storage finished, compute next).
+              // Keep running -- stack_complete marks the real end.
             } else if (
               event.event_type === "apply_error" ||
               event.event_type === "stack_error"
@@ -164,7 +172,9 @@ export function TerraformProgressModal({
   }, [sseUrl]);
 
   const progressPct =
-    resourcesTotal > 0 ? Math.round((resourcesCompleted / resourcesTotal) * 100) : 0;
+    resourcesTotal > 0
+      ? Math.min(100, Math.round((resourcesCompleted / resourcesTotal) * 100))
+      : 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -214,12 +224,15 @@ export function TerraformProgressModal({
               .filter(
                 (e) =>
                   e.event_type === "resource_complete" ||
-                  e.event_type === "progress"
+                  e.event_type === "progress" ||
+                  e.event_type === "phase_complete"
               )
               .map((e, i) => (
                 <li key={i} className="text-sm flex items-center gap-2">
                   {e.event_type === "resource_complete" ? (
                     <span className="text-green-500">&#10003;</span>
+                  ) : e.event_type === "phase_complete" ? (
+                    <span className="text-green-600 font-medium">&#10003;</span>
                   ) : (
                     <span className="text-blue-500">&#9654;</span>
                   )}
