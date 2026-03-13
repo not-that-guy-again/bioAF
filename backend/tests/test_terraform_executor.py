@@ -777,3 +777,51 @@ async def test_run_init_no_bucket_in_config_skips_backend_config():
 
     assert captured_cmd is not None
     assert not any("backend-config" in c for c in captured_cmd)
+
+
+# ---------------------------------------------------------------------------
+# run_apply initializes working directory and does not use saved plan file
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_apply_inits_workdir_and_applies_without_planfile(session):
+    """run_apply() runs terraform init + apply in a fresh work dir without tfplan."""
+    user_id = await _seed_user(session)
+    await _seed_gcp_config(session, configured=True, initialized=True)
+
+    show_stdout = _make_show_json_output(1)
+
+    def mock_plan(cmd, **kwargs):
+        if "show" in cmd:
+            return _mock_subprocess_run(show_stdout)
+        return _mock_subprocess_run(_make_plan_output(1))
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_plan):
+        with _patch_work_dir():
+            plan_run = await TerraformExecutor.run_plan(
+                session=session,
+                user_id=user_id,
+                module_name="storage",
+            )
+
+    apply_stdout = _make_apply_output(1)
+    captured_cmds = []
+
+    def mock_apply(cmd, **kwargs):
+        captured_cmds.append(cmd)
+        return _mock_subprocess_run(apply_stdout)
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply):
+        with _patch_work_dir():
+            async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
+                pass
+
+    # Should have called init then apply
+    assert len(captured_cmds) >= 2
+    init_cmd = captured_cmds[0]
+    apply_cmd = captured_cmds[1]
+    assert "init" in init_cmd
+    assert "apply" in apply_cmd
+    # apply must NOT reference a saved plan file
+    assert "tfplan" not in apply_cmd

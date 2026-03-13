@@ -152,10 +152,12 @@ class TerraformExecutor:
         env, cleanup = await GCPCredentialInjector.build_env(config)
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
+            TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            await TerraformExecutor._run_init(work_dir, env, config)
 
             apply_result = await asyncio.to_thread(
                 subprocess.run,
-                ["terraform", "apply", "-auto-approve", "-json", "-no-color", "tfplan"],
+                ["terraform", "apply", "-auto-approve", "-json", "-no-color"],
                 cwd=str(work_dir),
                 capture_output=True,
                 text=True,
