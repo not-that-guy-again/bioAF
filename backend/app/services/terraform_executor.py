@@ -24,6 +24,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.component import TerraformRun
+from app.services.activity_feed_service import ActivityFeedService
 from app.services.audit_service import log_action
 from app.services.credential_injector import GCPCredentialInjector
 from app.services.plan_parser import TerraformPlanParser
@@ -246,6 +247,7 @@ class TerraformExecutor:
     async def bootstrap_foundation(
         session: AsyncSession,
         user_id: int,
+        org_id: int | None = None,
     ) -> AsyncIterator[TerraformProgressEvent]:
         """Bootstrap GCS state bucket via the foundation module.
 
@@ -375,6 +377,29 @@ class TerraformExecutor:
             run.status = "completed"
             run.terraform_state_url = f"gs://{bucket_name}" if bucket_name else ""
             run.completed_at = datetime.now(timezone.utc)
+            await session.flush()
+
+            await log_action(
+                session,
+                user_id=user_id,
+                entity_type="terraform",
+                entity_id=run.id,
+                action="bootstrap",
+                details={"status": "completed", "module_name": "foundation", "state_bucket": bucket_name},
+            )
+
+            if org_id is not None:
+                await ActivityFeedService.add_event(
+                    session,
+                    org_id=org_id,
+                    user_id=user_id,
+                    event_type="infrastructure.bootstrap_completed",
+                    summary=f"Terraform state bucket created: {bucket_name}",
+                    entity_type="terraform",
+                    entity_id=run.id,
+                    metadata={"state_bucket": bucket_name},
+                )
+
             await session.flush()
 
             yield TerraformProgressEvent(

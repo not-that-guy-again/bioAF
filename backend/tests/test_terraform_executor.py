@@ -476,6 +476,141 @@ async def test_bootstrap_creates_state_bucket_key(session):
 
 
 # ---------------------------------------------------------------------------
+# Test 12b: bootstrap emits audit log entry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_creates_audit_log_entry(session):
+    """bootstrap_foundation creates an audit_log entry on success."""
+    user_id = await _seed_user(session)
+    await _seed_gcp_config(session, configured=True, initialized=False)
+
+    show_stdout = _make_show_json_output(1)
+    apply_stdout = _make_apply_output(1)
+    tf_output = json.dumps({"state_bucket_name": {"value": "bioaf-tfstate-test"}})
+
+    def mock_run(cmd, **kwargs):
+        if "output" in cmd:
+            return _mock_subprocess_run(tf_output)
+        if "show" in cmd:
+            return _mock_subprocess_run(show_stdout)
+        if "apply" in cmd:
+            return _mock_subprocess_run(apply_stdout)
+        return _mock_subprocess_run(_make_plan_output(1))
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+        with _patch_work_dir():
+            async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
+                pass
+
+    row = (
+        await session.execute(
+            text("SELECT action, entity_type FROM audit_log WHERE entity_type = 'terraform' ORDER BY id DESC LIMIT 1")
+        )
+    ).fetchone()
+    assert row is not None
+    assert row[0] == "bootstrap"
+    assert row[1] == "terraform"
+
+
+# ---------------------------------------------------------------------------
+# Test 12c: bootstrap emits activity feed entry when org_id provided
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_creates_activity_feed_entry(session):
+    """bootstrap_foundation creates an activity_feed entry when org_id is provided."""
+    from app.models.organization import Organization
+    from app.models.user import User
+    from app.services.auth_service import AuthService
+
+    org = Organization(name="ActivityTestOrg", setup_complete=True)
+    session.add(org)
+    await session.flush()
+
+    user = User(
+        email="activity_test@test.com",
+        password_hash=AuthService.hash_password("pw"),
+        role="admin",
+        organization_id=org.id,
+        status="active",
+    )
+    session.add(user)
+    await session.flush()
+    await session.commit()
+
+    await _seed_gcp_config(session, configured=True, initialized=False)
+
+    show_stdout = _make_show_json_output(1)
+    apply_stdout = _make_apply_output(1)
+    tf_output = json.dumps({"state_bucket_name": {"value": "bioaf-tfstate-test"}})
+
+    def mock_run(cmd, **kwargs):
+        if "output" in cmd:
+            return _mock_subprocess_run(tf_output)
+        if "show" in cmd:
+            return _mock_subprocess_run(show_stdout)
+        if "apply" in cmd:
+            return _mock_subprocess_run(apply_stdout)
+        return _mock_subprocess_run(_make_plan_output(1))
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+        with _patch_work_dir():
+            async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user.id, org_id=org.id):
+                pass
+
+    row = (
+        await session.execute(
+            text(
+                "SELECT event_type, summary FROM activity_feed "
+                "WHERE event_type = 'infrastructure.bootstrap_completed' LIMIT 1"
+            )
+        )
+    ).fetchone()
+    assert row is not None
+    assert "bioaf-tfstate-test" in row[1]
+
+
+# ---------------------------------------------------------------------------
+# Test 12d: bootstrap without org_id skips activity feed (no error)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_without_org_id_skips_activity_feed(session):
+    """bootstrap_foundation does not create activity_feed entry when org_id is None."""
+    user_id = await _seed_user(session)
+    await _seed_gcp_config(session, configured=True, initialized=False)
+
+    show_stdout = _make_show_json_output(1)
+    apply_stdout = _make_apply_output(1)
+    tf_output = json.dumps({"state_bucket_name": {"value": "bioaf-tfstate-test"}})
+
+    def mock_run(cmd, **kwargs):
+        if "output" in cmd:
+            return _mock_subprocess_run(tf_output)
+        if "show" in cmd:
+            return _mock_subprocess_run(show_stdout)
+        if "apply" in cmd:
+            return _mock_subprocess_run(apply_stdout)
+        return _mock_subprocess_run(_make_plan_output(1))
+
+    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+        with _patch_work_dir():
+            async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
+                pass
+
+    count = (
+        await session.execute(
+            text("SELECT count(*) FROM activity_feed WHERE event_type = 'infrastructure.bootstrap_completed'")
+        )
+    ).scalar()
+    assert count == 0
+
+
+# ---------------------------------------------------------------------------
 # Test 13: _write_tfvars writes correct variables for each module
 # ---------------------------------------------------------------------------
 
