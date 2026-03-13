@@ -6,6 +6,7 @@ Provides cluster status via GKE API.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import AsyncGenerator
 
@@ -187,7 +188,23 @@ async def _run_module(
 
     This is the real implementation. Tests mock this function.
     """
-    run = await TerraformExecutor.run_plan(session, user_id, module_name=module_name)
+    try:
+        run = await TerraformExecutor.run_plan(session, user_id, module_name=module_name)
+    except asyncio.CancelledError:
+        # Connection dropped during plan -- mark any active run as failed
+        logger.warning("Plan cancelled for module %s (client disconnected)", module_name)
+        await session.execute(
+            text("""
+            UPDATE terraform_runs
+            SET status = 'failed',
+                error_message = 'Operation cancelled (client disconnected)',
+                completed_at = now()
+            WHERE status IN ('planning', 'applying')
+              AND module_name = :mod
+            """).bindparams(mod=module_name)
+        )
+        await session.commit()
+        return
     await session.commit()
 
     if run.status != "awaiting_confirmation":

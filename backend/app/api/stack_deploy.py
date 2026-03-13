@@ -199,7 +199,11 @@ async def stack_deploy_endpoint(
         finally:
             await session.commit()
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/api/v1/infrastructure/stack/teardown")
@@ -230,7 +234,11 @@ async def stack_teardown_endpoint(
         finally:
             await session.commit()
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/api/v1/infrastructure/stack/status")

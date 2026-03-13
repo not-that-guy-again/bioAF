@@ -15,7 +15,7 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import text
@@ -29,6 +29,31 @@ def _patch_work_dir():
     tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
     with patch.object(TerraformExecutor, "_prepare_work_dir", return_value=tmp):
         yield tmp
+
+
+def _mock_async_process(stdout: str, returncode: int = 0, stderr: str = ""):
+    """Create a mock async subprocess process for asyncio.create_subprocess_exec."""
+    lines = (stdout + "\n").encode().splitlines(keepends=True) if stdout else [b""]
+    line_iter = iter(lines)
+
+    async def readline():
+        try:
+            return next(line_iter)
+        except StopIteration:
+            return b""
+
+    mock_stdout = MagicMock()
+    mock_stdout.readline = readline
+
+    mock_stderr = AsyncMock()
+    mock_stderr.read = AsyncMock(return_value=stderr.encode())
+
+    process = MagicMock()
+    process.stdout = mock_stdout
+    process.stderr = mock_stderr
+    process.returncode = returncode
+    process.wait = AsyncMock(return_value=returncode)
+    return process
 
 
 # ---------------------------------------------------------------------------
@@ -248,15 +273,14 @@ async def test_run_apply_yields_progress_events(session):
             )
 
     apply_stdout = _make_apply_output(1)
-
-    def mock_run_apply(cmd, **kwargs):
-        return _mock_subprocess_run(apply_stdout)
+    mock_proc = _mock_async_process(apply_stdout)
 
     events = []
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run_apply):
-        with _patch_work_dir():
-            async for event in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
-                events.append(event)
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", return_value=_mock_subprocess_run("")):
+            with _patch_work_dir():
+                async for event in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
+                    events.append(event)
 
     assert len(events) > 0
     assert all(isinstance(e, TerraformProgressEvent) for e in events)
@@ -289,14 +313,13 @@ async def test_run_apply_updates_resources_completed(session):
             )
 
     apply_stdout = _make_apply_output(1)
+    mock_proc = _mock_async_process(apply_stdout)
 
-    def mock_apply(cmd, **kwargs):
-        return _mock_subprocess_run(apply_stdout)
-
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply):
-        with _patch_work_dir():
-            async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
-                pass
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", return_value=_mock_subprocess_run("")):
+            with _patch_work_dir():
+                async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
+                    pass
 
     await session.refresh(plan_run)
     assert plan_run.status == "completed"
@@ -329,16 +352,13 @@ async def test_run_apply_handles_failure(session):
                 module_name="foundation",
             )
 
-    fail_result = _mock_subprocess_run("", returncode=1)
-    fail_result.stderr = "Error: some terraform error"
+    mock_proc = _mock_async_process("", returncode=1, stderr="Error: some terraform error")
 
-    def mock_apply_fail(cmd, **kwargs):
-        return fail_result
-
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply_fail):
-        with _patch_work_dir():
-            async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
-                pass
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", return_value=_mock_subprocess_run("")):
+            with _patch_work_dir():
+                async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
+                    pass
 
     await session.refresh(plan_run)
     assert plan_run.status == "failed"
@@ -459,15 +479,16 @@ async def test_bootstrap_creates_state_bucket_key(session):
             return _mock_subprocess_run(tf_output)
         if "show" in cmd:
             return _mock_subprocess_run(show_stdout)
-        if "apply" in cmd:
-            return _mock_subprocess_run(apply_stdout)
         return _mock_subprocess_run(_make_plan_output(1))
 
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with _patch_work_dir():
-            events = []
-            async for event in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
-                events.append(event)
+    mock_proc = _mock_async_process(apply_stdout)
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+            with _patch_work_dir():
+                events = []
+                async for event in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
+                    events.append(event)
 
     # Check platform_config updated
     row = (
@@ -496,14 +517,15 @@ async def test_bootstrap_creates_audit_log_entry(session):
             return _mock_subprocess_run(tf_output)
         if "show" in cmd:
             return _mock_subprocess_run(show_stdout)
-        if "apply" in cmd:
-            return _mock_subprocess_run(apply_stdout)
         return _mock_subprocess_run(_make_plan_output(1))
 
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with _patch_work_dir():
-            async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
-                pass
+    mock_proc = _mock_async_process(apply_stdout)
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+            with _patch_work_dir():
+                async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
+                    pass
 
     row = (
         await session.execute(
@@ -553,14 +575,15 @@ async def test_bootstrap_creates_activity_feed_entry(session):
             return _mock_subprocess_run(tf_output)
         if "show" in cmd:
             return _mock_subprocess_run(show_stdout)
-        if "apply" in cmd:
-            return _mock_subprocess_run(apply_stdout)
         return _mock_subprocess_run(_make_plan_output(1))
 
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with _patch_work_dir():
-            async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user.id, org_id=org.id):
-                pass
+    mock_proc = _mock_async_process(apply_stdout)
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+            with _patch_work_dir():
+                async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user.id, org_id=org.id):
+                    pass
 
     row = (
         await session.execute(
@@ -594,14 +617,15 @@ async def test_bootstrap_without_org_id_skips_activity_feed(session):
             return _mock_subprocess_run(tf_output)
         if "show" in cmd:
             return _mock_subprocess_run(show_stdout)
-        if "apply" in cmd:
-            return _mock_subprocess_run(apply_stdout)
         return _mock_subprocess_run(_make_plan_output(1))
 
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
-        with _patch_work_dir():
-            async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
-                pass
+    mock_proc = _mock_async_process(apply_stdout)
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_run):
+            with _patch_work_dir():
+                async for _ in TerraformExecutor.bootstrap_foundation(session=session, user_id=user_id):
+                    pass
 
     count = (
         await session.execute(
@@ -807,22 +831,34 @@ async def test_run_apply_inits_workdir_and_applies_without_planfile(session):
             )
 
     apply_stdout = _make_apply_output(1)
-    captured_cmds = []
+    mock_proc = _mock_async_process(apply_stdout)
+    captured_init_cmds = []
+    captured_exec_args = []
 
-    def mock_apply(cmd, **kwargs):
-        captured_cmds.append(cmd)
-        return _mock_subprocess_run(apply_stdout)
+    original_mock_init = _mock_subprocess_run("")
 
-    with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_apply):
-        with _patch_work_dir():
-            async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
-                pass
+    def mock_init_run(cmd, **kwargs):
+        captured_init_cmds.append(cmd)
+        return original_mock_init
 
-    # Should have called init then apply
-    assert len(captured_cmds) >= 2
-    init_cmd = captured_cmds[0]
-    apply_cmd = captured_cmds[1]
+    async def mock_create_subprocess(*args, **kwargs):
+        captured_exec_args.append(list(args))
+        return mock_proc
+
+    with patch("asyncio.create_subprocess_exec", side_effect=mock_create_subprocess):
+        with patch("app.services.terraform_executor.subprocess.run", side_effect=mock_init_run):
+            with _patch_work_dir():
+                async for _ in TerraformExecutor.run_apply(session=session, run_id=plan_run.id, user_id=user_id):
+                    pass
+
+    # init should have been called via subprocess.run
+    assert len(captured_init_cmds) >= 1
+    init_cmd = captured_init_cmds[0]
     assert "init" in init_cmd
+
+    # apply should have been called via create_subprocess_exec
+    assert len(captured_exec_args) >= 1
+    apply_cmd = captured_exec_args[0]
     assert "apply" in apply_cmd
     # apply must NOT reference a saved plan file
     assert "tfplan" not in apply_cmd
