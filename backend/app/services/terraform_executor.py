@@ -227,6 +227,20 @@ class TerraformExecutor:
                         log_line=line,
                     )
 
+                elif entry_type == "apply_start" and "hook" in entry:
+                    hook = entry["hook"]
+                    resource = hook.get("resource", {})
+                    addr = resource.get("addr", "")
+                    if not addr.startswith("data."):
+                        yield TerraformProgressEvent(
+                            event_type="progress",
+                            resource_address=addr,
+                            message=entry.get("@message", f"Creating: {addr}"),
+                            resources_completed=resources_completed,
+                            resources_total=resources_total,
+                            log_line=line,
+                        )
+
                 elif "@message" in entry:
                     yield TerraformProgressEvent(
                         event_type="progress",
