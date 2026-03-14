@@ -26,6 +26,7 @@ from app.services.stack_deployment import (
     StackStatus,
     deploy_stack,
     get_cluster_status,
+    sync_storage_config,
     teardown_stack,
 )
 from app.services.terraform_executor import TerraformExecutor
@@ -240,6 +241,26 @@ async def stack_teardown_endpoint(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/api/v1/infrastructure/stack/sync-storage-config")
+async def sync_storage_config_endpoint(
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Re-read Terraform storage outputs and write bucket names to platform_config.
+
+    Use this after a deployment where storage was applied before the automatic
+    output-persistence was in place (i.e. bucket names are missing from
+    platform_config but the GCS buckets exist).
+    """
+    try:
+        populated = await sync_storage_config(session)
+        await session.commit()
+        return {"status": "ok", "populated": populated}
+    except Exception as exc:
+        logger.error("Storage config sync failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/api/v1/infrastructure/stack/status")

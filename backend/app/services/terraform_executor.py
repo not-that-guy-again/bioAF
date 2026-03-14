@@ -706,6 +706,47 @@ class TerraformExecutor:
             details={"status": run.status, "module_name": module_name},
         )
 
+    @staticmethod
+    async def read_module_outputs(
+        session: AsyncSession,
+        module_name: str,
+    ) -> dict:
+        """Read `terraform output -json` for an already-deployed module.
+
+        Initialises a fresh work dir against the existing remote state and
+        returns the parsed output dict (keyed by output name, each value is
+        the standard Terraform output object with a "value" key).
+
+        Raises RuntimeError if the init or output command fails.
+        """
+        config = await TerraformExecutor._read_gcp_config(session)
+        env, cleanup = await GCPCredentialInjector.build_env(config)
+        work_dir = None
+        try:
+            work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
+            TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            await TerraformExecutor._run_init(work_dir, env, config, module_name=module_name)
+
+            output_result = await asyncio.to_thread(
+                subprocess.run,
+                ["terraform", "output", "-json"],
+                cwd=str(work_dir),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                env={**TerraformExecutor._base_env(), **env},
+            )
+            if output_result.returncode != 0:
+                raise RuntimeError(f"terraform output failed: {output_result.stderr}")
+            return json.loads(output_result.stdout)
+        finally:
+            await cleanup()
+            if work_dir and work_dir.exists():
+                try:
+                    shutil.rmtree(str(work_dir))
+                except Exception:
+                    pass
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

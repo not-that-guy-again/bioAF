@@ -497,3 +497,30 @@ async def teardown_stack(
         event_type="stack_complete",
         message="Teardown complete",
     )
+
+
+_STORAGE_BUCKET_OUTPUT_KEYS = [
+    "ingest_bucket_name",
+    "raw_bucket_name",
+    "working_bucket_name",
+    "results_bucket_name",
+    "config_backups_bucket_name",
+]
+
+
+async def sync_storage_config(session: AsyncSession) -> dict[str, str]:
+    """Re-read the storage Terraform outputs and write bucket names to platform_config.
+
+    Used to recover deployments where storage was applied before the output-
+    persistence fix was in place.  Returns a dict of {config_key: bucket_name}
+    for all keys that were successfully populated.
+    """
+    outputs = await TerraformExecutor.read_module_outputs(session, "storage")
+    populated: dict[str, str] = {}
+    for key in _STORAGE_BUCKET_OUTPUT_KEYS:
+        bucket_name = outputs.get(key, {}).get("value", "")
+        if bucket_name:
+            await _set_config(session, key, bucket_name)
+            populated[key] = bucket_name
+    await session.flush()
+    return populated
