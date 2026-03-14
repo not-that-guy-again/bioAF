@@ -114,10 +114,13 @@ export function TerraformProgressModal({
 
             setEvents((prev) => [...prev, event]);
 
-            if (event.resources_total) {
+            if (event.resources_total && event.resources_total > 0) {
               setResourcesTotal(event.resources_total);
             }
-            if (event.resources_completed !== undefined) {
+            if (
+              event.resources_completed !== undefined &&
+              event.resources_completed > 0
+            ) {
               setResourcesCompleted(event.resources_completed);
             }
             if (event.log_line) {

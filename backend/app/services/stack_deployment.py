@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 from typing import AsyncGenerator
 
 from pydantic import BaseModel
@@ -256,6 +257,20 @@ async def deploy_stack(
     storage_deployed = await _read_config(session, "storage_deployed")
     storage_failed = False
     compute_failed = False
+    # Track per-phase counts to build an accurate cumulative progress bar.
+    storage_completed = 0
+    storage_planned = 0
+    compute_completed = 0
+    compute_planned = 0
+
+    # Generate a stack_uid if one doesn't exist yet. This short hex string
+    # is appended to all GCP resource names so that teardown + redeploy
+    # avoids GCP's 7-day soft-delete window for buckets.
+    existing_uid = await _read_config(session, "stack_uid")
+    if existing_uid == "null":
+        new_uid = secrets.token_hex(3)  # 6 hex chars, e.g. "a1b2c3"
+        await _set_config(session, "stack_uid", new_uid)
+        await session.flush()
 
     # Step 1: Deploy storage if needed
     if storage_deployed != "true":
@@ -291,11 +306,13 @@ async def deploy_stack(
                         metadata={"module": "storage"},
                     )
                 await session.flush()
+                storage_completed = event.resources_completed
+                storage_planned = event.resources_total
                 yield TerraformProgressEvent(
                     event_type="phase_complete",
                     message="Storage deployment complete",
-                    resources_completed=event.resources_completed,
-                    resources_total=event.resources_total,
+                    resources_completed=storage_completed,
+                    resources_total=storage_planned,
                 )
             else:
                 yield event
@@ -358,14 +375,30 @@ async def deploy_stack(
                     metadata={"module": "compute", "stack_type": "kubernetes"},
                 )
             await session.flush()
+            compute_completed = event.resources_completed
+            compute_planned = event.resources_total
             yield TerraformProgressEvent(
                 event_type="phase_complete",
                 message="Compute deployment complete",
-                resources_completed=event.resources_completed,
-                resources_total=event.resources_total,
+                resources_completed=storage_completed + compute_completed,
+                resources_total=storage_planned + compute_planned,
             )
         else:
-            yield event
+            # Re-emit with accumulated totals so the progress bar
+            # reflects the full stack, not just the current module.
+            if event.event_type == "resource_complete":
+                compute_completed += 1
+            if event.resources_total:
+                compute_planned = event.resources_total
+            yield TerraformProgressEvent(
+                event_type=event.event_type,
+                message=event.message,
+                resource_address=event.resource_address,
+                resources_completed=storage_completed + compute_completed,
+                resources_total=storage_planned + compute_planned,
+                log_line=event.log_line,
+                extra=event.extra,
+            )
 
     if compute_failed:
         yield TerraformProgressEvent(
@@ -377,6 +410,8 @@ async def deploy_stack(
     yield TerraformProgressEvent(
         event_type="stack_complete",
         message="Stack deployment complete",
+        resources_completed=storage_completed + compute_completed,
+        resources_total=storage_planned + compute_planned,
     )
 
 

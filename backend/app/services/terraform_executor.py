@@ -96,7 +96,7 @@ class TerraformExecutor:
 
             env, cleanup = await GCPCredentialInjector.build_env(config)
             try:
-                await TerraformExecutor._run_init(work_dir, env, config)
+                await TerraformExecutor._run_init(work_dir, env, config, module_name=module_name)
                 plan_json = await TerraformExecutor._run_plan_capture(work_dir, env)
                 parsed = TerraformPlanParser.parse(plan_json)
 
@@ -156,7 +156,7 @@ class TerraformExecutor:
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
             TerraformExecutor._write_tfvars(work_dir, module_name, config)
-            await TerraformExecutor._run_init(work_dir, env, config)
+            await TerraformExecutor._run_init(work_dir, env, config, module_name=module_name)
 
             process = await asyncio.create_subprocess_exec(
                 "terraform",
@@ -538,7 +538,7 @@ class TerraformExecutor:
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
             TerraformExecutor._write_tfvars(work_dir, module_name, config)
-            await TerraformExecutor._run_init(work_dir, env, config)
+            await TerraformExecutor._run_init(work_dir, env, config, module_name=module_name)
 
             process = await asyncio.create_subprocess_exec(
                 "terraform",
@@ -719,6 +719,7 @@ class TerraformExecutor:
         region = config.get("gcp_region") or "us-central1"
         zone = config.get("gcp_zone") or f"{region}-a"
         org_slug = config.get("org_slug") or "bioaf"
+        stack_uid = config.get("stack_uid") or ""
         state_bucket = config.get("terraform_state_bucket") or f"bioaf-tfstate-{project_id}"
 
         # Common variables shared by all modules
@@ -731,9 +732,11 @@ class TerraformExecutor:
             tfvars["state_bucket_name"] = state_bucket
         elif module_name == "storage":
             tfvars["org_slug"] = org_slug
+            tfvars["stack_uid"] = stack_uid
         elif module_name == "compute":
             tfvars["zone"] = zone
             tfvars["org_slug"] = org_slug
+            tfvars["stack_uid"] = stack_uid
 
         tfvars_path = work_dir / "terraform.tfvars.json"
         tfvars_path.write_text(json.dumps(tfvars, indent=2))
@@ -744,6 +747,7 @@ class TerraformExecutor:
         env: dict,
         config: dict,
         local_backend: bool = False,
+        module_name: str | None = None,
     ) -> None:
         """Run `terraform init` in work_dir."""
         cmd = ["terraform", "init", "-no-color", "-input=false"]
@@ -753,6 +757,10 @@ class TerraformExecutor:
             bucket = config.get("terraform_state_bucket")
             if bucket:
                 cmd += [f"-backend-config=bucket={bucket}"]
+            # Each module gets its own state prefix so they don't
+            # clobber each other's terraform.tfstate in the bucket.
+            if module_name:
+                cmd += [f"-backend-config=prefix={module_name}"]
 
         result = await asyncio.to_thread(
             subprocess.run,
@@ -809,6 +817,7 @@ class TerraformExecutor:
             "gcp_zone",
             "gcp_service_account_key",
             "org_slug",
+            "stack_uid",
             "terraform_initialized",
             "terraform_state_bucket",
         ]

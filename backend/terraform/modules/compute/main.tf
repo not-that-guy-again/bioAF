@@ -12,7 +12,7 @@ terraform {
 # --- GKE Cluster ---
 
 resource "google_container_cluster" "bioaf" {
-  name     = "bioaf-${var.org_slug}"
+  name     = "bioaf-${var.org_slug}-${var.stack_uid}"
   project  = var.project_id
   location = var.zone # Zonal cluster (cheaper than regional for POC)
 
