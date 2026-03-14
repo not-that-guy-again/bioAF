@@ -16,7 +16,8 @@ resource "google_container_cluster" "bioaf" {
   project  = var.project_id
   location = var.zone # Zonal cluster (cheaper than regional for POC)
 
-  # We manage node pools separately
+  # Terraform-managed lifecycle -- teardown handles deletion
+  deletion_protection      = false
   remove_default_node_pool = true
   initial_node_count       = 1
 
