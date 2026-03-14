@@ -56,6 +56,7 @@ export default function ExperimentDetailPage() {
   const [showSampleForm, setShowSampleForm] = useState(false);
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [sampleForm, setSampleForm] = useState<SampleCreateRequest>({});
+  const [sampleFormError, setSampleFormError] = useState("");
   const [batchForm, setBatchForm] = useState<BatchCreateRequest>({ name: "" });
 
   useEffect(() => {
@@ -137,13 +138,16 @@ export default function ExperimentDetailPage() {
   }
 
   async function handleAddSample() {
+    setSampleFormError("");
     try {
       await api.post(`/api/experiments/${id}/samples`, sampleForm);
       setSampleForm({});
       setShowSampleForm(false);
       loadSamples();
       loadExperiment();
-    } catch {}
+    } catch (err) {
+      setSampleFormError(err instanceof Error ? err.message : "Failed to save sample");
+    }
   }
 
   async function handleAddBatch() {
@@ -335,16 +339,19 @@ export default function ExperimentDetailPage() {
                     <input placeholder="Tissue Type" value={sampleForm.tissue_type ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, tissue_type: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Donor/Source" value={sampleForm.donor_source ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, donor_source: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Treatment" value={sampleForm.treatment_condition ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, treatment_condition: e.target.value })} className="border rounded px-3 py-2 text-sm" />
-                    <input placeholder="Chemistry Version" value={sampleForm.chemistry_version ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, chemistry_version: e.target.value })} className="border rounded px-3 py-2 text-sm" />
+                    <input placeholder="Kit Version (e.g. NextGEM v3.1)" value={sampleForm.chemistry_version ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, chemistry_version: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input type="number" placeholder="Cell Count" min={0} value={sampleForm.cell_count ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, cell_count: e.target.value ? Number(e.target.value) : null })} className="border rounded px-3 py-2 text-sm" />
                     <input type="number" placeholder="Viability %" min={0} max={100} step={0.1} value={sampleForm.viability_pct ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, viability_pct: e.target.value ? Number(e.target.value) : null })} className="border rounded px-3 py-2 text-sm" />
                     <VocabularySelect fieldName="molecule_type" value={sampleForm.molecule_type} onChange={(v) => setSampleForm({ ...sampleForm, molecule_type: v })} placeholder="Molecule Type..." />
                     <VocabularySelect fieldName="library_prep_method" value={sampleForm.library_prep_method} onChange={(v) => setSampleForm({ ...sampleForm, library_prep_method: v })} placeholder="Library Prep..." />
                     <VocabularySelect fieldName="library_layout" value={sampleForm.library_layout} onChange={(v) => setSampleForm({ ...sampleForm, library_layout: v })} placeholder="Library Layout..." />
                   </div>
+                  {sampleFormError && (
+                    <p className="text-red-600 text-sm mt-2">{sampleFormError}</p>
+                  )}
                   <div className="flex gap-2 mt-3">
                     <button onClick={handleAddSample} className="bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm">Save</button>
-                    <button onClick={() => setShowSampleForm(false)} className="border px-4 py-1.5 rounded text-sm">Cancel</button>
+                    <button onClick={() => { setShowSampleForm(false); setSampleFormError(""); }} className="border px-4 py-1.5 rounded text-sm">Cancel</button>
                   </div>
                 </div>
               )}
