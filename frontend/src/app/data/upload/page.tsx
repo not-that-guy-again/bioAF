@@ -69,7 +69,7 @@ export default function DataUploadPage() {
 
         const params = new URLSearchParams();
         if (state.experimentId) params.set("experiment_id", state.experimentId);
-        const path = `/api/files/upload${params.toString() ? `?${params}` : ""}`;
+        const path = `/api/files/upload/simple${params.toString() ? `?${params}` : ""}`;
 
         await api.upload<FileResponse>(path, file);
 
