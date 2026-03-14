@@ -285,6 +285,17 @@ async def deploy_stack(
             elif event.event_type == "apply_complete":
                 # Storage post-apply hook -- remap to phase_complete so
                 # the frontend does not treat this as the final event.
+                outputs = event.extra.get("outputs", {})
+                for config_key in [
+                    "ingest_bucket_name",
+                    "raw_bucket_name",
+                    "working_bucket_name",
+                    "results_bucket_name",
+                    "config_backups_bucket_name",
+                ]:
+                    bucket_name = outputs.get(config_key, {}).get("value", "")
+                    if bucket_name:
+                        await _set_config(session, config_key, bucket_name)
                 await _set_config(session, "storage_deployed", "true")
                 await log_action(
                     session,

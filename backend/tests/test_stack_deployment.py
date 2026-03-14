@@ -640,3 +640,62 @@ async def test_deploy_stack_accumulates_resource_counts(session):
     # 2 from storage + 3 from compute = 5 total
     assert stack_complete[0].resources_completed == 5
     assert stack_complete[0].resources_total == 5
+
+
+# -----------------------------------------------------------------------
+# Bucket names written to platform_config after storage deploy
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deploy_stack_stores_bucket_names_after_storage(session):
+    """Storage apply_complete event writes all 5 bucket names to platform_config."""
+    from app.services.stack_deployment import deploy_stack
+
+    _, user_id = await _seed_org_and_user(session)
+
+    await _set_config(session, "gcp_credentials_configured", "true")
+    await _set_config(session, "terraform_initialized", "true")
+    await _set_config(session, "compute_deployed", "false")
+    await _set_config(session, "storage_deployed", "false")
+    await session.commit()
+
+    storage_outputs = {
+        "ingest_bucket_name": {"value": "bioaf-abc123-ingest"},
+        "raw_bucket_name": {"value": "bioaf-abc123-raw"},
+        "working_bucket_name": {"value": "bioaf-abc123-working"},
+        "results_bucket_name": {"value": "bioaf-abc123-results"},
+        "config_backups_bucket_name": {"value": "bioaf-abc123-config-backups"},
+    }
+
+    async def mock_run_module(sess, uid, module_name):
+        if module_name == "storage":
+            yield _make_progress_event(
+                "apply_complete",
+                "storage done",
+                extra={"outputs": storage_outputs},
+            )
+        else:
+            yield _make_progress_event(
+                "apply_complete",
+                "compute done",
+                extra={
+                    "outputs": {
+                        "cluster_name": {"value": "bioaf-test"},
+                        "cluster_endpoint": {"value": "https://1.2.3.4"},
+                        "cluster_ca_cert": {"value": "Y2VydA=="},
+                    }
+                },
+            )
+
+    with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
+        async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
+            pass
+
+    await session.commit()
+
+    assert await _get_config(session, "ingest_bucket_name") == "bioaf-abc123-ingest"
+    assert await _get_config(session, "raw_bucket_name") == "bioaf-abc123-raw"
+    assert await _get_config(session, "working_bucket_name") == "bioaf-abc123-working"
+    assert await _get_config(session, "results_bucket_name") == "bioaf-abc123-results"
+    assert await _get_config(session, "config_backups_bucket_name") == "bioaf-abc123-config-backups"

@@ -260,11 +260,27 @@ class TerraformExecutor:
             if return_code == 0:
                 run.status = "completed"
                 run.completed_at = datetime.now(timezone.utc)
+                tf_outputs: dict = {}
+                try:
+                    output_result = await asyncio.to_thread(
+                        subprocess.run,
+                        ["terraform", "output", "-json"],
+                        cwd=str(work_dir),
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                        env={**TerraformExecutor._base_env(), **env},
+                    )
+                    if output_result.returncode == 0:
+                        tf_outputs = json.loads(output_result.stdout)
+                except Exception as out_exc:
+                    logger.warning("Failed to read terraform outputs for %s: %s", module_name, out_exc)
                 yield TerraformProgressEvent(
                     event_type="apply_complete",
                     message="Apply complete",
                     resources_completed=resources_completed,
                     resources_total=resources_total,
+                    extra={"outputs": tf_outputs},
                 )
             else:
                 run.status = "failed"
