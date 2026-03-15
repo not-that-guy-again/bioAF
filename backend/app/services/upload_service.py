@@ -174,7 +174,7 @@ class UploadService:
         gcs_path = f"uploads/{upload_id}/{filename}"
         gcs_uri = f"gs://{bucket_name}/{gcs_path}"
 
-        # Upload to GCS
+        # Upload to GCS -- raises on failure so no dangling DB records are created
         await UploadService._upload_to_gcs(bucket_name, gcs_path, content)
 
         if not file_type:
@@ -189,6 +189,7 @@ class UploadService:
             size_bytes=len(content),
             md5_checksum=None,
             file_type=file_type,
+            experiment_id=experiment_id,
         )
 
         if sample_ids:
@@ -255,13 +256,13 @@ class UploadService:
 
     @staticmethod
     async def _upload_to_gcs(bucket_name: str, gcs_path: str, content: bytes) -> None:
-        """Upload content to GCS."""
-        try:
-            from google.cloud import storage as gcs_storage
+        """Upload content to GCS. Raises on failure."""
+        from google.cloud import storage as gcs_storage
 
+        def _do_upload() -> None:
             client = gcs_storage.Client()
             bucket = client.bucket(bucket_name)
             blob = bucket.blob(gcs_path)
             blob.upload_from_string(content)
-        except Exception as e:
-            logger.warning("GCS upload failed (file record still created): %s", e)
+
+        await asyncio.to_thread(_do_upload)
