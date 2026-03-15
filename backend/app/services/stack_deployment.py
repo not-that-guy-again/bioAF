@@ -499,6 +499,83 @@ async def teardown_stack(
     )
 
 
+async def destroy_storage(
+    session: AsyncSession,
+    user_id: int,
+    org_id: int | None = None,
+) -> AsyncGenerator[TerraformProgressEvent, None]:
+    """Destroy the storage module (GCS buckets + Pub/Sub).
+
+    Only allowed when compute is not deployed. Clears all storage-related
+    platform_config keys and resets stack_uid so a fresh deploy generates
+    new resource names (avoids GCS soft-delete name conflicts).
+    """
+    compute_deployed = await _read_config(session, "compute_deployed")
+    if compute_deployed == "true":
+        raise ValueError("Cannot destroy storage while compute stack is deployed. Teardown compute first.")
+
+    storage_deployed = await _read_config(session, "storage_deployed")
+    if storage_deployed != "true":
+        raise ValueError("Storage is not deployed.")
+
+    yield TerraformProgressEvent(
+        event_type="progress",
+        message="Destroying storage infrastructure...",
+    )
+
+    destroy_failed = False
+    async for event in _run_destroy(session, user_id, "storage"):
+        yield event
+        if event.event_type == "apply_error":
+            destroy_failed = True
+
+    if destroy_failed:
+        yield TerraformProgressEvent(
+            event_type="stack_error",
+            message="Storage destroy failed",
+        )
+        return
+
+    # Clear all storage-related config and reset stack_uid so next deploy
+    # generates fresh bucket names (GCS has a 7-day soft-delete window).
+    for key in [
+        "storage_deployed",
+        "ingest_bucket_name",
+        "raw_bucket_name",
+        "working_bucket_name",
+        "results_bucket_name",
+        "config_backups_bucket_name",
+        "stack_uid",
+    ]:
+        await _set_config(session, key, "null")
+
+    await log_action(
+        session,
+        user_id=user_id,
+        entity_type="infrastructure",
+        entity_id=0,
+        action="destroy_storage",
+        details={"module": "storage", "status": "completed"},
+    )
+    if org_id is not None:
+        await ActivityFeedService.add_event(
+            session,
+            org_id=org_id,
+            user_id=user_id,
+            event_type="infrastructure.storage_destroyed",
+            summary="Storage infrastructure destroyed (GCS buckets, Pub/Sub)",
+            entity_type="infrastructure",
+            entity_id=0,
+            metadata={"module": "storage"},
+        )
+    await session.flush()
+
+    yield TerraformProgressEvent(
+        event_type="stack_complete",
+        message="Storage destroyed",
+    )
+
+
 _STORAGE_BUCKET_OUTPUT_KEYS = [
     "ingest_bucket_name",
     "raw_bucket_name",
