@@ -12,37 +12,36 @@ jest.mock("@/lib/auth", () => ({
   removeToken: jest.fn(),
 }));
 
-const mockUpload = jest.fn();
+const mockUploadSigned = jest.fn();
 jest.mock("@/lib/api", () => ({
   api: {
-    upload: (...args: unknown[]) => mockUpload(...args),
+    uploadSigned: (...args: unknown[]) => mockUploadSigned(...args),
   },
 }));
 
 beforeEach(() => {
-  mockUpload.mockReset();
-  mockUpload.mockResolvedValue({ id: 1, filename: "sample.fastq.gz" });
+  mockUploadSigned.mockReset();
+  mockUploadSigned.mockResolvedValue({ id: 1, filename: "sample.fastq.gz" });
 });
 
 describe("DataUploadPage", () => {
-  it("calls /api/files/upload/simple when uploading a file", async () => {
+  it("calls uploadSigned when uploading a file", async () => {
     render(<DataUploadPage />);
 
     const file = new File(["data"], "sample.fastq.gz", { type: "application/gzip" });
     const input = document.querySelector("input[type='file']") as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
 
-    await waitFor(() => screen.getByText("Upload All"));
-    fireEvent.click(screen.getByText("Upload All"));
+    await waitFor(() => screen.getByText(/Upload 1 file/));
+    fireEvent.click(screen.getByText(/Upload 1 file/));
 
-    await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
-    const [calledPath] = mockUpload.mock.calls[0];
-    expect(calledPath).toContain("/api/files/upload/simple");
-    expect(calledPath).not.toContain("/api/files/upload?");
-    expect(calledPath).not.toBe("/api/files/upload");
+    await waitFor(() => expect(mockUploadSigned).toHaveBeenCalledTimes(1));
+    const [calledFile, calledOptions] = mockUploadSigned.mock.calls[0];
+    expect(calledFile).toBe(file);
+    expect(calledOptions.experimentId).toBeUndefined();
   });
 
-  it("appends experiment_id query param when provided", async () => {
+  it("passes experimentId option when experiment ID is provided", async () => {
     render(<DataUploadPage />);
 
     fireEvent.change(screen.getByPlaceholderText("Experiment ID"), {
@@ -53,12 +52,11 @@ describe("DataUploadPage", () => {
     const input = document.querySelector("input[type='file']") as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
 
-    await waitFor(() => screen.getByText("Upload All"));
-    fireEvent.click(screen.getByText("Upload All"));
+    await waitFor(() => screen.getByText(/Upload 1 file/));
+    fireEvent.click(screen.getByText(/Upload 1 file/));
 
-    await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
-    const [calledPath] = mockUpload.mock.calls[0];
-    expect(calledPath).toContain("/api/files/upload/simple");
-    expect(calledPath).toContain("experiment_id=42");
+    await waitFor(() => expect(mockUploadSigned).toHaveBeenCalledTimes(1));
+    const [, calledOptions] = mockUploadSigned.mock.calls[0];
+    expect(calledOptions.experimentId).toBe(42);
   });
 });

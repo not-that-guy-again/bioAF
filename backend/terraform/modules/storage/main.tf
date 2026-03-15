@@ -27,6 +27,14 @@ resource "google_storage_bucket" "ingest" {
   uniform_bucket_level_access = true
   versioning { enabled = true }
 
+  # Allow browsers to PUT files directly via signed URLs
+  cors {
+    origin          = ["*"]
+    method          = ["PUT", "OPTIONS"]
+    response_header = ["Content-Type", "Content-Length", "Authorization", "x-goog-*"]
+    max_age_seconds = 3600
+  }
+
   labels = {
     managed_by = "bioaf"
     purpose    = "ingest"

@@ -1,5 +1,6 @@
 import io
 import json
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -254,3 +255,65 @@ async def test_simple_upload_streams_file_without_buffering(client, admin_token,
 
     assert resp.status_code == 200
     assert "file_obj" in captured
+
+
+# ---------------------------------------------------------------------------
+# complete_upload: optional md5
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_complete_upload_omitting_actual_md5_returns_200(client, admin_token, configured_ingest_bucket):
+    """complete_upload must accept a request body that omits actual_md5.
+
+    The frontend cannot efficiently compute MD5 for 50GB+ files, so the
+    field must be optional when no expected_md5 was set during initiate.
+    """
+    # Seed a pending upload directly in the in-memory store
+    from app.services.upload_service import _pending_uploads
+
+    upload_id = str(uuid.uuid4())
+    _pending_uploads[upload_id] = {
+        "org_id": 1,
+        "user_id": 1,
+        "filename": "big.fastq.gz",
+        "gcs_uri": f"gs://bioaf-ingest-test-abc123/uploads/{upload_id}/big.fastq.gz",
+        "expected_size": None,
+        "expected_md5": None,  # No MD5 check
+        "experiment_id": None,
+        "sample_ids": [],
+    }
+
+    resp = await client.post(
+        "/api/files/upload/complete",
+        json={"upload_id": upload_id},  # No actual_md5 field
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_complete_upload_with_explicit_empty_md5_returns_200(client, admin_token, configured_ingest_bucket):
+    """complete_upload must accept actual_md5 as empty string when no MD5 check needed."""
+    from app.services.upload_service import _pending_uploads
+
+    upload_id = str(uuid.uuid4())
+    _pending_uploads[upload_id] = {
+        "org_id": 1,
+        "user_id": 1,
+        "filename": "big2.fastq.gz",
+        "gcs_uri": f"gs://bioaf-ingest-test-abc123/uploads/{upload_id}/big2.fastq.gz",
+        "expected_size": None,
+        "expected_md5": None,
+        "experiment_id": None,
+        "sample_ids": [],
+    }
+
+    resp = await client.post(
+        "/api/files/upload/complete",
+        json={"upload_id": upload_id, "actual_md5": ""},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert resp.status_code == 200, resp.text
