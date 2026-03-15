@@ -26,6 +26,7 @@ resource "google_storage_bucket" "ingest" {
 
   uniform_bucket_level_access = true
   versioning { enabled = true }
+  force_destroy = true
 
   # Allow browsers to PUT files directly via signed URLs
   cors {
@@ -49,6 +50,7 @@ resource "google_storage_bucket" "raw" {
 
   uniform_bucket_level_access = true
   versioning { enabled = true }
+  force_destroy = true
 
   lifecycle_rule {
     condition {
@@ -74,6 +76,7 @@ resource "google_storage_bucket" "working" {
 
   uniform_bucket_level_access = true
   versioning { enabled = true }
+  force_destroy = true
 
   labels = {
     managed_by = "bioaf"
@@ -89,6 +92,7 @@ resource "google_storage_bucket" "results" {
 
   uniform_bucket_level_access = true
   versioning { enabled = true }
+  force_destroy = true
 
   labels = {
     managed_by = "bioaf"
@@ -104,6 +108,7 @@ resource "google_storage_bucket" "config_backups" {
 
   uniform_bucket_level_access = true
   versioning { enabled = true }
+  force_destroy = true
 
   labels = {
     managed_by = "bioaf"
