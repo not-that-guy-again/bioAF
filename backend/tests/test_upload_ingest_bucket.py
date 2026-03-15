@@ -1,5 +1,6 @@
 import io
-from unittest.mock import AsyncMock, patch
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -140,3 +141,90 @@ async def test_simple_upload_returns_500_on_gcs_failure(client, admin_token, con
 
     assert resp.status_code == 500
     assert "Upload failed" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# GCS credential selection
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_gcs_credentials_returns_none_for_vm_default(session):
+    """_get_gcs_credentials returns None when source is vm_default (use ADC)."""
+    from app.models.component import PlatformConfig
+    from app.services.upload_service import UploadService
+
+    session.add(PlatformConfig(key="gcp_credential_source", value="vm_default"))
+    await session.flush()
+    await session.commit()
+
+    creds = await UploadService._get_gcs_credentials(session)
+    assert creds is None
+
+
+@pytest.mark.asyncio
+async def test_get_gcs_credentials_returns_none_when_no_source_configured(session):
+    """_get_gcs_credentials returns None when gcp_credential_source is absent."""
+    from app.services.upload_service import UploadService
+
+    creds = await UploadService._get_gcs_credentials(session)
+    assert creds is None
+
+
+@pytest.mark.asyncio
+async def test_get_gcs_credentials_parses_sa_key(session):
+    """_get_gcs_credentials returns credentials when source is service_account_key."""
+    from app.models.component import PlatformConfig
+    from app.services.upload_service import UploadService
+
+    fake_key = {
+        "type": "service_account",
+        "project_id": "test-project",
+        "private_key_id": "key-id",
+        "private_key": "fake-key",
+        "client_email": "bioaf@test-project.iam.gserviceaccount.com",
+        "client_id": "123",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+    }
+    session.add(PlatformConfig(key="gcp_credential_source", value="service_account_key"))
+    session.add(PlatformConfig(key="gcp_service_account_key", value=json.dumps(fake_key)))
+    await session.flush()
+    await session.commit()
+
+    mock_creds = MagicMock()
+    with patch(
+        "google.oauth2.service_account.Credentials.from_service_account_info",
+        return_value=mock_creds,
+    ) as mock_from_info:
+        creds = await UploadService._get_gcs_credentials(session)
+
+    mock_from_info.assert_called_once()
+    call_args = mock_from_info.call_args
+    assert call_args[0][0]["client_email"] == "bioaf@test-project.iam.gserviceaccount.com"
+    assert creds is mock_creds
+
+
+@pytest.mark.asyncio
+async def test_simple_upload_passes_credentials_to_gcs(client, admin_token, configured_ingest_bucket, session):
+    """simple_upload passes credentials from _get_gcs_credentials to _upload_to_gcs."""
+    from app.services.upload_service import UploadService
+
+    mock_creds = MagicMock()
+    captured = {}
+
+    async def fake_upload(bucket_name, gcs_path, content, credentials=None):
+        captured["credentials"] = credentials
+
+    with (
+        patch.object(UploadService, "_get_gcs_credentials", new=AsyncMock(return_value=mock_creds)),
+        patch.object(UploadService, "_upload_to_gcs", side_effect=fake_upload),
+    ):
+        resp = await client.post(
+            "/api/files/upload/simple",
+            files={"file": ("creds_test.fastq.gz", io.BytesIO(b"data"), "application/gzip")},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert resp.status_code == 200
+    assert captured["credentials"] is mock_creds
