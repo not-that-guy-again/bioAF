@@ -15,6 +15,7 @@ import SnapshotTimeline from "@/components/SnapshotTimeline";
 import type {
   ExperimentDetail,
   ExperimentUpdateRequest,
+  FieldDefaultValue,
   Sample,
   Batch,
   AuditLogResponse,
@@ -62,6 +63,18 @@ export default function ExperimentDetailPage() {
   const [sampleForm, setSampleForm] = useState<SampleCreateRequest>({});
   const [sampleFormError, setSampleFormError] = useState("");
   const [batchForm, setBatchForm] = useState<BatchCreateRequest>({ name: "" });
+  const [editFieldDefaults, setEditFieldDefaults] = useState<FieldDefaultValue[]>([]);
+
+  const DEFAULTABLE_FIELDS = [
+    { name: "organism", label: "Organism", type: "text" as const },
+    { name: "tissue_type", label: "Tissue Type", type: "text" as const },
+    { name: "donor_source", label: "Donor ID", type: "text" as const },
+    { name: "treatment_condition", label: "Treatment Condition", type: "text" as const },
+    { name: "chemistry_version", label: "Chemistry Version", type: "text" as const },
+    { name: "molecule_type", label: "Molecule Type", type: "vocabulary" as const },
+    { name: "library_prep_method", label: "Library Prep Method", type: "vocabulary" as const },
+    { name: "library_layout", label: "Library Layout", type: "vocabulary" as const },
+  ];
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -173,14 +186,38 @@ export default function ExperimentDetailPage() {
       start_date: experiment.start_date,
       expected_sample_count: experiment.expected_sample_count,
     });
+    setEditFieldDefaults(
+      experiment.field_defaults.map((fd) => ({
+        field_name: fd.field_name,
+        default_value: fd.default_value,
+        is_required: fd.is_required,
+      }))
+    );
     setOverviewError("");
     setEditingOverview(true);
+  }
+
+  function updateEditFieldDefault(fieldName: string, value: string | null, isRequired: boolean | null) {
+    setEditFieldDefaults((prev) => {
+      const existing = prev.find((d) => d.field_name === fieldName);
+      if (existing) {
+        if (!value && isRequired === null) {
+          return prev.filter((d) => d.field_name !== fieldName);
+        }
+        return prev.map((d) => d.field_name === fieldName ? { ...d, default_value: value, is_required: isRequired } : d);
+      }
+      if (value || isRequired !== null) {
+        return [...prev, { field_name: fieldName, default_value: value, is_required: isRequired }];
+      }
+      return prev;
+    });
   }
 
   async function handleSaveOverview() {
     setOverviewError("");
     try {
-      await api.patch(`/api/experiments/${id}`, overviewForm);
+      const payload = { ...overviewForm, field_defaults: editFieldDefaults };
+      await api.patch(`/api/experiments/${id}`, payload);
       setEditingOverview(false);
       loadExperiment();
     } catch (err) {
@@ -322,6 +359,44 @@ export default function ExperimentDetailPage() {
                         <input type="number" min={0} value={overviewForm.expected_sample_count ?? ""} onChange={(e) => setOverviewForm({ ...overviewForm, expected_sample_count: e.target.value ? Number(e.target.value) : null })} className="w-full border rounded px-3 py-1.5 text-sm" />
                       </div>
                     </div>
+                    <div className="border-t pt-3 mt-3">
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">Sample Field Defaults</h3>
+                      <p className="text-xs text-gray-400 mb-2">Default values applied to new samples. Per-sample values override these.</p>
+                      <div className="space-y-2">
+                        {DEFAULTABLE_FIELDS.map((field) => {
+                          const current = editFieldDefaults.find((d) => d.field_name === field.name);
+                          return (
+                            <div key={field.name} className="grid grid-cols-3 gap-2 items-center">
+                              <span className="text-xs text-gray-600">{field.label}</span>
+                              {field.type === "vocabulary" ? (
+                                <VocabularySelect
+                                  fieldName={field.name}
+                                  value={current?.default_value ?? null}
+                                  onChange={(v) => updateEditFieldDefault(field.name, v, current?.is_required ?? null)}
+                                  placeholder={`Default...`}
+                                />
+                              ) : (
+                                <input
+                                  value={current?.default_value ?? ""}
+                                  onChange={(e) => updateEditFieldDefault(field.name, e.target.value || null, current?.is_required ?? null)}
+                                  placeholder="Default..."
+                                  className="border rounded px-2 py-1 text-sm"
+                                />
+                              )}
+                              <label className="flex items-center gap-1 text-xs text-gray-500">
+                                <input
+                                  type="checkbox"
+                                  checked={current?.is_required ?? false}
+                                  onChange={(e) => updateEditFieldDefault(field.name, current?.default_value ?? null, e.target.checked || null)}
+                                  className="rounded border-gray-300"
+                                />
+                                Required
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                     {overviewError && <p className="text-red-600 text-sm">{overviewError}</p>}
                     <div className="flex gap-2 pt-1">
                       <button onClick={handleSaveOverview} className="bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm">Save</button>
@@ -377,6 +452,25 @@ export default function ExperimentDetailPage() {
                     </dl>
                   </>
                 )}
+
+                {experiment.field_defaults.length > 0 && (
+                  <>
+                    <h3 className="text-md font-semibold mt-6 mb-3">Sample Field Defaults</h3>
+                    <p className="text-xs text-gray-400 mb-3">Applied to new samples unless overridden per-sample.</p>
+                    <dl className="space-y-2">
+                      {experiment.field_defaults.map((fd) => {
+                        const label = DEFAULTABLE_FIELDS.find((f) => f.name === fd.field_name)?.label ?? fd.field_name;
+                        return (
+                          <div key={fd.id} className="flex items-center gap-2">
+                            <dt className="text-sm text-gray-400">{label}</dt>
+                            <dd className="text-sm text-gray-600">{fd.default_value || "—"}</dd>
+                            {fd.is_required && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">required</span>}
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -385,7 +479,16 @@ export default function ExperimentDetailPage() {
             <div>
               <div className="flex items-center gap-4 mb-4">
                 <button
-                  onClick={() => setShowSampleForm(!showSampleForm)}
+                  onClick={() => {
+                    if (!showSampleForm && experiment) {
+                      const prefill: Record<string, string> = {};
+                      for (const fd of experiment.field_defaults) {
+                        if (fd.default_value) prefill[fd.field_name] = fd.default_value;
+                      }
+                      setSampleForm(prefill as unknown as SampleCreateRequest);
+                    }
+                    setShowSampleForm(!showSampleForm);
+                  }}
                   className="bg-bioaf-600 text-white px-4 py-2 rounded-md text-sm hover:bg-bioaf-700"
                 >
                   Add Sample

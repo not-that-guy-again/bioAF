@@ -190,6 +190,7 @@ export interface ExperimentUpdateRequest {
   description?: string | null;
   start_date?: string | null;
   expected_sample_count?: number | null;
+  field_defaults?: FieldDefaultValue[];
 }
 
 export interface ExperimentListResponse {
@@ -234,10 +235,24 @@ export interface BatchBrief {
   created_at: string;
 }
 
+export interface FieldDefaultValue {
+  field_name: string;
+  default_value: string | null;
+  is_required: boolean | null;
+}
+
+export interface FieldDefaultResponse {
+  id: number;
+  field_name: string;
+  default_value: string | null;
+  is_required: boolean | null;
+}
+
 export interface ExperimentDetail extends Experiment {
   samples: SampleBrief[];
   batches: BatchBrief[];
   custom_fields: CustomFieldResponse[];
+  field_defaults: FieldDefaultResponse[];
   audit_trail_count: number;
 }
 
@@ -320,6 +335,7 @@ export interface ExperimentCreateRequest {
   start_date?: string | null;
   expected_sample_count?: number | null;
   custom_fields?: CustomFieldValue[];
+  field_defaults?: FieldDefaultValue[];
 }
 
 export interface SampleCreateRequest {
