@@ -419,7 +419,7 @@ export function TerraformProgressModal({
                 {phaseLabel}
               </p>
               <div className="mt-2">
-                {computePhaseStarted && mode === "deploy" && (
+                {((computePhaseStarted && mode === "deploy") || mode === "teardown") && (
                   <p className="text-xs text-gray-400">
                     This may take 5–15 minutes.
                   </p>
