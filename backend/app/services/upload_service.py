@@ -276,23 +276,23 @@ class UploadService:
 
     @staticmethod
     async def _generate_signed_upload_url(bucket_name: str, gcs_path: str, credentials=None) -> str:
-        """Generate a signed URL for uploading to GCS."""
-        try:
-            from google.cloud import storage as gcs_storage
+        """Generate a signed URL for uploading to GCS.
 
-            client = gcs_storage.Client(credentials=credentials)
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob(gcs_path)
-            url = blob.generate_signed_url(
-                version="v4",
-                expiration=3600,
-                method="PUT",
-                content_type="application/octet-stream",
-            )
-            return url
-        except Exception as e:
-            logger.warning("GCS signed URL generation failed (using placeholder): %s", e)
-            return f"https://storage.googleapis.com/upload/{bucket_name}/{gcs_path}?signed=placeholder"
+        Requires credentials with signing capability (service_account.Credentials).
+        ADC / VM default service account will not work here -- configure
+        gcp_credential_source=service_account_key in platform_config.
+        """
+        from google.cloud import storage as gcs_storage
+
+        client = gcs_storage.Client(credentials=credentials)
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(gcs_path)
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=3600,
+            method="PUT",
+            content_type="application/octet-stream",
+        )
 
     @staticmethod
     async def _upload_file_to_gcs(bucket_name: str, gcs_path: str, file_obj, credentials=None) -> None:

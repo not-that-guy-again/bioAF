@@ -34,11 +34,18 @@ async def test_initiate_upload_requires_bucket_config(client, admin_token):
 @pytest.mark.asyncio
 async def test_initiate_upload_uses_configured_bucket(client, admin_token, configured_ingest_bucket):
     """Upload initiate must use the bucket name stored in platform_config."""
-    resp = await client.post(
-        "/api/files/upload/initiate",
-        json={"filename": "sample.fastq.gz", "expected_size_bytes": 1_000_000},
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
+    from app.services.upload_service import UploadService
+
+    with patch.object(
+        UploadService,
+        "_generate_signed_upload_url",
+        new=AsyncMock(return_value="https://storage.googleapis.com/fake-signed-url"),
+    ):
+        resp = await client.post(
+            "/api/files/upload/initiate",
+            json={"filename": "sample.fastq.gz", "expected_size_bytes": 1_000_000},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert configured_ingest_bucket in data["gcs_uri"]
