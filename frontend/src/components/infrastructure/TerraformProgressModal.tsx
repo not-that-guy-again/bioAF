@@ -64,6 +64,53 @@ const PATIENCE_MESSAGES = [
   "Spinning up nodes (they're shy)…",
   "Convincing Kubernetes this is a good idea…",
   "Almost there. Probably.",
+  "Aligning reads...",
+  "Realigning reads...",
+  "Realigning the realignment...",
+  "Counting reads...",
+  "Counting them again to be sure...",
+  "Finding that one weird SNP...",
+  "Ignoring mitochondiral reads...",
+  "Blaming the reference genome...",
+  "Indexing the reference genome...",
+  "Re-indexing the reference genome...",
+  "Scaffolding genomes...",
+  "Looking for structural variants...",
+  "Pretending we understand structural variants...",
+  "Explaining TPM to the system again...",
+  "Explaining FPKM to the system again...",
+  "Pretending TPM vs FPKM matters less than it does...",
+  "Arguing about cluster labels",
+  "Growing cells...",
+  "Waiting for cells to grow...",
+  "Waiting longer for cells to grow...",
+  "Checking the incubator...",
+  "Feeding the cells...",
+  "Sacrificing a pipette tip...",
+  "Running another gel...",
+  "Waiting for the centrifuge...",
+  "Balancing the centrifuge again just in case...",
+  "Submitting job to the queue...",
+  "Waiting in the queue...",
+  "Still waiting in the queue...",
+  "Looking for the missing sample...",
+  "Looking harder for the missling sample...",
+  "Checking the -80...",
+  "Defrosting the -80...",
+  "Questioning the methods section...",
+  "Questioning everything...",
+  "Untangling phylogenetic trees...",
+  "Teaching BLAST new tricks...",
+  "Negotiating with NCBI...",
+  "Bribing the alignment algorithm...",
+  "Searching for conserved domains...",
+  "Looking for signal peptides...",
+  "Convincing proteins to fold correctly...",
+  "Consulting the ribosome...",
+  "SLURM says maybe...",
+  "Explaining TPM to the PI...",
+  "Downloading another 200GB reference genome...",
+  "Recreating the environment (again)...",
 ];
 
 type ResourceStatus = "pending" | "in_progress" | "complete";
@@ -321,14 +368,14 @@ export function TerraformProgressModal({
     };
   }, [sseUrl]);
 
-  // Rotate patience messages every 30 seconds once compute phase begins.
+  // Rotate patience messages every 10 seconds while running.
   useEffect(() => {
-    if (!computePhaseStarted || status !== "running") return;
+    if (status !== "running") return;
     const interval = setInterval(() => {
       setPatienceIndex((prev) => (prev + 1) % PATIENCE_MESSAGES.length);
-    }, 30000);
+    }, 10000);
     return () => clearInterval(interval);
-  }, [computePhaseStarted, status]);
+  }, [status]);
 
   // Auto-scroll resource list
   useEffect(() => {
@@ -371,16 +418,16 @@ export function TerraformProgressModal({
                 <span className="inline-block h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                 {phaseLabel}
               </p>
-              {computePhaseStarted && mode === "deploy" && (
-                <div className="mt-2">
+              <div className="mt-2">
+                {computePhaseStarted && mode === "deploy" && (
                   <p className="text-xs text-gray-400">
                     This may take 5–15 minutes.
                   </p>
-                  <p className="text-xs text-gray-300 mt-1">
-                    {PATIENCE_MESSAGES[patienceIndex]}
-                  </p>
-                </div>
-              )}
+                )}
+                <p className="text-xs text-gray-300 mt-1">
+                  {PATIENCE_MESSAGES[patienceIndex]}
+                </p>
+              </div>
             </div>
           )}
           {status === "complete" && (
