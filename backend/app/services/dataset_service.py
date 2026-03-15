@@ -174,9 +174,8 @@ class DatasetService:
             .join(Experiment, Sample.experiment_id == Experiment.id)
             .where(Experiment.organization_id == org_id, Sample.organism.is_not(None), Sample.organism != "")
             .distinct()
-            .order_by(Sample.organism)
         )
-        organisms = [row[0] for row in result.all()]
+        organisms = sorted([row[0] for row in result.all()], key=lambda s: (s.lower(), s))
         return {"organisms": organisms}
 
     @staticmethod

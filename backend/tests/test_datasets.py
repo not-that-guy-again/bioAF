@@ -232,8 +232,8 @@ async def test_filter_options_returns_distinct_organisms(client, admin_token, ex
 
 
 @pytest.mark.asyncio
-async def test_filter_options_preserves_casing(session, admin_user, client, admin_token):
-    """Distinct values should preserve original casing to surface inconsistencies."""
+async def test_filter_options_preserves_casing_and_sorts_insensitively(session, admin_user, client, admin_token):
+    """Distinct values preserve original casing but sort case-insensitively so variants cluster."""
     from app.models.experiment import Experiment
     from app.models.sample import Sample
 
@@ -246,7 +246,7 @@ async def test_filter_options_preserves_casing(session, admin_user, client, admi
     session.add(exp)
     await session.flush()
 
-    for org_name in ["Homo sapiens", "HOMO SAPIENS", "Human"]:
+    for org_name in ["Zebrafish", "homo sapiens", "HOMO SAPIENS", "Human"]:
         session.add(Sample(experiment_id=exp.id, organism=org_name))
     await session.flush()
     await session.commit()
@@ -257,9 +257,16 @@ async def test_filter_options_preserves_casing(session, admin_user, client, admi
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert "Homo sapiens" in data["organisms"]
-    assert "HOMO SAPIENS" in data["organisms"]
-    assert "Human" in data["organisms"]
+    orgs = data["organisms"]
+    # All variants preserved
+    assert "homo sapiens" in orgs
+    assert "HOMO SAPIENS" in orgs
+    assert "Human" in orgs
+    # Case-insensitive sort: "homo sapiens" clusters with "HOMO SAPIENS"/"Human", all before "Zebrafish"
+    # With case-sensitive ASCII sort, "homo sapiens" would sort AFTER "Zebrafish" (Z < h)
+    homo_idx = orgs.index("homo sapiens")
+    zebra_idx = orgs.index("Zebrafish")
+    assert homo_idx < zebra_idx
 
 
 @pytest.mark.asyncio
