@@ -24,7 +24,8 @@ export default function DataFilesPage() {
     { id: number; name: string }[]
   >([]);
   const [filterType, setFilterType] = useState("");
-  const [linkingFile, setLinkingFile] = useState<FileResponse | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [linkingFileIds, setLinkingFileIds] = useState<number[]>([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string>("");
 
   const fetchFiles = useCallback(async () => {
@@ -33,6 +34,7 @@ export default function DataFilesPage() {
       const params = filterType ? `?file_type=${filterType}` : "";
       const data = await api.get<FileListResponse>(`/api/files${params}`);
       setFiles(data.files);
+      setSelectedIds(new Set());
     } catch {
       // ignore
     } finally {
@@ -58,17 +60,43 @@ export default function DataFilesPage() {
     fetchExperiments();
   }, [fetchFiles, fetchExperiments]);
 
+  const openLinkModal = (fileIds: number[]) => {
+    setLinkingFileIds(fileIds);
+    setSelectedExperimentId("");
+  };
+
   const handleLink = async () => {
-    if (!linkingFile || !selectedExperimentId) return;
+    if (linkingFileIds.length === 0 || !selectedExperimentId) return;
     try {
-      await api.post(`/api/files/${linkingFile.id}/link`, {
-        experiment_id: Number(selectedExperimentId),
-      });
-      setLinkingFile(null);
+      await Promise.all(
+        linkingFileIds.map((id) =>
+          api.post(`/api/files/${id}/link`, {
+            experiment_id: Number(selectedExperimentId),
+          })
+        )
+      );
+      setLinkingFileIds([]);
       setSelectedExperimentId("");
       fetchFiles();
     } catch {
       // ignore
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === files.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(files.map((f) => f.id)));
     }
   };
 
@@ -101,6 +129,22 @@ export default function DataFilesPage() {
                   </option>
                 ))}
               </select>
+
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 ml-4">
+                  <span className="text-sm text-gray-600">
+                    {selectedIds.size} selected
+                  </span>
+                  <button
+                    onClick={() =>
+                      openLinkModal(Array.from(selectedIds))
+                    }
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                  >
+                    Link to Experiment
+                  </button>
+                </div>
+              )}
             </div>
 
             {loading ? (
@@ -112,6 +156,16 @@ export default function DataFilesPage() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-4 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={
+                            files.length > 0 &&
+                            selectedIds.size === files.length
+                          }
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Filename
                       </th>
@@ -135,6 +189,13 @@ export default function DataFilesPage() {
                   <tbody className="divide-y divide-gray-200">
                     {files.map((file) => (
                       <tr key={file.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(file.id)}
+                            onChange={() => toggleSelect(file.id)}
+                          />
+                        </td>
                         <td className="px-4 py-3 text-sm font-medium">
                           {file.filename}
                         </td>
@@ -163,10 +224,7 @@ export default function DataFilesPage() {
                                 Unlinked
                               </span>
                               <button
-                                onClick={() => {
-                                  setLinkingFile(file);
-                                  setSelectedExperimentId("");
-                                }}
+                                onClick={() => openLinkModal([file.id])}
                                 className="text-blue-600 text-xs hover:underline"
                               >
                                 Link
@@ -182,15 +240,28 @@ export default function DataFilesPage() {
             )}
           </div>
 
-          {linkingFile && (
+          {linkingFileIds.length > 0 && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
                 <h2 className="text-lg font-semibold mb-4">
-                  Link to Experiment
+                  {linkingFileIds.length === 1
+                    ? "Link to Experiment"
+                    : `Link ${linkingFileIds.length} files to Experiment`}
                 </h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  {linkingFile.filename}
-                </p>
+                {linkingFileIds.length === 1 && (
+                  <p className="text-sm text-gray-600 mb-4">
+                    {files.find((f) => f.id === linkingFileIds[0])?.filename}
+                  </p>
+                )}
+                {linkingFileIds.length > 1 && (
+                  <ul className="text-sm text-gray-600 mb-4 list-disc pl-5 max-h-32 overflow-y-auto">
+                    {linkingFileIds.map((id) => (
+                      <li key={id}>
+                        {files.find((f) => f.id === id)?.filename}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <select
                   value={selectedExperimentId}
                   onChange={(e) => setSelectedExperimentId(e.target.value)}
@@ -205,7 +276,7 @@ export default function DataFilesPage() {
                 </select>
                 <div className="flex justify-end gap-3">
                   <button
-                    onClick={() => setLinkingFile(null)}
+                    onClick={() => setLinkingFileIds([])}
                     className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
                   >
                     Cancel
