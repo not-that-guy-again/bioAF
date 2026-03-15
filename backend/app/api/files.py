@@ -85,13 +85,13 @@ async def simple_upload(
     user_id = int(current_user["sub"])
 
     try:
-        content = await file.read()
         result = await UploadService.simple_upload(
             session,
             org_id,
             user_id,
             file.filename or "unknown",
-            content,
+            file.file,
+            size_bytes=file.size,
             experiment_id=experiment_id,
         )
     except ValueError as e:

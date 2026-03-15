@@ -84,7 +84,7 @@ async def test_simple_upload_links_experiment_id(client, admin_token, configured
     await session.flush()
     await session.commit()
 
-    with patch("app.services.upload_service.UploadService._upload_to_gcs", new_callable=AsyncMock):
+    with patch("app.services.upload_service.UploadService._upload_file_to_gcs", new_callable=AsyncMock):
         resp = await client.post(
             f"/api/files/upload/simple?experiment_id={exp.id}",
             files={"file": ("sample.fastq.gz", io.BytesIO(b"data"), "application/gzip")},
@@ -106,7 +106,7 @@ async def test_simple_upload_without_experiment_id(client, admin_token, configur
     from app.models.file import File
     from sqlalchemy import select
 
-    with patch("app.services.upload_service.UploadService._upload_to_gcs", new_callable=AsyncMock):
+    with patch("app.services.upload_service.UploadService._upload_file_to_gcs", new_callable=AsyncMock):
         resp = await client.post(
             "/api/files/upload/simple",
             files={"file": ("noexp.fastq.gz", io.BytesIO(b"data"), "application/gzip")},
@@ -129,10 +129,10 @@ async def test_simple_upload_returns_500_on_gcs_failure(client, admin_token, con
     """GCS upload failure must return 500, not silently create a dangling file record."""
     from app.services.upload_service import UploadService
 
-    async def fake_upload_to_gcs(*args, **kwargs):
+    async def fake_upload_file_to_gcs(*args, **kwargs):
         raise Exception("403 Provided scope(s) are not authorized")
 
-    with patch.object(UploadService, "_upload_to_gcs", side_effect=fake_upload_to_gcs):
+    with patch.object(UploadService, "_upload_file_to_gcs", side_effect=fake_upload_file_to_gcs):
         resp = await client.post(
             "/api/files/upload/simple",
             files={"file": ("fail.fastq.gz", io.BytesIO(b"data"), "application/gzip")},
@@ -207,18 +207,18 @@ async def test_get_gcs_credentials_parses_sa_key(session):
 
 @pytest.mark.asyncio
 async def test_simple_upload_passes_credentials_to_gcs(client, admin_token, configured_ingest_bucket, session):
-    """simple_upload passes credentials from _get_gcs_credentials to _upload_to_gcs."""
+    """simple_upload passes credentials from _get_gcs_credentials to _upload_file_to_gcs."""
     from app.services.upload_service import UploadService
 
     mock_creds = MagicMock()
     captured = {}
 
-    async def fake_upload(bucket_name, gcs_path, content, credentials=None):
+    async def fake_upload(bucket_name, gcs_path, file_obj, credentials=None):
         captured["credentials"] = credentials
 
     with (
         patch.object(UploadService, "_get_gcs_credentials", new=AsyncMock(return_value=mock_creds)),
-        patch.object(UploadService, "_upload_to_gcs", side_effect=fake_upload),
+        patch.object(UploadService, "_upload_file_to_gcs", side_effect=fake_upload),
     ):
         resp = await client.post(
             "/api/files/upload/simple",
@@ -228,3 +228,29 @@ async def test_simple_upload_passes_credentials_to_gcs(client, admin_token, conf
 
     assert resp.status_code == 200
     assert captured["credentials"] is mock_creds
+
+
+@pytest.mark.asyncio
+async def test_simple_upload_streams_file_without_buffering(client, admin_token, configured_ingest_bucket, session):
+    """simple_upload must pass a file-like object to _upload_file_to_gcs, not bytes.
+
+    This prevents OOM crashes when uploading large FASTQ files.
+    """
+    from app.services.upload_service import UploadService
+
+    captured = {}
+
+    async def fake_upload(bucket_name, gcs_path, file_obj, credentials=None):
+        # file_obj must be a readable IO object, not bytes
+        assert hasattr(file_obj, "read"), "Expected a file-like object, got bytes or other type"
+        captured["file_obj"] = file_obj
+
+    with patch.object(UploadService, "_upload_file_to_gcs", side_effect=fake_upload):
+        resp = await client.post(
+            "/api/files/upload/simple",
+            files={"file": ("stream_test.fastq.gz", io.BytesIO(b"hello fastq"), "application/gzip")},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert resp.status_code == 200
+    assert "file_obj" in captured

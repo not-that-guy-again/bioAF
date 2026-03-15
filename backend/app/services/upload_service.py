@@ -201,12 +201,13 @@ class UploadService:
         org_id: int,
         user_id: int,
         filename: str,
-        content: bytes,
+        file_obj,
+        size_bytes: int | None = None,
         file_type: str | None = None,
         experiment_id: int | None = None,
         sample_ids: list[int] | None = None,
     ) -> File:
-        """Simple single-request upload for small files."""
+        """Stream a file directly to GCS without buffering the full content in memory."""
         upload_id = str(uuid.uuid4())
         bucket_name = await UploadService._get_ingest_bucket(session)
         gcs_path = f"uploads/{upload_id}/{filename}"
@@ -214,7 +215,7 @@ class UploadService:
 
         # Upload to GCS -- raises on failure so no dangling DB records are created
         credentials = await UploadService._get_gcs_credentials(session)
-        await UploadService._upload_to_gcs(bucket_name, gcs_path, content, credentials=credentials)
+        await UploadService._upload_file_to_gcs(bucket_name, gcs_path, file_obj, credentials=credentials)
 
         if not file_type:
             file_type = UploadService._detect_file_type(filename)
@@ -225,7 +226,7 @@ class UploadService:
             user_id=user_id,
             filename=filename,
             gcs_uri=gcs_uri,
-            size_bytes=len(content),
+            size_bytes=size_bytes,
             md5_checksum=None,
             file_type=file_type,
             experiment_id=experiment_id,
@@ -294,14 +295,17 @@ class UploadService:
             return f"https://storage.googleapis.com/upload/{bucket_name}/{gcs_path}?signed=placeholder"
 
     @staticmethod
-    async def _upload_to_gcs(bucket_name: str, gcs_path: str, content: bytes, credentials=None) -> None:
-        """Upload content to GCS. Raises on failure."""
+    async def _upload_file_to_gcs(bucket_name: str, gcs_path: str, file_obj, credentials=None) -> None:
+        """Stream a file-like object to GCS. Raises on failure.
+
+        Uses upload_from_file so the full content is never held in memory at once.
+        """
         from google.cloud import storage as gcs_storage
 
         def _do_upload() -> None:
             client = gcs_storage.Client(credentials=credentials)
             bucket = client.bucket(bucket_name)
             blob = bucket.blob(gcs_path)
-            blob.upload_from_string(content)
+            blob.upload_from_file(file_obj, rewind=True)
 
         await asyncio.to_thread(_do_upload)
