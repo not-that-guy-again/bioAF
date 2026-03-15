@@ -272,6 +272,7 @@ function DatasetBrowserTab() {
   const [moleculeTypeFilter, setMoleculeTypeFilter] = useState("");
   const [instrumentModelFilter, setInstrumentModelFilter] = useState("");
   const [reviewStatusFilter, setReviewStatusFilter] = useState("");
+  const [organismOptions, setOrganismOptions] = useState<string[]>([]);
   const pageSize = 20;
 
   // Multi-select and "Add to Project" state
@@ -313,6 +314,12 @@ function DatasetBrowserTab() {
   useEffect(() => {
     fetchDatasets();
   }, [fetchDatasets]);
+
+  useEffect(() => {
+    api.get<{ organisms: string[] }>("/api/datasets/filter-options")
+      .then((data) => setOrganismOptions(data.organisms))
+      .catch(() => {});
+  }, []);
 
   const toggleExperiment = (id: number) => {
     const next = new Set(selectedExperiments);
@@ -413,8 +420,9 @@ function DatasetBrowserTab() {
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         >
           <option value="">All Organisms</option>
-          <option value="Human">Human</option>
-          <option value="Mouse">Mouse</option>
+          {organismOptions.map((org) => (
+            <option key={org} value={org}>{org}</option>
+          ))}
         </select>
         <select
           value={reviewStatusFilter}

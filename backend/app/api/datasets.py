@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.schemas.dataset import DatasetExperimentSummary, DatasetSearchResult
+from app.schemas.dataset import DatasetExperimentSummary, DatasetFilterOptions, DatasetSearchResult
 from app.schemas.experiment import UserSummary
 from app.services.dataset_service import DatasetService
 
@@ -76,6 +76,17 @@ async def search_datasets(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/filter-options", response_model=DatasetFilterOptions)
+async def get_filter_options(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    current_user = request.state.current_user
+    org_id = int(current_user["org_id"])
+    options = await DatasetService.get_filter_options(session, org_id)
+    return DatasetFilterOptions(**options)
 
 
 @router.get("/{experiment_id}")

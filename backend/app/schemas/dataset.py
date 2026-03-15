@@ -26,6 +26,10 @@ class DatasetExperimentSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DatasetFilterOptions(BaseModel):
+    organisms: list[str] = []
+
+
 class DatasetSearchResult(BaseModel):
     experiments: list[DatasetExperimentSummary]
     total: int

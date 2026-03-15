@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.batch import Batch
 from app.models.cellxgene_publication import CellxgenePublication
 from app.models.experiment import Experiment
+from app.models.sample import Sample
 from app.models.file import File
 from app.models.pipeline_run import PipelineRun
 from app.models.pipeline_run_review import PipelineRunReview
@@ -164,6 +165,19 @@ class DatasetService:
             )
 
         return datasets, total
+
+    @staticmethod
+    async def get_filter_options(session: AsyncSession, org_id: int) -> dict:
+        """Return distinct filter values for the org's samples."""
+        result = await session.execute(
+            select(Sample.organism)
+            .join(Experiment, Sample.experiment_id == Experiment.id)
+            .where(Experiment.organization_id == org_id, Sample.organism.is_not(None), Sample.organism != "")
+            .distinct()
+            .order_by(Sample.organism)
+        )
+        organisms = [row[0] for row in result.all()]
+        return {"organisms": organisms}
 
     @staticmethod
     async def get_dataset_detail(session: AsyncSession, org_id: int, experiment_id: int) -> dict | None:

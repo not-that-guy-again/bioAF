@@ -218,3 +218,56 @@ async def test_response_includes_filter_fields(client, admin_token, experiment_w
     assert match["molecule_type"] == "total RNA"
     assert match["instrument_model"] == "NovaSeq 6000"
     assert match["review_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_filter_options_returns_distinct_organisms(client, admin_token, experiment_with_samples_and_batches):
+    resp = await client.get(
+        "/api/datasets/filter-options",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data["organisms"]) == {"Human", "Mouse"}
+
+
+@pytest.mark.asyncio
+async def test_filter_options_preserves_casing(session, admin_user, client, admin_token):
+    """Distinct values should preserve original casing to surface inconsistencies."""
+    from app.models.experiment import Experiment
+    from app.models.sample import Sample
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="Casing Test",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    for org_name in ["Homo sapiens", "HOMO SAPIENS", "Human"]:
+        session.add(Sample(experiment_id=exp.id, organism=org_name))
+    await session.flush()
+    await session.commit()
+
+    resp = await client.get(
+        "/api/datasets/filter-options",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "Homo sapiens" in data["organisms"]
+    assert "HOMO SAPIENS" in data["organisms"]
+    assert "Human" in data["organisms"]
+
+
+@pytest.mark.asyncio
+async def test_filter_options_empty_org(client, admin_token):
+    resp = await client.get(
+        "/api/datasets/filter-options",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["organisms"] == []
