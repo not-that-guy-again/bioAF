@@ -20,6 +20,10 @@ export default function DataBrowserPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [organismFilter, setOrganismFilter] = useState("");
+  const [moleculeTypeFilter, setMoleculeTypeFilter] = useState("");
+  const [instrumentModelFilter, setInstrumentModelFilter] = useState("");
+  const [reviewStatusFilter, setReviewStatusFilter] = useState("");
+  const [organismOptions, setOrganismOptions] = useState<string[]>([]);
   const pageSize = 20;
 
   const [selectedExperiments, setSelectedExperiments] = useState<Set<number>>(new Set());
@@ -42,6 +46,9 @@ export default function DataBrowserPage() {
       if (query) params.set("query", query);
       if (statusFilter) params.set("status", statusFilter);
       if (organismFilter) params.set("organism", organismFilter);
+      if (moleculeTypeFilter) params.set("molecule_type", moleculeTypeFilter);
+      if (instrumentModelFilter) params.set("instrument_model", instrumentModelFilter);
+      if (reviewStatusFilter) params.set("review_status", reviewStatusFilter);
       const data = await api.get<DatasetSearchResult>(
         `/api/datasets?${params}`
       );
@@ -52,11 +59,17 @@ export default function DataBrowserPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, query, statusFilter, organismFilter]);
+  }, [page, query, statusFilter, organismFilter, moleculeTypeFilter, instrumentModelFilter, reviewStatusFilter]);
 
   useEffect(() => {
     fetchDatasets();
   }, [fetchDatasets]);
+
+  useEffect(() => {
+    api.get<{ organisms: string[] }>("/api/datasets/filter-options")
+      .then((data) => setOrganismOptions(data.organisms))
+      .catch(() => {});
+  }, []);
 
   const toggleExperiment = (id: number) => {
     const next = new Set(selectedExperiments);
@@ -160,8 +173,42 @@ export default function DataBrowserPage() {
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm"
               >
                 <option value="">All Organisms</option>
-                <option value="Human">Human</option>
-                <option value="Mouse">Mouse</option>
+                {organismOptions.map((org) => (
+                  <option key={org} value={org}>{org}</option>
+                ))}
+              </select>
+              <select
+                value={reviewStatusFilter}
+                onChange={(e) => { setReviewStatusFilter(e.target.value); setPage(1); }}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              >
+                <option value="">All Review Statuses</option>
+                <option value="approved">Approved</option>
+                <option value="approved_with_caveats">Approved with Caveats</option>
+                <option value="rejected">Rejected</option>
+                <option value="revision_requested">Revision Requested</option>
+              </select>
+              <select
+                value={instrumentModelFilter}
+                onChange={(e) => { setInstrumentModelFilter(e.target.value); setPage(1); }}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              >
+                <option value="">All Instruments</option>
+                <option value="NovaSeq 6000">NovaSeq 6000</option>
+                <option value="NovaSeq X">NovaSeq X</option>
+                <option value="NextSeq 2000">NextSeq 2000</option>
+                <option value="MiSeq">MiSeq</option>
+              </select>
+              <select
+                value={moleculeTypeFilter}
+                onChange={(e) => { setMoleculeTypeFilter(e.target.value); setPage(1); }}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+              >
+                <option value="">All Molecule Types</option>
+                <option value="total RNA">Total RNA</option>
+                <option value="mRNA">mRNA</option>
+                <option value="genomic DNA">Genomic DNA</option>
+                <option value="protein">Protein</option>
               </select>
               {canModify && selectedExperiments.size > 0 && (
                 <button
