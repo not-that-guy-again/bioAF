@@ -356,6 +356,27 @@ export interface SampleCreateRequest {
   qc_notes?: string | null;
 }
 
+export interface SampleUpdateRequest {
+  sample_id_external?: string | null;
+  organism?: string | null;
+  tissue_type?: string | null;
+  donor_source?: string | null;
+  treatment_condition?: string | null;
+  chemistry_version?: string | null;
+  batch_id?: number | null;
+  viability_pct?: number | null;
+  cell_count?: number | null;
+  prep_notes?: string | null;
+  molecule_type?: string | null;
+  library_prep_method?: string | null;
+  library_layout?: string | null;
+}
+
+export interface SampleBulkUpdateRequest {
+  sample_ids: number[];
+  update: SampleUpdateRequest;
+}
+
 export interface BatchCreateRequest {
   name: string;
   prep_date?: string | null;
