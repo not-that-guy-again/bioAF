@@ -804,6 +804,7 @@ class TerraformExecutor:
         elif module_name == "storage":
             tfvars["org_slug"] = org_slug
             tfvars["stack_uid"] = stack_uid
+            tfvars["backend_service_account_email"] = config.get("backend_service_account_email") or ""
         elif module_name == "compute":
             tfvars["zone"] = zone
             tfvars["org_slug"] = org_slug
@@ -891,6 +892,7 @@ class TerraformExecutor:
             "stack_uid",
             "terraform_initialized",
             "terraform_state_bucket",
+            "backend_service_account_email",
         ]
         rows = (
             await session.execute(

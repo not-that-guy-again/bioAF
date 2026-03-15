@@ -103,6 +103,34 @@ resource "google_storage_bucket" "config_backups" {
   }
 }
 
+# --- IAM: grant backend service account object access on all buckets ---
+
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
+locals {
+  # If an explicit SA email is provided use it; otherwise fall back to the
+  # project default compute SA (used by GCE VMs created without a custom SA).
+  _backend_sa = var.backend_service_account_email != "" ? var.backend_service_account_email : "${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  backend_sa  = "serviceAccount:${local._backend_sa}"
+
+  storage_buckets = {
+    ingest         = google_storage_bucket.ingest.name
+    raw            = google_storage_bucket.raw.name
+    working        = google_storage_bucket.working.name
+    results        = google_storage_bucket.results.name
+    config_backups = google_storage_bucket.config_backups.name
+  }
+}
+
+resource "google_storage_bucket_iam_member" "backend_object_admin" {
+  for_each = local.storage_buckets
+  bucket   = each.value
+  role     = "roles/storage.objectAdmin"
+  member   = local.backend_sa
+}
+
 # --- Pub/Sub for ingest bucket notifications ---
 
 resource "google_pubsub_topic" "ingest_events" {
