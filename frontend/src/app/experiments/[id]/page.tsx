@@ -649,10 +649,6 @@ export default function ExperimentDetailPage() {
                 </div>
               )}
 
-              {editSampleError && (
-                <p className="text-red-600 text-sm mb-2">{editSampleError}</p>
-              )}
-
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -675,103 +671,123 @@ export default function ExperimentDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QC</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {samples.map((s) =>
-                      editingSampleId === s.id ? (
-                        <tr key={s.id} className="bg-blue-50">
-                          <td className="px-2 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedSampleIds.has(s.id)}
-                              onChange={() => toggleSampleSelection(s.id)}
-                              className="rounded border-gray-300"
-                            />
-                          </td>
-                          <td className="px-2 py-2"><input value={editSampleForm.sample_id_external ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sample_id_external: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" /></td>
-                          <td className="px-2 py-2"><input value={editSampleForm.organism ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, organism: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" /></td>
-                          <td className="px-2 py-2"><input value={editSampleForm.tissue_type ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, tissue_type: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" /></td>
-                          <td className="px-2 py-2">
-                            <VocabularySelect fieldName="molecule_type" value={editSampleForm.molecule_type} onChange={(v) => setEditSampleForm({ ...editSampleForm, molecule_type: v })} placeholder="..." />
-                          </td>
-                          <td className="px-2 py-2"><input value={editSampleForm.treatment_condition ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, treatment_condition: e.target.value })} className="border rounded px-2 py-1 text-sm w-full" /></td>
-                          <td className="px-2 py-2">
-                            <VocabularySelect fieldName="library_prep_method" value={editSampleForm.library_prep_method} onChange={(v) => setEditSampleForm({ ...editSampleForm, library_prep_method: v })} placeholder="..." />
-                          </td>
-                          <td className="px-2 py-2">
-                            <VocabularySelect fieldName="library_layout" value={editSampleForm.library_layout} onChange={(v) => setEditSampleForm({ ...editSampleForm, library_layout: v })} placeholder="..." />
-                          </td>
-                          <td className="px-2 py-2 text-sm text-gray-400">{s.batch?.name || "---"}</td>
-                          <td className="px-2 py-2">
-                            <select
-                              value={s.qc_status ?? ""}
-                              onChange={(e) => { if (e.target.value) handleUpdateQC(s.id, e.target.value); }}
-                              className="text-xs border rounded px-2 py-1"
-                            >
-                              <option value="">---</option>
-                              <option value="pass">Pass</option>
-                              <option value="warning">Warning</option>
-                              <option value="fail">Fail</option>
-                            </select>
-                          </td>
-                          <td className="px-2 py-2 text-sm text-gray-500">{s.status.replace(/_/g, " ")}</td>
-                          <td className="px-2 py-2">
-                            <div className="flex gap-1">
-                              <button onClick={handleSaveSampleEdit} className="text-xs bg-bioaf-600 text-white px-2 py-1 rounded">Save</button>
-                              <button onClick={() => { setEditingSampleId(null); setEditSampleError(""); }} className="text-xs border px-2 py-1 rounded">Cancel</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ) : (
-                        <tr key={s.id} className={`hover:bg-gray-50 ${selectedSampleIds.has(s.id) ? "bg-blue-50/50" : ""}`}>
-                          <td className="px-2 py-3 text-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedSampleIds.has(s.id)}
-                              onChange={() => toggleSampleSelection(s.id)}
-                              className="rounded border-gray-300"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-sm">{s.sample_id_external || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.organism || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.tissue_type || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.molecule_type || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.treatment_condition || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.library_prep_method || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.library_layout || "---"}</td>
-                          <td className="px-4 py-3 text-sm">{s.batch?.name || "---"}</td>
-                          <td className="px-4 py-3">
-                            <select
-                              value={s.qc_status ?? ""}
-                              onChange={(e) => { if (e.target.value) handleUpdateQC(s.id, e.target.value); }}
-                              className="text-xs border rounded px-2 py-1"
-                            >
-                              <option value="">---</option>
-                              <option value="pass">Pass</option>
-                              <option value="warning">Warning</option>
-                              <option value="fail">Fail</option>
-                            </select>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{s.status.replace(/_/g, " ")}</td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => startEditSample(s)}
-                              className="text-xs text-bioaf-600 hover:text-bioaf-700 font-medium"
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    )}
+                    {samples.map((s) => (
+                      <tr key={s.id} className={`hover:bg-gray-50 ${selectedSampleIds.has(s.id) ? "bg-blue-50/50" : ""}`}>
+                        <td className="px-2 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedSampleIds.has(s.id)}
+                            onChange={() => toggleSampleSelection(s.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-sm">{s.sample_id_external || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.organism || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.tissue_type || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.molecule_type || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.treatment_condition || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.library_prep_method || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.library_layout || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.batch?.name || "---"}</td>
+                        <td className="px-4 py-3">
+                          <select
+                            value={s.qc_status ?? ""}
+                            onChange={(e) => { if (e.target.value) handleUpdateQC(s.id, e.target.value); }}
+                            className="text-xs border rounded px-2 py-1"
+                          >
+                            <option value="">---</option>
+                            <option value="pass">Pass</option>
+                            <option value="warning">Warning</option>
+                            <option value="fail">Fail</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{s.status.replace(/_/g, " ")}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => startEditSample(s)}
+                            className="text-xs text-bioaf-600 hover:text-bioaf-700 font-medium"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                     {samples.length === 0 && (
                       <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+
+              {/* Edit Sample Modal */}
+              {editingSampleId !== null && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                  <div className="fixed inset-0 bg-black/40" onClick={() => { setEditingSampleId(null); setEditSampleError(""); }} />
+                  <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold">Edit Sample</h3>
+                      <button onClick={() => { setEditingSampleId(null); setEditSampleError(""); }} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">External Sample ID</label>
+                        <input value={editSampleForm.sample_id_external ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sample_id_external: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Organism</label>
+                        <input value={editSampleForm.organism ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, organism: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Tissue Type</label>
+                        <input value={editSampleForm.tissue_type ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, tissue_type: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Donor ID</label>
+                        <input value={editSampleForm.donor_source ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, donor_source: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Treatment Condition</label>
+                        <input value={editSampleForm.treatment_condition ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, treatment_condition: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Chemistry Version</label>
+                        <input value={editSampleForm.chemistry_version ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, chemistry_version: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Cell Count</label>
+                        <input type="number" min={0} value={editSampleForm.cell_count ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, cell_count: e.target.value ? Number(e.target.value) : null })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Viability %</label>
+                        <input type="number" min={0} max={100} step={0.1} value={editSampleForm.viability_pct ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, viability_pct: e.target.value ? Number(e.target.value) : null })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Molecule Type</label>
+                        <VocabularySelect fieldName="molecule_type" value={editSampleForm.molecule_type} onChange={(v) => setEditSampleForm({ ...editSampleForm, molecule_type: v })} placeholder="Molecule Type..." />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Library Prep Method</label>
+                        <VocabularySelect fieldName="library_prep_method" value={editSampleForm.library_prep_method} onChange={(v) => setEditSampleForm({ ...editSampleForm, library_prep_method: v })} placeholder="Library Prep Method..." />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Library Layout</label>
+                        <VocabularySelect fieldName="library_layout" value={editSampleForm.library_layout} onChange={(v) => setEditSampleForm({ ...editSampleForm, library_layout: v })} placeholder="Library Layout..." />
+                      </div>
+                    </div>
+                    {editSampleError && (
+                      <p className="text-red-600 text-sm mt-3">{editSampleError}</p>
+                    )}
+                    <div className="flex justify-end gap-2 mt-4">
+                      <button onClick={() => { setEditingSampleId(null); setEditSampleError(""); }} className="border px-4 py-2 rounded text-sm">Cancel</button>
+                      <button onClick={handleSaveSampleEdit} className="bg-bioaf-600 text-white px-4 py-2 rounded text-sm hover:bg-bioaf-700">Save Changes</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
