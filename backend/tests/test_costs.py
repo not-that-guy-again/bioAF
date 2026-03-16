@@ -1,6 +1,6 @@
 import pytest
 from decimal import Decimal
-from datetime import date, datetime, timezone
+from datetime import date
 
 from httpx import AsyncClient
 
