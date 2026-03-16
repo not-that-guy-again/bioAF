@@ -67,7 +67,8 @@ class FileOrganizationService:
 
         # Move file in GCS if URIs differ
         if old_uri != new_uri:
-            new_uri = await GcsStorageService.move_file(old_uri, new_uri)
+            credentials = await GcsStorageService.get_credentials(session)
+            new_uri = await GcsStorageService.move_file(old_uri, new_uri, credentials=credentials)
 
         # Update DB
         await session.execute(
@@ -118,7 +119,8 @@ class FileOrganizationService:
 
         # Move in GCS
         if old_uri != new_uri:
-            new_uri = await GcsStorageService.move_file(old_uri, new_uri)
+            credentials = await GcsStorageService.get_credentials(session)
+            new_uri = await GcsStorageService.move_file(old_uri, new_uri, credentials=credentials)
 
         # Update DB
         await session.execute(
@@ -169,7 +171,8 @@ class FileOrganizationService:
 
         # Move in GCS
         if old_uri != new_uri:
-            new_uri = await GcsStorageService.move_file(old_uri, new_uri)
+            credentials = await GcsStorageService.get_credentials(session)
+            new_uri = await GcsStorageService.move_file(old_uri, new_uri, credentials=credentials)
 
         # Update DB
         await session.execute(

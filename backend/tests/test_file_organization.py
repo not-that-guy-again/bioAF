@@ -83,6 +83,7 @@ async def test_assign_file_to_experiment_moves_from_unlinked(session):
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
         mock_gcs.move_file = AsyncMock(return_value="gs://bioaf-raw-demo/experiments/1/sample.fastq.gz")
+        mock_gcs.get_credentials = AsyncMock(return_value=None)
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp1.id}/"
         mock_gcs.build_unlinked_prefix.return_value = "unlinked/"
 
@@ -107,6 +108,7 @@ async def test_assign_file_from_ingest_bucket_moves_to_raw_bucket(session):
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
         mock_gcs.move_file = AsyncMock(return_value=f"gs://bioaf-raw-demo/experiments/{exp1.id}/reads.fastq.gz")
+        mock_gcs.get_credentials = AsyncMock(return_value=None)
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp1.id}/"
 
         from app.services.file_organization import FileOrganizationService
@@ -133,6 +135,7 @@ async def test_assign_file_to_experiment_writes_audit_log(session):
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
         mock_gcs.move_file = AsyncMock(return_value="gs://bioaf-raw-demo/experiments/1/audit.fastq.gz")
+        mock_gcs.get_credentials = AsyncMock(return_value=None)
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp1.id}/"
         mock_gcs.build_unlinked_prefix.return_value = "unlinked/"
 
@@ -165,6 +168,7 @@ async def test_reassign_file_between_experiments(session):
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
         mock_gcs.move_file = AsyncMock(return_value=f"gs://bioaf-raw-demo/experiments/{exp2.id}/data.fastq.gz")
+        mock_gcs.get_credentials = AsyncMock(return_value=None)
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp2.id}/"
 
         from app.services.file_organization import FileOrganizationService
@@ -192,6 +196,7 @@ async def test_unlink_file_moves_to_unlinked(session):
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
         mock_gcs.move_file = AsyncMock(return_value="gs://bioaf-raw-demo/unlinked/unlink.fastq.gz")
+        mock_gcs.get_credentials = AsyncMock(return_value=None)
         mock_gcs.build_unlinked_prefix.return_value = "unlinked/"
 
         from app.services.file_organization import FileOrganizationService
@@ -219,6 +224,7 @@ async def test_assign_file_already_in_experiment_is_reassign(session):
 
     with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
         mock_gcs.move_file = AsyncMock(return_value=f"gs://bioaf-raw-demo/experiments/{exp2.id}/reassign.fastq.gz")
+        mock_gcs.get_credentials = AsyncMock(return_value=None)
         mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp2.id}/"
 
         from app.services.file_organization import FileOrganizationService

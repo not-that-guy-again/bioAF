@@ -311,7 +311,7 @@ async def test_reconcile_moves_stuck_ingest_files_to_raw(client, admin_token, se
 
     move_calls = []
 
-    async def fake_move(source, dest):
+    async def fake_move(source, dest, credentials=None):
         move_calls.append((source, dest))
         return dest
 
