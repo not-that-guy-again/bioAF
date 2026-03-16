@@ -496,6 +496,7 @@ class KubernetesComputeProvider(ComputeProvider):
             "name": "pipeline",
             "image": container_image,
             "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+            "terminationMessagePolicy": "FallbackToLogsOnError",
         }
         if command:
             main_container["command"] = command
