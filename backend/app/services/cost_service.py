@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.adapters.registry import get_compute_adapter, get_storage_adapter
 from app.models.budget_config import BudgetConfig
 from app.models.cost_record import CostRecord
-from app.services.compute_cost_service import ComputeCostService
 from app.services.event_bus import event_bus
 from app.services.event_types import BUDGET_THRESHOLD_50, BUDGET_THRESHOLD_80, BUDGET_THRESHOLD_100
 
@@ -139,38 +138,37 @@ class CostService:
 
     @staticmethod
     async def sync_billing_data(session: AsyncSession, org_id: int) -> None:
-        """Sync cost data from infrastructure adapters into cost_records.
+        """Sync today's cost data from infrastructure adapters into cost_records.
 
-        Calculates daily costs for three components:
+        Records daily costs for three components:
         - node: the always-on bioAF platform VM
         - storage: all GCS buckets
         - compute: pipeline and interactive compute nodes
 
-        Backfills missing days from month start through today so the
-        month-to-date total is accurate. Idempotent per day.
+        Only writes today's record. Past records accumulate from prior daily
+        syncs so costs reflect what was actually running each day.
+        Idempotent -- re-syncing the same day updates existing records.
         """
         logger.info("Syncing billing data for org %d", org_id)
         today = date.today()
         month_start = date(today.year, today.month, 1)
 
-        # -- Node cost (always-on platform VM) --
+        # -- Node and compute cost from cluster metrics --
+        # Cluster metrics reflect actual billing rates (sustained-use discounts,
+        # committed-use, free-tier credits) rather than GCP list prices.
         compute_adapter = get_compute_adapter()
-        cluster_status = await compute_adapter.get_cluster_status()
+        cluster_metrics = await compute_adapter.get_cluster_metrics()
         node_cost_daily = Decimal("0")
         compute_cost_daily = Decimal("0")
 
-        for pool in cluster_status.get("node_pools", []):
-            machine_type = pool.get("machine_type", "")
-            current_nodes = pool.get("current_nodes", 0)
-            is_spot = pool.get("spot", False)
-            hourly = ComputeCostService.estimate_job_cost(machine_type, 1.0, is_spot)
-
+        for pool in cluster_metrics.get("node_pools", []):
+            hourly = Decimal(str(pool.get("cost_rate_hourly", 0)))
             if pool.get("name", "") == "bioaf-platform":
-                node_cost_daily += Decimal(str(hourly)) * current_nodes * 24
+                node_cost_daily += hourly * 24
             else:
-                compute_cost_daily += Decimal(str(hourly)) * current_nodes * 24
+                compute_cost_daily += hourly * 24
 
-        # -- Storage cost (all buckets, prorated daily from monthly) --
+        # -- Storage cost (prorated daily from monthly) --
         storage_adapter = get_storage_adapter()
         storage_metrics = await storage_adapter.get_storage_metrics()
         storage_cost_monthly = Decimal(str(storage_metrics.get("total_cost_monthly_usd", 0)))
@@ -181,49 +179,33 @@ class CostService:
             days_in_month = (next_month - month_start).days
         storage_cost_daily = storage_cost_monthly / days_in_month if days_in_month > 0 else Decimal("0")
 
-        # -- Find which days already have records --
-        existing_result = await session.execute(
-            select(CostRecord.record_date, CostRecord.component).where(
-                CostRecord.organization_id == org_id,
-                CostRecord.record_date >= month_start,
-                CostRecord.record_date <= today,
-            )
-        )
-        existing_pairs = {(row[0], row[1]) for row in existing_result.all()}
-
-        # -- Upsert cost records for each day from month start through today --
+        # -- Upsert today's cost records --
         components = {
             "node": node_cost_daily,
             "storage": storage_cost_daily,
             "compute": compute_cost_daily,
         }
 
-        current_day = month_start
-        while current_day <= today:
-            for component, amount in components.items():
-                if (current_day, component) in existing_pairs:
-                    # Only update today's record (past days are stable)
-                    if current_day == today:
-                        existing_rec = await session.execute(
-                            select(CostRecord).where(
-                                CostRecord.organization_id == org_id,
-                                CostRecord.record_date == today,
-                                CostRecord.component == component,
-                            )
-                        )
-                        record = existing_rec.scalar_one_or_none()
-                        if record:
-                            record.cost_amount = amount
-                else:
-                    session.add(
-                        CostRecord(
-                            organization_id=org_id,
-                            record_date=current_day,
-                            component=component,
-                            cost_amount=amount,
-                        )
+        for component, amount in components.items():
+            existing_rec = await session.execute(
+                select(CostRecord).where(
+                    CostRecord.organization_id == org_id,
+                    CostRecord.record_date == today,
+                    CostRecord.component == component,
+                )
+            )
+            record = existing_rec.scalar_one_or_none()
+            if record:
+                record.cost_amount = amount
+            else:
+                session.add(
+                    CostRecord(
+                        organization_id=org_id,
+                        record_date=today,
+                        component=component,
+                        cost_amount=amount,
                     )
-            current_day += timedelta(days=1)
+                )
 
     @staticmethod
     async def get_budget_config(session: AsyncSession, org_id: int) -> BudgetConfig | None:

@@ -99,16 +99,15 @@ async def test_trigger_billing_sync(client: AsyncClient, admin_token: str):
 
 @pytest.mark.asyncio
 async def test_cost_summary_with_records(client: AsyncClient, admin_token: str, admin_user, session):
-    """Insert cost records and verify summary includes them."""
+    """Insert cost records for today and verify summary includes them."""
     from app.models.cost_record import CostRecord
 
-    now = datetime.now(timezone.utc)
-    month_start = date(now.year, now.month, 1)
+    today = date.today()
 
     for i, component in enumerate(["compute", "storage", "network"]):
         record = CostRecord(
             organization_id=admin_user.organization_id,
-            record_date=month_start,
+            record_date=today,
             component=component,
             cost_amount=Decimal(f"{(i + 1) * 100}.00"),
         )
@@ -214,8 +213,8 @@ async def test_sync_billing_data_is_idempotent(admin_user, session):
 
 
 @pytest.mark.asyncio
-async def test_sync_billing_data_backfills_month(admin_user, session):
-    """sync_billing_data should create records for all days from month start through today."""
+async def test_sync_billing_data_only_writes_today(admin_user, session):
+    """sync_billing_data should only create records for today, not backfill."""
     from app.models.cost_record import CostRecord
     from app.services.cost_service import CostService
 
@@ -224,22 +223,19 @@ async def test_sync_billing_data_backfills_month(admin_user, session):
     await session.flush()
 
     today = date.today()
-    month_start = date(today.year, today.month, 1)
-    expected_days = (today - month_start).days + 1
-
     from sqlalchemy import select
 
     result = await session.execute(
         select(CostRecord).where(
             CostRecord.organization_id == org_id,
-            CostRecord.record_date >= month_start,
             CostRecord.component == "node",
         )
     )
     node_records = list(result.scalars().all())
-    assert len(node_records) == expected_days, (
-        f"Expected {expected_days} node records (one per day), got {len(node_records)}"
+    assert len(node_records) == 1, (
+        f"Expected 1 node record (today only), got {len(node_records)}"
     )
+    assert node_records[0].record_date == today
 
 
 @pytest.mark.asyncio
