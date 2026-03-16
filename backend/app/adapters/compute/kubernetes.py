@@ -479,7 +479,9 @@ class KubernetesComputeProvider(ComputeProvider):
 
         # Write sample sheet to the data volume via init container
         if sample_sheet and pipeline_source and not job_spec.get("command"):
-            escaped_sheet = sample_sheet.replace("'", "'\\''")
+            # Strip carriage returns that browsers/forms sometimes inject
+            clean_sheet = sample_sheet.replace("\r\n", "\n").replace("\r", "\n")
+            escaped_sheet = clean_sheet.replace("'", "'\\''")
             init_containers.append(
                 {
                     "name": "write-samplesheet",
@@ -513,6 +515,7 @@ class KubernetesComputeProvider(ComputeProvider):
             },
             "spec": {
                 "backoffLimit": 0,
+                "ttlSecondsAfterFinished": 3600,
                 "template": {
                     "spec": {
                         "nodeSelector": {"bioaf.io/pool": "pipelines"},
