@@ -6,7 +6,7 @@ the K8s adapter should build a client from platform_config credentials
 """
 
 import base64
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -67,6 +67,8 @@ class TestOutOfClusterAuth:
     @pytest.mark.asyncio
     async def test_out_of_cluster_client_uses_endpoint_and_ca(self, adapter_k8s_mode, platform_config):
         """_build_out_of_cluster_client configures ApiClient with endpoint + CA."""
+        adapter_k8s_mode._cluster_config = platform_config
+
         with patch(
             "app.adapters.compute.kubernetes.config.load_incluster_config",
             side_effect=Exception("not in cluster"),
@@ -76,16 +78,11 @@ class TestOutOfClusterAuth:
                 mock_config_cls.return_value = mock_config
 
                 with patch("app.adapters.compute.kubernetes.client.ApiClient"):
-                    with patch.object(
-                        adapter_k8s_mode,
-                        "_load_cluster_config",
-                        return_value=platform_config,
+                    with patch(
+                        "app.adapters.compute.kubernetes._get_gcp_token",
+                        return_value="fake-token",
                     ):
-                        with patch(
-                            "app.adapters.compute.kubernetes._get_gcp_token",
-                            return_value="fake-token",
-                        ):
-                            adapter_k8s_mode._build_out_of_cluster_client()
+                        adapter_k8s_mode._build_out_of_cluster_client()
 
                 mock_config_cls.assert_called_once()
                 assert mock_config.host == "https://10.0.0.1"
@@ -114,3 +111,26 @@ class TestOutOfClusterAuth:
 
         assert result["job_id"] == "bioaf-pipeline-99"
         mock_batch.create_namespaced_job.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_load_cluster_config_is_async(self, adapter_k8s_mode):
+        """load_cluster_config must be async to avoid event loop conflicts with asyncpg."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            ("gke_cluster_endpoint", "https://10.0.0.1"),
+            ("gke_cluster_ca_cert", "dGVzdA=="),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        # session_factory() returns an async context manager (like AsyncSession)
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = mock_session
+        mock_ctx.__aexit__.return_value = False
+
+        adapter_k8s_mode._session_factory = MagicMock(return_value=mock_ctx)
+
+        cfg = await adapter_k8s_mode.load_cluster_config()
+        assert cfg["gke_cluster_endpoint"] == "https://10.0.0.1"
+        # Should cache the result
+        assert adapter_k8s_mode._cluster_config is not None

@@ -64,6 +64,12 @@ async def initialize_adapters(session: AsyncSession, session_factory=None) -> No
     _compute_adapter, _storage_adapter, _notebook_adapter = _create_adapters(
         compute_stack, session_factory=session_factory
     )
+
+    # Eagerly load cluster config so the compute adapter never needs to
+    # run async DB queries from a sync context (which breaks asyncpg).
+    if hasattr(_compute_adapter, "load_cluster_config"):
+        await _compute_adapter.load_cluster_config()
+
     _initialized = True
 
 

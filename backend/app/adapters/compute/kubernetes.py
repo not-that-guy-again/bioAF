@@ -203,62 +203,43 @@ class KubernetesComputeProvider(ComputeProvider):
 
     # -- K8s client helpers --
 
-    def _load_cluster_config(self) -> dict:
+    async def load_cluster_config(self) -> dict:
         """Read GKE cluster config from platform_config (cached).
 
-        Returns dict with gke_cluster_endpoint, gke_cluster_ca_cert,
-        gcp_credential_source, and gcp_service_account_key.
+        Must be called during async initialization (e.g., app startup)
+        so the DB query runs on the correct event loop. The result is
+        cached in _cluster_config for later sync access.
         """
         if self._cluster_config is not None:
             return self._cluster_config
 
-        import asyncio
-
         from sqlalchemy import text as sa_text
 
-        async def _read():
-            if not self._session_factory:
-                return {}
-            async with self._session_factory() as session:
-                result = await session.execute(
-                    sa_text(
-                        "SELECT key, value FROM platform_config "
-                        "WHERE key IN ("
-                        "  'gke_cluster_endpoint', 'gke_cluster_ca_cert',"
-                        "  'gcp_credential_source', 'gcp_service_account_key'"
-                        ")"
-                    )
+        if not self._session_factory:
+            self._cluster_config = {}
+            return self._cluster_config
+
+        async with self._session_factory() as session:
+            result = await session.execute(
+                sa_text(
+                    "SELECT key, value FROM platform_config "
+                    "WHERE key IN ("
+                    "  'gke_cluster_endpoint', 'gke_cluster_ca_cert',"
+                    "  'gcp_credential_source', 'gcp_service_account_key'"
+                    ")"
                 )
-                return {r[0]: r[1] for r in result.fetchall()}
+            )
+            self._cluster_config = {r[0]: r[1] for r in result.fetchall()}
 
-        try:
-            loop = asyncio.get_running_loop()
-            # We're inside an async context but need sync access.
-            # Use a new thread to run the coroutine.
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                cfg = loop.run_in_executor(pool, lambda: asyncio.run(_read()))
-                # This won't work in sync context, fall back
-                raise RuntimeError("use sync fallback")
-        except RuntimeError:
-            # Either no running loop or we need to just run it
-            try:
-                cfg = asyncio.run(_read())
-            except RuntimeError:
-                # Already in an async loop -- use nest_asyncio pattern
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(asyncio.run, _read())
-                    cfg = future.result(timeout=10)
-
-        self._cluster_config = cfg
-        return cfg
+        return self._cluster_config
 
     def _build_out_of_cluster_client(self) -> client.ApiClient:
-        """Build a K8s ApiClient using platform_config credentials."""
-        cfg = self._load_cluster_config()
+        """Build a K8s ApiClient using platform_config credentials.
+
+        Requires load_cluster_config() to have been called first during
+        async startup so _cluster_config is populated.
+        """
+        cfg = self._cluster_config or {}
 
         endpoint = cfg.get("gke_cluster_endpoint", "")
         ca_cert_b64 = cfg.get("gke_cluster_ca_cert", "")
