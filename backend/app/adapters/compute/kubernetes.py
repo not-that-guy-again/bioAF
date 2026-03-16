@@ -23,16 +23,22 @@ from app.adapters.base import ComputeProvider
 logger = logging.getLogger("bioaf.adapters.compute.k8s")
 
 
-def _get_gcp_token(service_account_key_json: str) -> str:
-    """Exchange a GCP service account key for an access token."""
+def _get_gcp_credentials(service_account_key_json: str):
+    """Build GCP credentials from a service account key JSON string."""
     from google.oauth2 import service_account
-    import google.auth.transport.requests
 
     key_data = _json.loads(service_account_key_json)
-    credentials = service_account.Credentials.from_service_account_info(
+    return service_account.Credentials.from_service_account_info(
         key_data,
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )
+
+
+def _get_gcp_token(service_account_key_json: str) -> str:
+    """Exchange a GCP service account key for an access token."""
+    import google.auth.transport.requests
+
+    credentials = _get_gcp_credentials(service_account_key_json)
     credentials.refresh(google.auth.transport.requests.Request())
     return credentials.token
 
@@ -248,6 +254,10 @@ class KubernetesComputeProvider(ComputeProvider):
         if not endpoint or endpoint == "null":
             raise RuntimeError("No GKE cluster endpoint in platform_config. Deploy the compute stack first.")
 
+        # Ensure endpoint has https:// scheme
+        if not endpoint.startswith("https://"):
+            endpoint = f"https://{endpoint}"
+
         # Get a GCP access token for K8s API auth
         token = _get_gcp_token(sa_key)
 
@@ -275,7 +285,14 @@ class KubernetesComputeProvider(ComputeProvider):
             logger.info("Using incluster K8s config")
         except Exception:
             logger.info("Not running in cluster, using platform_config credentials")
-            self._api_client = self._build_out_of_cluster_client()
+            try:
+                self._api_client = self._build_out_of_cluster_client()
+                logger.info(
+                    "K8s client built for endpoint %s", (self._cluster_config or {}).get("gke_cluster_endpoint")
+                )
+            except Exception:
+                logger.exception("Failed to build out-of-cluster K8s client")
+                raise
 
         return self._api_client
 
@@ -371,8 +388,15 @@ class KubernetesComputeProvider(ComputeProvider):
     }
 
     def _get_gke_client(self):
-        """Get a GKE ClusterManager client. Tests mock this method."""
+        """Get a GKE ClusterManager client using platform_config credentials."""
         from google.cloud import container_v1
+
+        cfg = self._cluster_config or {}
+        sa_key = cfg.get("gcp_service_account_key", "")
+
+        if sa_key:
+            credentials = _get_gcp_credentials(sa_key)
+            return container_v1.ClusterManagerClient(credentials=credentials)
 
         return container_v1.ClusterManagerClient()
 
