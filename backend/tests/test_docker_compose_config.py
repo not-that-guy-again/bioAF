@@ -22,18 +22,12 @@ class TestBackendComputeConfig:
     def test_compute_mode_set_to_k8s(self, compose_config):
         """Backend service must set BIOAF_COMPUTE_MODE to k8s."""
         backend_env = compose_config["services"]["backend"]["environment"]
-        assert "BIOAF_COMPUTE_MODE" in backend_env, (
-            "BIOAF_COMPUTE_MODE not set in backend environment"
-        )
+        assert "BIOAF_COMPUTE_MODE" in backend_env, "BIOAF_COMPUTE_MODE not set in backend environment"
         value = backend_env["BIOAF_COMPUTE_MODE"]
         # The value may use variable substitution like ${BIOAF_COMPUTE_MODE:-k8s}
-        assert "k8s" in str(value), (
-            f"Expected BIOAF_COMPUTE_MODE to default to k8s, got {value}"
-        )
+        assert "k8s" in str(value), f"Expected BIOAF_COMPUTE_MODE to default to k8s, got {value}"
 
     def test_gcp_project_id_passed(self, compose_config):
         """Backend service must pass GCP_PROJECT_ID for GKE cluster access."""
         backend_env = compose_config["services"]["backend"]["environment"]
-        assert "BIOAF_GCP_PROJECT_ID" in backend_env, (
-            "BIOAF_GCP_PROJECT_ID not set in backend environment"
-        )
+        assert "BIOAF_GCP_PROJECT_ID" in backend_env, "BIOAF_GCP_PROJECT_ID not set in backend environment"

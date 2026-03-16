@@ -76,9 +76,7 @@ async def initialized_catalog(client, admin_token):
 
 class TestLaunchRunJobSpec:
     @pytest.mark.asyncio
-    async def test_job_spec_includes_pipeline_name(
-        self, client, admin_token, experiment, samples, initialized_catalog
-    ):
+    async def test_job_spec_includes_pipeline_name(self, client, admin_token, experiment, samples, initialized_catalog):
         """launch_run should pass pipeline_name in the job_spec for K8s labels."""
         captured_spec = {}
 
@@ -113,9 +111,7 @@ class TestLaunchRunJobSpec:
             )
 
         assert response.status_code == 200
-        assert "pipeline_name" in captured_spec, (
-            f"job_spec missing pipeline_name. Keys: {list(captured_spec.keys())}"
-        )
+        assert "pipeline_name" in captured_spec, f"job_spec missing pipeline_name. Keys: {list(captured_spec.keys())}"
         assert captured_spec["pipeline_name"] == "nf-core/scrnaseq"
 
     @pytest.mark.asyncio
@@ -159,9 +155,7 @@ class TestLaunchRunJobSpec:
         assert captured_spec.get("pipeline_version") == "2.7.1"
 
     @pytest.mark.asyncio
-    async def test_job_spec_includes_sample_sheet(
-        self, client, admin_token, experiment, samples, initialized_catalog
-    ):
+    async def test_job_spec_includes_sample_sheet(self, client, admin_token, experiment, samples, initialized_catalog):
         """launch_run should pass generated sample_sheet CSV."""
         captured_spec = {}
 

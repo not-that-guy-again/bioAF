@@ -51,9 +51,7 @@ class TestNextflowCommandBuilt:
 
         body = mock_batch.create_namespaced_job.call_args[1]["body"]
         main_container = body["spec"]["template"]["spec"]["containers"][0]
-        assert "nextflow" in main_container["image"], (
-            f"Expected nextflow image, got {main_container['image']}"
-        )
+        assert "nextflow" in main_container["image"], f"Expected nextflow image, got {main_container['image']}"
 
     @pytest.mark.asyncio
     async def test_builds_nextflow_run_command(self, adapter):
