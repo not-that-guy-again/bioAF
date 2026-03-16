@@ -69,6 +69,25 @@ async def test_update_budget_config(client: AsyncClient, admin_token: str):
 
 
 @pytest.mark.asyncio
+async def test_update_budget_currency(client: AsyncClient, admin_token: str):
+    response = await client.put(
+        "/api/costs/budget",
+        json={"monthly_budget": "200.00", "currency": "EUR"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["currency"] == "EUR"
+
+    # Verify currency appears in summary
+    summary = await client.get(
+        "/api/costs/summary",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert summary.json()["currency"] == "EUR"
+
+
+@pytest.mark.asyncio
 async def test_trigger_billing_sync(client: AsyncClient, admin_token: str):
     response = await client.post(
         "/api/costs/sync",
@@ -192,6 +211,35 @@ async def test_sync_billing_data_is_idempotent(admin_user, session):
     assert components.count("node") == 1
     assert components.count("storage") == 1
     assert components.count("compute") == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_billing_data_backfills_month(admin_user, session):
+    """sync_billing_data should create records for all days from month start through today."""
+    from app.models.cost_record import CostRecord
+    from app.services.cost_service import CostService
+
+    org_id = admin_user.organization_id
+    await CostService.sync_billing_data(session, org_id)
+    await session.flush()
+
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    expected_days = (today - month_start).days + 1
+
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(CostRecord).where(
+            CostRecord.organization_id == org_id,
+            CostRecord.record_date >= month_start,
+            CostRecord.component == "node",
+        )
+    )
+    node_records = list(result.scalars().all())
+    assert len(node_records) == expected_days, (
+        f"Expected {expected_days} node records (one per day), got {len(node_records)}"
+    )
 
 
 @pytest.mark.asyncio

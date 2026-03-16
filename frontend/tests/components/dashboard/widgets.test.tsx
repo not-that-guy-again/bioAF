@@ -122,8 +122,8 @@ describe("Dashboard Widgets", () => {
       });
       render(<CostBudgetWidget />);
       await waitFor(() => {
-        expect(screen.getByText("$500")).toBeInTheDocument();
-        expect(screen.getByText("$1,000")).toBeInTheDocument();
+        expect(screen.getByText("$500.00")).toBeInTheDocument();
+        expect(screen.getByText("$1000.00")).toBeInTheDocument();
         expect(screen.getByText("50% of monthly budget")).toBeInTheDocument();
       });
     });
@@ -148,7 +148,7 @@ describe("Dashboard Widgets", () => {
       });
     });
 
-    it("shows empty state when no budget configured", async () => {
+    it("shows spend with infinity and cost center link when no budget configured", async () => {
       mockApiGet.mockResolvedValueOnce({
         current_month_spend: 200,
         monthly_budget: null,
@@ -158,7 +158,11 @@ describe("Dashboard Widgets", () => {
       });
       render(<CostBudgetWidget />);
       await waitFor(() => {
-        expect(screen.getByTestId("widget-empty")).toBeInTheDocument();
+        expect(screen.getByText("$200.00")).toBeInTheDocument();
+        expect(screen.getByText("\u221E")).toBeInTheDocument();
+        expect(screen.getByTestId("widget-no-budget")).toBeInTheDocument();
+        const link = screen.getByText("Configure in Cost Center");
+        expect(link).toHaveAttribute("href", "/infrastructure/cost-center");
       });
     });
 

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -100,6 +100,8 @@ class CostService:
             days_in_month = (next_month - month_start).days
         projected = (current_month_spend / days_elapsed * days_in_month) if days_elapsed > 0 else Decimal("0")
 
+        currency = budget.currency if budget else "USD"
+
         return {
             "current_month_spend": current_month_spend,
             "daily_trend": daily_trend,
@@ -108,6 +110,7 @@ class CostService:
             "monthly_budget": monthly_budget,
             "budget_remaining": budget_remaining,
             "projected_month_end": projected,
+            "currency": currency,
         }
 
     @staticmethod
@@ -143,10 +146,12 @@ class CostService:
         - storage: all GCS buckets
         - compute: pipeline and interactive compute nodes
 
-        Idempotent -- updates existing records for today rather than duplicating.
+        Backfills missing days from month start through today so the
+        month-to-date total is accurate. Idempotent per day.
         """
         logger.info("Syncing billing data for org %d", org_id)
         today = date.today()
+        month_start = date(today.year, today.month, 1)
 
         # -- Node cost (always-on platform VM) --
         compute_adapter = get_compute_adapter()
@@ -169,41 +174,56 @@ class CostService:
         storage_adapter = get_storage_adapter()
         storage_metrics = await storage_adapter.get_storage_metrics()
         storage_cost_monthly = Decimal(str(storage_metrics.get("total_cost_monthly_usd", 0)))
-        now = datetime.now(timezone.utc)
-        if now.month == 12:
+        if today.month == 12:
             days_in_month = 31
         else:
-            next_month = date(now.year, now.month + 1, 1)
-            days_in_month = (next_month - date(now.year, now.month, 1)).days
+            next_month = date(today.year, today.month + 1, 1)
+            days_in_month = (next_month - month_start).days
         storage_cost_daily = storage_cost_monthly / days_in_month if days_in_month > 0 else Decimal("0")
 
-        # -- Upsert cost records for today --
+        # -- Find which days already have records --
+        existing_result = await session.execute(
+            select(CostRecord.record_date, CostRecord.component).where(
+                CostRecord.organization_id == org_id,
+                CostRecord.record_date >= month_start,
+                CostRecord.record_date <= today,
+            )
+        )
+        existing_pairs = {(row[0], row[1]) for row in existing_result.all()}
+
+        # -- Upsert cost records for each day from month start through today --
         components = {
             "node": node_cost_daily,
             "storage": storage_cost_daily,
             "compute": compute_cost_daily,
         }
 
-        for component, amount in components.items():
-            existing = await session.execute(
-                select(CostRecord).where(
-                    CostRecord.organization_id == org_id,
-                    CostRecord.record_date == today,
-                    CostRecord.component == component,
-                )
-            )
-            record = existing.scalar_one_or_none()
-            if record:
-                record.cost_amount = amount
-            else:
-                session.add(
-                    CostRecord(
-                        organization_id=org_id,
-                        record_date=today,
-                        component=component,
-                        cost_amount=amount,
+        current_day = month_start
+        while current_day <= today:
+            for component, amount in components.items():
+                if (current_day, component) in existing_pairs:
+                    # Only update today's record (past days are stable)
+                    if current_day == today:
+                        existing_rec = await session.execute(
+                            select(CostRecord).where(
+                                CostRecord.organization_id == org_id,
+                                CostRecord.record_date == today,
+                                CostRecord.component == component,
+                            )
+                        )
+                        record = existing_rec.scalar_one_or_none()
+                        if record:
+                            record.cost_amount = amount
+                else:
+                    session.add(
+                        CostRecord(
+                            organization_id=org_id,
+                            record_date=current_day,
+                            component=component,
+                            cost_amount=amount,
+                        )
                     )
-                )
+            current_day += timedelta(days=1)
 
     @staticmethod
     async def get_budget_config(session: AsyncSession, org_id: int) -> BudgetConfig | None:
@@ -229,6 +249,7 @@ class CostService:
             "threshold_80_enabled",
             "threshold_100_enabled",
             "scale_to_zero_on_100",
+            "currency",
         ]:
             if key in data and data[key] is not None:
                 setattr(config, key, data[key])
