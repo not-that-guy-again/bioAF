@@ -436,6 +436,10 @@ class KubernetesComputeProvider(ComputeProvider):
         if sample_sheet:
             parts.extend(["--input", "/data/samplesheet.csv"])
 
+        # Ensure outdir is always set (nf-core pipelines require it)
+        if "outdir" not in parameters:
+            parameters = {**parameters, "outdir": "/data/results"}
+
         for key, value in sorted(parameters.items()):
             parts.extend([f"--{key}", str(value)])
 
