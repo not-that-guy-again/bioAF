@@ -433,6 +433,9 @@ class KubernetesComputeProvider(ComputeProvider):
         if pipeline_version:
             parts.extend(["-r", pipeline_version])
 
+        # nf-core pipelines need a profile for container execution
+        parts.extend(["-profile", "docker"])
+
         if sample_sheet:
             parts.extend(["--input", "/data/samplesheet.csv"])
 

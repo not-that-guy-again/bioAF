@@ -64,7 +64,13 @@ class PipelineCatalogService:
                     PipelineCatalogEntry.pipeline_key == pipeline_def["pipeline_key"],
                 )
             )
-            if result.scalar_one_or_none():
+            existing = result.scalar_one_or_none()
+            if existing:
+                # Refresh defaults if the DB entry has empty params but the file has values
+                defaults_file = DEFAULTS_DIR / pipeline_def["defaults_file"]
+                if not existing.default_params_json and defaults_file.exists():
+                    existing.default_params_json = json.loads(defaults_file.read_text())
+                    logger.info("Refreshed defaults for %s", pipeline_def["pipeline_key"])
                 continue
 
             default_params = {}
