@@ -2,17 +2,39 @@
 
 Supports local/mock mode for development and real K8s API for production.
 Mode is controlled by the BIOAF_COMPUTE_MODE environment variable.
+
+When running outside the cluster (e.g., Docker Compose on a VM), the adapter
+builds a K8s client from platform_config credentials (gke_cluster_endpoint,
+gke_cluster_ca_cert, GCP service account key).
 """
 
+import base64
+import json as _json
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 
+from kubernetes import client, config
 
 from app.adapters.base import ComputeProvider
 
 logger = logging.getLogger("bioaf.adapters.compute.k8s")
+
+
+def _get_gcp_token(service_account_key_json: str) -> str:
+    """Exchange a GCP service account key for an access token."""
+    from google.oauth2 import service_account
+    import google.auth.transport.requests
+
+    key_data = _json.loads(service_account_key_json)
+    credentials = service_account.Credentials.from_service_account_info(
+        key_data,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+    credentials.refresh(google.auth.transport.requests.Request())
+    return credentials.token
 
 
 class KubernetesComputeProvider(ComputeProvider):
@@ -21,6 +43,8 @@ class KubernetesComputeProvider(ComputeProvider):
     def __init__(self, session_factory=None):
         self._mode = os.environ.get("BIOAF_COMPUTE_MODE", "local")
         self._session_factory = session_factory
+        self._api_client: client.ApiClient | None = None
+        self._cluster_config: dict | None = None
 
     @property
     def is_local(self) -> bool:
@@ -179,32 +203,117 @@ class KubernetesComputeProvider(ComputeProvider):
 
     # -- K8s client helpers --
 
+    def _load_cluster_config(self) -> dict:
+        """Read GKE cluster config from platform_config (cached).
+
+        Returns dict with gke_cluster_endpoint, gke_cluster_ca_cert,
+        gcp_credential_source, and gcp_service_account_key.
+        """
+        if self._cluster_config is not None:
+            return self._cluster_config
+
+        import asyncio
+
+        from sqlalchemy import text as sa_text
+
+        async def _read():
+            if not self._session_factory:
+                return {}
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    sa_text(
+                        "SELECT key, value FROM platform_config "
+                        "WHERE key IN ("
+                        "  'gke_cluster_endpoint', 'gke_cluster_ca_cert',"
+                        "  'gcp_credential_source', 'gcp_service_account_key'"
+                        ")"
+                    )
+                )
+                return {r[0]: r[1] for r in result.fetchall()}
+
+        try:
+            loop = asyncio.get_running_loop()
+            # We're inside an async context but need sync access.
+            # Use a new thread to run the coroutine.
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                cfg = loop.run_in_executor(pool, lambda: asyncio.run(_read()))
+                # This won't work in sync context, fall back
+                raise RuntimeError("use sync fallback")
+        except RuntimeError:
+            # Either no running loop or we need to just run it
+            try:
+                cfg = asyncio.run(_read())
+            except RuntimeError:
+                # Already in an async loop -- use nest_asyncio pattern
+                import concurrent.futures
+
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, _read())
+                    cfg = future.result(timeout=10)
+
+        self._cluster_config = cfg
+        return cfg
+
+    def _build_out_of_cluster_client(self) -> client.ApiClient:
+        """Build a K8s ApiClient using platform_config credentials."""
+        cfg = self._load_cluster_config()
+
+        endpoint = cfg.get("gke_cluster_endpoint", "")
+        ca_cert_b64 = cfg.get("gke_cluster_ca_cert", "")
+        sa_key = cfg.get("gcp_service_account_key", "")
+
+        if not endpoint or endpoint == "null":
+            raise RuntimeError("No GKE cluster endpoint in platform_config. Deploy the compute stack first.")
+
+        # Get a GCP access token for K8s API auth
+        token = _get_gcp_token(sa_key)
+
+        # Write CA cert to a temp file for the K8s client
+        ca_cert_bytes = base64.b64decode(ca_cert_b64)
+        ca_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
+        ca_file.write(ca_cert_bytes)
+        ca_file.close()
+
+        configuration = client.Configuration()
+        configuration.host = endpoint
+        configuration.ssl_ca_cert = ca_file.name
+        configuration.api_key = {"authorization": f"Bearer {token}"}
+
+        return client.ApiClient(configuration)
+
+    def _get_api_client(self) -> client.ApiClient:
+        """Get or create a K8s ApiClient, trying incluster first."""
+        if self._api_client is not None:
+            return self._api_client
+
+        try:
+            config.load_incluster_config()
+            self._api_client = client.ApiClient()
+            logger.info("Using incluster K8s config")
+        except Exception:
+            logger.info("Not running in cluster, using platform_config credentials")
+            self._api_client = self._build_out_of_cluster_client()
+
+        return self._api_client
+
     def _get_k8s_core_client(self):
         """Get a Kubernetes CoreV1Api client. Tests mock this method."""
-        from kubernetes import client, config
-
-        config.load_incluster_config()
-        return client.CoreV1Api()
+        return client.CoreV1Api(api_client=self._get_api_client())
 
     def _get_k8s_batch_client(self):
         """Get a Kubernetes BatchV1Api client. Tests mock this method."""
-        from kubernetes import client, config
-
-        config.load_incluster_config()
-        return client.BatchV1Api()
+        return client.BatchV1Api(api_client=self._get_api_client())
 
     def _get_k8s_rbac_client(self):
         """Get a Kubernetes RbacAuthorizationV1Api client. Tests mock this method."""
-        from kubernetes import client, config
-
-        config.load_incluster_config()
-        return client.RbacAuthorizationV1Api()
+        return client.RbacAuthorizationV1Api(api_client=self._get_api_client())
 
     _namespace_ready = False
 
     async def ensure_pipeline_namespace(self, namespace: str = "bioaf-pipelines") -> None:
         """Ensure the pipeline namespace, service account, and role binding exist."""
-        from kubernetes import client
         from kubernetes.client.rest import ApiException
 
         core_v1 = self._get_k8s_core_client()
@@ -471,8 +580,8 @@ class KubernetesComputeProvider(ComputeProvider):
         project_id = os.environ.get("GCP_PROJECT_ID", "")
         zone = os.environ.get("GCP_ZONE", "")
 
-        client = self._get_gke_client()
-        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+        gke_client = self._get_gke_client()
+        cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
 
         node_pools = []
         total_nodes = 0
@@ -510,8 +619,8 @@ class KubernetesComputeProvider(ComputeProvider):
         project_id = os.environ.get("GCP_PROJECT_ID", "")
         zone = os.environ.get("GCP_ZONE", "")
 
-        client = self._get_gke_client()
-        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+        gke_client = self._get_gke_client()
+        cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
 
         node_pools = []
         for pool in cluster.node_pools:
