@@ -112,7 +112,7 @@ export default function InfraCostCenterPage() {
     ? Math.min(100, (parseFloat(summary.current_month_spend) / parseFloat(budget.monthly_budget)) * 100)
     : 0;
 
-  const fmt = (value: string) => `${parseFloat(value).toFixed(2)} ${currency}`;
+  const fmt = (value: string | number) => `${parseFloat(String(value)).toFixed(2)} ${currency}`;
 
   return (
     <div className="flex h-screen">
