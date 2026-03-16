@@ -3,17 +3,31 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
+interface ComponentCost {
+  component: string;
+  amount: string;
+  percentage: number;
+}
+
 interface CostSummaryResponse {
   current_month_spend: number;
   monthly_budget: number | null;
   budget_remaining: number | null;
   projected_month_end: number | null;
+  breakdown_by_component: ComponentCost[];
 }
 
 interface BudgetData {
   current_spend: number;
   monthly_budget: number;
+  breakdown: ComponentCost[];
 }
+
+const COMPONENT_LABELS: Record<string, string> = {
+  node: "bioAF Node",
+  storage: "Storage",
+  compute: "Compute",
+};
 
 export function CostBudgetWidget() {
   const [data, setData] = useState<BudgetData | null>(null);
@@ -28,6 +42,7 @@ export function CostBudgetWidget() {
           setData({
             current_spend: res.current_month_spend,
             monthly_budget: res.monthly_budget,
+            breakdown: res.breakdown_by_component || [],
           });
         }
       })
@@ -79,6 +94,17 @@ export function CostBudgetWidget() {
             />
           </div>
           <p className="text-xs text-gray-500 mt-1">{Math.round(pct)}% of monthly budget</p>
+
+          {data.breakdown.length > 0 && (
+            <div className="mt-3 space-y-1 border-t pt-2">
+              {data.breakdown.map((item) => (
+                <div key={item.component} className="flex justify-between text-xs text-gray-600">
+                  <span>{COMPONENT_LABELS[item.component] || item.component}</span>
+                  <span>${parseFloat(item.amount).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

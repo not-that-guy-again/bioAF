@@ -132,6 +132,93 @@ async def test_cost_history_with_records(client: AsyncClient, admin_token: str, 
 
 
 @pytest.mark.asyncio
+async def test_sync_billing_data_populates_cost_records(admin_user, session):
+    """sync_billing_data should create cost_records for node, storage, and compute."""
+    from app.models.cost_record import CostRecord
+    from app.services.cost_service import CostService
+
+    org_id = admin_user.organization_id
+    await CostService.sync_billing_data(session, org_id)
+    await session.flush()
+
+    today = date.today()
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(CostRecord).where(
+            CostRecord.organization_id == org_id,
+            CostRecord.record_date == today,
+        )
+    )
+    records = list(result.scalars().all())
+    components = {r.component for r in records}
+
+    assert "node" in components, "Expected a 'node' cost record"
+    assert "storage" in components, "Expected a 'storage' cost record"
+    assert "compute" in components, "Expected a 'compute' cost record"
+
+    for r in records:
+        assert r.cost_amount >= 0, f"Cost for {r.component} should be >= 0"
+
+    # Node cost should be > 0 (always-on platform node)
+    node_record = next(r for r in records if r.component == "node")
+    assert node_record.cost_amount > 0
+
+
+@pytest.mark.asyncio
+async def test_sync_billing_data_is_idempotent(admin_user, session):
+    """Running sync twice should not duplicate records for the same day."""
+    from app.models.cost_record import CostRecord
+    from app.services.cost_service import CostService
+
+    org_id = admin_user.organization_id
+    await CostService.sync_billing_data(session, org_id)
+    await session.flush()
+    await CostService.sync_billing_data(session, org_id)
+    await session.flush()
+
+    today = date.today()
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(CostRecord).where(
+            CostRecord.organization_id == org_id,
+            CostRecord.record_date == today,
+        )
+    )
+    records = list(result.scalars().all())
+    components = [r.component for r in records]
+    # Each component should appear exactly once
+    assert components.count("node") == 1
+    assert components.count("storage") == 1
+    assert components.count("compute") == 1
+
+
+@pytest.mark.asyncio
+async def test_cost_summary_includes_synced_data(client: AsyncClient, admin_token: str):
+    """Summary endpoint should return non-zero spend from synced data."""
+    # Trigger sync first
+    await client.post(
+        "/api/costs/sync",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    response = await client.get(
+        "/api/costs/summary",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert float(data["current_month_spend"]) > 0
+    assert len(data["breakdown_by_component"]) >= 3
+
+    component_names = [c["component"] for c in data["breakdown_by_component"]]
+    assert "node" in component_names
+    assert "storage" in component_names
+    assert "compute" in component_names
+
+
+@pytest.mark.asyncio
 async def test_budget_threshold_check(admin_user, session):
     """Test budget threshold checking emits no errors."""
     from app.services.cost_service import CostService

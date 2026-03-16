@@ -78,4 +78,5 @@ async def trigger_billing_sync(
 ):
     org_id = current_user["org_id"]
     await CostService.sync_billing_data(session, org_id)
+    await session.commit()
     return {"status": "sync_initiated"}
