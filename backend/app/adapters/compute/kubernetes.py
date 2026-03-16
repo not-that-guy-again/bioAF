@@ -231,7 +231,8 @@ class KubernetesComputeProvider(ComputeProvider):
                     "SELECT key, value FROM platform_config "
                     "WHERE key IN ("
                     "  'gke_cluster_endpoint', 'gke_cluster_ca_cert',"
-                    "  'gcp_credential_source', 'gcp_service_account_key'"
+                    "  'gcp_credential_source', 'gcp_service_account_key',"
+                    "  'gke_cluster_name', 'gcp_project_id', 'gcp_zone'"
                     ")"
                 )
             )
@@ -437,6 +438,10 @@ class KubernetesComputeProvider(ComputeProvider):
         stage_commands = job_spec.get("stage_commands", [])
         pipeline_source = job_spec.get("pipeline_source", "")
         sample_sheet = job_spec.get("sample_sheet", "")
+
+        # Ensure namespace, service account, and role binding exist on first use
+        if not self._namespace_ready:
+            await self.ensure_pipeline_namespace(namespace)
 
         # Auto-build Nextflow command when pipeline_source is set and no
         # explicit command was provided
@@ -696,13 +701,42 @@ class KubernetesComputeProvider(ComputeProvider):
         return round(rate, 4)
 
     async def _k8s_get_cluster_metrics(self) -> dict:
-        """Query GKE API for cluster metrics with cost rate estimates."""
-        cluster_name = os.environ.get("GKE_CLUSTER_NAME", "")
-        project_id = os.environ.get("GCP_PROJECT_ID", "")
-        zone = os.environ.get("GCP_ZONE", "")
+        """Query GKE API for cluster metrics with cost rate estimates.
 
-        gke_client = self._get_gke_client()
-        cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+        Reads cluster identity (name, project, zone) from platform_config
+        so no extra environment variables are needed beyond what the deploy
+        script already stores.  Falls back to env vars for compatibility.
+        If the GKE API call fails, returns safe zeros so the cost endpoint
+        does not 500.
+        """
+        cfg = self._cluster_config or {}
+        cluster_name = cfg.get("gke_cluster_name") or os.environ.get("GKE_CLUSTER_NAME", "")
+        project_id = cfg.get("gcp_project_id") or os.environ.get("GCP_PROJECT_ID", "")
+        zone = cfg.get("gcp_zone") or os.environ.get("GCP_ZONE", "")
+
+        _fallback = {
+            "cpu_utilization_pct": 0.0,
+            "memory_utilization_pct": 0.0,
+            "cost_burn_rate_hourly": 0.0,
+            "node_pools": [],
+        }
+
+        if not cluster_name or not project_id or not zone:
+            logger.warning(
+                "Missing GKE cluster identity (name=%s, project=%s, zone=%s). "
+                "Store gke_cluster_name, gcp_project_id, gcp_zone in platform_config.",
+                cluster_name,
+                project_id,
+                zone,
+            )
+            return _fallback
+
+        try:
+            gke_client = self._get_gke_client()
+            cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+        except Exception:
+            logger.exception("Failed to fetch GKE cluster metrics")
+            return _fallback
 
         total_cost = 0.0
         node_pools = []
