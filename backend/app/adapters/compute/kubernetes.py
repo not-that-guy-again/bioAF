@@ -43,6 +43,19 @@ def _get_gcp_token(service_account_key_json: str) -> str:
     return credentials.token
 
 
+def _sanitize_label_value(value: str) -> str:
+    """Sanitize a string for use as a K8s label value.
+
+    Label values must match: (([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?
+    Replaces invalid characters with '-' and trims to 63 chars.
+    """
+    import re
+
+    sanitized = re.sub(r"[^A-Za-z0-9\-_.]", "-", value)
+    sanitized = sanitized.strip("-_.")
+    return sanitized[:63]
+
+
 class KubernetesComputeProvider(ComputeProvider):
     """Kubernetes compute backend with local mode for development."""
 
@@ -494,7 +507,7 @@ class KubernetesComputeProvider(ComputeProvider):
                 "namespace": namespace,
                 "labels": {
                     "bioaf.io/pipeline-run": str(run_id),
-                    "bioaf.io/pipeline": pipeline_name,
+                    "bioaf.io/pipeline": _sanitize_label_value(pipeline_name),
                     "bioaf.io/pool": "pipelines",
                 },
             },
