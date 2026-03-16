@@ -640,8 +640,39 @@ class KubernetesComputeProvider(ComputeProvider):
             "health": health,
         }
 
+    # On-demand hourly rates (USD) for common GCE machine types.
+    # Source: us-central1 pricing as of 2024-Q4. Close enough for cost
+    # estimation; exact billing comes from the GCP billing export.
+    _GCE_HOURLY_RATES: dict[str, float] = {
+        "e2-micro": 0.0084,
+        "e2-small": 0.0168,
+        "e2-medium": 0.0336,
+        "e2-standard-2": 0.0671,
+        "e2-standard-4": 0.1342,
+        "e2-standard-8": 0.2684,
+        "n2-standard-2": 0.0971,
+        "n2-standard-4": 0.1942,
+        "n2-standard-8": 0.3884,
+        "n2-highmem-2": 0.1310,
+        "n2-highmem-4": 0.2620,
+        "n2-highmem-8": 0.5241,
+        "n2-highmem-16": 1.0482,
+        "n2-highcpu-4": 0.1416,
+        "n2-highcpu-8": 0.2832,
+    }
+
+    _SPOT_DISCOUNT = 0.35  # spot VMs are ~65% cheaper on average
+
+    @classmethod
+    def _hourly_rate(cls, machine_type: str, spot: bool) -> float:
+        """Look up the hourly rate for a GCE machine type."""
+        rate = cls._GCE_HOURLY_RATES.get(machine_type, 0.10)
+        if spot:
+            rate *= cls._SPOT_DISCOUNT
+        return round(rate, 4)
+
     async def _k8s_get_cluster_metrics(self) -> dict:
-        """Query GKE API for cluster metrics."""
+        """Query GKE API for cluster metrics with cost rate estimates."""
         cluster_name = os.environ.get("GKE_CLUSTER_NAME", "")
         project_id = os.environ.get("GCP_PROJECT_ID", "")
         zone = os.environ.get("GCP_ZONE", "")
@@ -649,20 +680,26 @@ class KubernetesComputeProvider(ComputeProvider):
         gke_client = self._get_gke_client()
         cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
 
+        total_cost = 0.0
         node_pools = []
         for pool in cluster.node_pools:
+            node_count = pool.initial_node_count
+            is_spot = pool.config.spot
+            per_node = self._hourly_rate(pool.config.machine_type, is_spot)
+            pool_cost = round(per_node * node_count, 4)
+            total_cost += pool_cost
             node_pools.append(
                 {
                     "name": pool.name,
                     "cpu_utilization_pct": 0.0,
                     "memory_utilization_pct": 0.0,
-                    "cost_rate_hourly": 0.0,
+                    "cost_rate_hourly": pool_cost,
                 }
             )
 
         return {
             "cpu_utilization_pct": 0.0,
             "memory_utilization_pct": 0.0,
-            "cost_burn_rate_hourly": 0.0,
+            "cost_burn_rate_hourly": round(total_cost, 4),
             "node_pools": node_pools,
         }
