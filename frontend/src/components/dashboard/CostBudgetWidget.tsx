@@ -64,9 +64,9 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   VND: "\u20AB",
 };
 
-function formatCurrency(value: number, currency: string): string {
+function formatCurrency(value: number | string, currency: string): string {
   const symbol = CURRENCY_SYMBOLS[currency] || `${currency}\u00A0`;
-  return `${symbol}${value.toFixed(2)}`;
+  return `${symbol}${Number(value).toFixed(2)}`;
 }
 
 export function CostBudgetWidget() {
@@ -91,10 +91,10 @@ export function CostBudgetWidget() {
 
   const hasBudget = data?.monthly_budget != null;
   const pct = hasBudget
-    ? Math.min((data!.current_spend / data!.monthly_budget!) * 100, 100)
+    ? Math.min((Number(data!.current_spend) / Number(data!.monthly_budget!)) * 100, 100)
     : 0;
   const barColor = pct > 90 ? "bg-red-500" : pct > 75 ? "bg-amber-500" : "bg-green-500";
-  const fmt = (value: number) => formatCurrency(value, data?.currency || "USD");
+  const fmt = (value: number | string) => formatCurrency(value, data?.currency || "USD");
 
   return (
     <div className="bg-white rounded-lg shadow p-5" data-testid="widget-cost-budget">
@@ -149,7 +149,7 @@ export function CostBudgetWidget() {
               {data.breakdown.map((item) => (
                 <div key={item.component} className="flex justify-between text-xs text-gray-600">
                   <span>{COMPONENT_LABELS[item.component] || item.component}</span>
-                  <span>{fmt(parseFloat(item.amount))}</span>
+                  <span>{fmt(item.amount)}</span>
                 </div>
               ))}
             </div>
