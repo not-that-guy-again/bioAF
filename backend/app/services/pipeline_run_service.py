@@ -119,6 +119,7 @@ class PipelineRunService:
             compute_adapter = get_compute_adapter()
             job_spec = {
                 "run_id": run.id,
+                "pipeline_name": pipeline.pipeline_key,
                 "pipeline_source": pipeline.source_url,
                 "pipeline_version": pipeline.version,
                 "parameters": merged_params,
