@@ -627,7 +627,11 @@ class KubernetesComputeProvider(ComputeProvider):
         return jobs
 
     async def _k8s_get_job_logs(self, job_id: str) -> str:
-        """Retrieve logs from the pipeline pod."""
+        """Retrieve logs from the pipeline pod.
+
+        Falls back to pod container status (exit code, reason, message)
+        when the kubelet is unavailable (e.g., node scaled down).
+        """
         core_client = self._get_k8s_core_client()
         namespace = "bioaf-pipelines"
 
@@ -638,13 +642,48 @@ class KubernetesComputeProvider(ComputeProvider):
         if not pod_list.items:
             return f"No pods found for job {job_id}"
 
-        pod_name = pod_list.items[0].metadata.name
-        logs = core_client.read_namespaced_pod_log(
-            name=pod_name,
-            namespace=namespace,
-            container="pipeline",
-        )
-        return logs
+        pod = pod_list.items[0]
+        pod_name = pod.metadata.name
+
+        try:
+            logs = core_client.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=namespace,
+                container="pipeline",
+            )
+            return logs
+        except Exception:
+            logger.warning("Could not read logs from %s (node likely scaled down), using pod status", pod_name)
+
+        # Fallback: extract termination info from pod status
+        return self._extract_pod_termination_info(pod)
+
+    @staticmethod
+    def _extract_pod_termination_info(pod) -> str:
+        """Build a log message from pod container status when logs are unavailable."""
+        lines = [f"Pod {pod.metadata.name} - phase: {pod.status.phase}"]
+
+        for cs in pod.status.container_statuses or []:
+            terminated = getattr(cs.state, "terminated", None)
+            if terminated:
+                lines.append(f"Container '{cs.name}': exit_code={terminated.exit_code}, reason={terminated.reason}")
+                if terminated.message:
+                    lines.append(f"  message: {terminated.message}")
+
+            waiting = getattr(cs.state, "waiting", None)
+            if waiting and waiting.reason:
+                lines.append(f"Container '{cs.name}' waiting: {waiting.reason}")
+                if waiting.message:
+                    lines.append(f"  message: {waiting.message}")
+
+        for cs in pod.status.init_container_statuses or []:
+            terminated = getattr(cs.state, "terminated", None)
+            if terminated and terminated.exit_code != 0:
+                lines.append(
+                    f"Init container '{cs.name}': exit_code={terminated.exit_code}, reason={terminated.reason}"
+                )
+
+        return "\n".join(lines)
 
     async def _k8s_get_cluster_status(self) -> dict:
         """Query GKE API for real cluster status."""
