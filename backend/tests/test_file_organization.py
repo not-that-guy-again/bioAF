@@ -98,6 +98,33 @@ async def test_assign_file_to_experiment_moves_from_unlinked(session):
 
 
 @pytest.mark.asyncio
+async def test_assign_file_from_ingest_bucket_moves_to_raw_bucket(session):
+    """File in ingest bucket should move to raw bucket, not stay in ingest."""
+    org, user, exp1, _ = await _seed_org_user_exp(session)
+
+    # File lives in the ingest bucket (manual upload path)
+    file_id = await _create_file(session, org.id, "gs://bioaf-ingest-demo/uploads/abc123/reads.fastq.gz")
+
+    with patch("app.services.file_organization.GcsStorageService") as mock_gcs:
+        mock_gcs.move_file = AsyncMock(return_value=f"gs://bioaf-raw-demo/experiments/{exp1.id}/reads.fastq.gz")
+        mock_gcs.build_experiment_prefix.return_value = f"experiments/{exp1.id}/"
+
+        from app.services.file_organization import FileOrganizationService
+
+        await FileOrganizationService.assign_file_to_experiment(session, file_id, exp1.id, user.id)
+
+        # The move_file call should target the raw bucket, not the ingest bucket
+        call_args = mock_gcs.move_file.call_args
+        destination_uri = call_args[0][1] if call_args[0] else call_args[1].get("destination_uri", "")
+        assert "bioaf-raw-demo" in destination_uri, (
+            f"Expected destination in raw bucket (bioaf-raw-demo), got {destination_uri}"
+        )
+        assert "bioaf-ingest-demo" not in destination_uri, (
+            f"File should not stay in ingest bucket, got {destination_uri}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_assign_file_to_experiment_writes_audit_log(session):
     """Assign a file. Assert audit log entry created."""
     org, user, exp1, _ = await _seed_org_user_exp(session)

@@ -191,13 +191,21 @@ async def link_file(
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
 
     file = await FileService.get_file(session, file_id, org_id)
     if not file:
         raise HTTPException(404, "File not found")
 
     if body.experiment_id is not None:
-        file.experiment_id = body.experiment_id
+        from app.services.file_organization import FileOrganizationService
+
+        await FileOrganizationService.assign_file_to_experiment(session, file_id, body.experiment_id, user_id)
+
+        # Auto-transition experiment status for FASTQ files
+        if file.file_type == "fastq":
+            await UploadService._auto_update_experiment_status(session, body.experiment_id, org_id, user_id)
+
     if body.sample_id:
         await FileService.link_file_to_sample(session, file_id, body.sample_id)
     await session.commit()

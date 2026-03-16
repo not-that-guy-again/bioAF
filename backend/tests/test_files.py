@@ -116,11 +116,18 @@ async def test_list_files_null_experiment_id(client, admin_token, sample_file):
 
 @pytest.mark.asyncio
 async def test_link_file_to_experiment(client, admin_token, sample_file, sample_experiment):
-    resp = await client.post(
-        f"/api/files/{sample_file.id}/link",
-        json={"experiment_id": sample_experiment.id},
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
+    from unittest.mock import AsyncMock, patch
+
+    with patch(
+        "app.services.file_organization.GcsStorageService.move_file",
+        new_callable=AsyncMock,
+        return_value=f"gs://test-bucket/experiments/{sample_experiment.id}/test-file.fastq.gz",
+    ):
+        resp = await client.post(
+            f"/api/files/{sample_file.id}/link",
+            json={"experiment_id": sample_experiment.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
     assert resp.status_code == 200
 
     resp = await client.get(
@@ -128,6 +135,121 @@ async def test_link_file_to_experiment(client, admin_token, sample_file, sample_
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.json()["experiment_id"] == sample_experiment.id
+
+
+@pytest.mark.asyncio
+async def test_link_file_moves_to_raw_bucket(client, admin_token, session, admin_user):
+    """Linking a file should call FileOrganizationService to move it in GCS."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from sqlalchemy import text
+
+    # Seed raw bucket config
+    await session.execute(
+        text(
+            "INSERT INTO platform_config (key, value) VALUES ('raw_bucket_name', 'bioaf-raw-test') "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+        )
+    )
+    await session.commit()
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="Link Move Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://bioaf-ingest-test/uploads/abc/reads.fastq.gz",
+        filename="reads.fastq.gz",
+        size_bytes=5000,
+        file_type="fastq",
+        uploader_user_id=admin_user.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    with patch(
+        "app.services.file_organization.GcsStorageService.move_file",
+        new_callable=AsyncMock,
+        return_value=f"gs://bioaf-raw-test/experiments/{exp.id}/reads.fastq.gz",
+    ):
+        resp = await client.post(
+            f"/api/files/{f.id}/link",
+            json={"experiment_id": exp.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert resp.status_code == 200
+
+    row = (await session.execute(text("SELECT gcs_uri FROM files WHERE id = :fid").bindparams(fid=f.id))).fetchone()
+    # File should have moved to the raw bucket under the experiment prefix
+    assert "bioaf-raw-test" in row[0], f"Expected raw bucket in URI, got {row[0]}"
+    assert f"experiments/{exp.id}/" in row[0]
+
+
+@pytest.mark.asyncio
+async def test_link_fastq_transitions_experiment_to_fastq_uploaded(client, admin_token, session, admin_user):
+    """Linking a FASTQ file to a registered experiment should advance status."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from sqlalchemy import text
+
+    await session.execute(
+        text(
+            "INSERT INTO platform_config (key, value) VALUES ('raw_bucket_name', 'bioaf-raw-test') "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+        )
+    )
+    await session.commit()
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="Status Transition Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://bioaf-ingest-test/uploads/def/sample.fastq.gz",
+        filename="sample.fastq.gz",
+        size_bytes=5000,
+        file_type="fastq",
+        uploader_user_id=admin_user.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    with patch(
+        "app.services.file_organization.GcsStorageService.move_file",
+        new_callable=AsyncMock,
+        return_value=f"gs://bioaf-raw-test/experiments/{exp.id}/sample.fastq.gz",
+    ):
+        resp = await client.post(
+            f"/api/files/{f.id}/link",
+            json={"experiment_id": exp.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert resp.status_code == 200
+
+    row = (
+        await session.execute(text("SELECT status FROM experiments WHERE id = :eid").bindparams(eid=exp.id))
+    ).fetchone()
+    assert row[0] == "fastq_uploaded", f"Expected fastq_uploaded, got {row[0]}"
 
 
 # --- Upload Service Unit Tests ---
