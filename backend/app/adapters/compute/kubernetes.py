@@ -395,6 +395,33 @@ class KubernetesComputeProvider(ComputeProvider):
 
         return container_v1.ClusterManagerClient()
 
+    NEXTFLOW_IMAGE = "nextflow/nextflow:24.04.4"
+
+    @staticmethod
+    def _build_nextflow_command(job_spec: dict) -> list[str]:
+        """Build a Nextflow run command from the job spec.
+
+        Translates pipeline_source, pipeline_version, parameters, and
+        sample_sheet into a shell command that nextflow can execute.
+        """
+        pipeline_source = job_spec.get("pipeline_source", "")
+        pipeline_version = job_spec.get("pipeline_version", "")
+        parameters = job_spec.get("parameters", {})
+        sample_sheet = job_spec.get("sample_sheet", "")
+
+        parts = ["nextflow", "run", pipeline_source]
+
+        if pipeline_version:
+            parts.extend(["-r", pipeline_version])
+
+        if sample_sheet:
+            parts.extend(["--input", "/data/samplesheet.csv"])
+
+        for key, value in sorted(parameters.items()):
+            parts.extend([f"--{key}", str(value)])
+
+        return ["/bin/sh", "-c", " ".join(parts)]
+
     async def _k8s_submit_job(self, job_spec: dict) -> dict:
         """Submit a real Kubernetes Job to the GKE cluster."""
         run_id = job_spec.get("run_id", 0)
@@ -403,7 +430,14 @@ class KubernetesComputeProvider(ComputeProvider):
         container_image = job_spec.get("container_image", "alpine:3.19")
         command = job_spec.get("command", [])
         stage_commands = job_spec.get("stage_commands", [])
-        _ = job_spec.get("input_files", [])  # reserved for future use
+        pipeline_source = job_spec.get("pipeline_source", "")
+        sample_sheet = job_spec.get("sample_sheet", "")
+
+        # Auto-build Nextflow command when pipeline_source is set and no
+        # explicit command was provided
+        if pipeline_source and not command:
+            container_image = self.NEXTFLOW_IMAGE
+            command = self._build_nextflow_command(job_spec)
 
         job_name = f"bioaf-pipeline-{run_id}"
 
@@ -416,6 +450,18 @@ class KubernetesComputeProvider(ComputeProvider):
                     "name": "stage-inputs",
                     "image": "google/cloud-sdk:slim",
                     "command": ["/bin/sh", "-c", stage_script],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                }
+            )
+
+        # Write sample sheet to the data volume via init container
+        if sample_sheet and pipeline_source and not job_spec.get("command"):
+            escaped_sheet = sample_sheet.replace("'", "'\\''")
+            init_containers.append(
+                {
+                    "name": "write-samplesheet",
+                    "image": "alpine:3.19",
+                    "command": ["/bin/sh", "-c", f"printf '%s' '{escaped_sheet}' > /data/samplesheet.csv"],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
                 }
             )
