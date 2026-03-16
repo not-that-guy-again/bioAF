@@ -232,9 +232,7 @@ async def test_sync_billing_data_only_writes_today(admin_user, session):
         )
     )
     node_records = list(result.scalars().all())
-    assert len(node_records) == 1, (
-        f"Expected 1 node record (today only), got {len(node_records)}"
-    )
+    assert len(node_records) == 1, f"Expected 1 node record (today only), got {len(node_records)}"
     assert node_records[0].record_date == today
 
 
