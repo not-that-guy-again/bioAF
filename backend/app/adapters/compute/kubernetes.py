@@ -148,19 +148,19 @@ class KubernetesComputeProvider(ComputeProvider):
         }
 
     def _local_cluster_metrics(self) -> dict:
-        # Rates reflect actual GCP billing after sustained-use discounts
-        # e2-standard-2: ~$0.01/hr effective (list $0.067, ~85% discount from
-        # sustained-use + free-tier credits typical for small clusters)
+        from app.config import settings
+
+        node_rate = settings.local_node_cost_hourly
         return {
             "cpu_utilization_pct": 12.5,
             "memory_utilization_pct": 28.3,
-            "cost_burn_rate_hourly": 0.01,
+            "cost_burn_rate_hourly": node_rate,
             "node_pools": [
                 {
                     "name": "bioaf-platform",
                     "cpu_utilization_pct": 25.0,
                     "memory_utilization_pct": 45.0,
-                    "cost_rate_hourly": 0.01,
+                    "cost_rate_hourly": node_rate,
                 },
                 {
                     "name": "bioaf-pipelines",

@@ -268,3 +268,78 @@ async def test_budget_threshold_check(admin_user, session):
     from app.services.cost_service import CostService
 
     await CostService.check_budget_thresholds(session, admin_user.organization_id)
+
+
+@pytest.mark.asyncio
+async def test_purge_cost_records(client: AsyncClient, admin_token: str, admin_user, session):
+    """DELETE /api/costs/records should remove records in the given date range."""
+    from app.models.cost_record import CostRecord
+
+    today = date.today()
+    yesterday = date(today.year, today.month, today.day - 1) if today.day > 1 else today
+
+    for d in [yesterday, today]:
+        session.add(
+            CostRecord(
+                organization_id=admin_user.organization_id,
+                record_date=d,
+                component="node",
+                cost_amount=Decimal("1.00"),
+            )
+        )
+    await session.flush()
+    await session.commit()
+
+    # Purge only yesterday
+    response = await client.delete(
+        f"/api/costs/records?start_date={yesterday}&end_date={yesterday}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] >= 1
+
+    # Today's record should still exist
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(CostRecord).where(
+            CostRecord.organization_id == admin_user.organization_id,
+            CostRecord.record_date == today,
+        )
+    )
+    assert result.scalar_one_or_none() is not None
+
+
+@pytest.mark.asyncio
+async def test_purge_cost_records_forbidden_for_viewer(client: AsyncClient, viewer_token: str):
+    """Viewers should not be able to purge cost records."""
+    response = await client.delete(
+        "/api/costs/records?start_date=2026-01-01&end_date=2026-12-31",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_local_cost_rates_from_settings(admin_user, session):
+    """Sync should use rates from settings, not hardcoded values."""
+    from app.models.cost_record import CostRecord
+    from app.services.cost_service import CostService
+
+    org_id = admin_user.organization_id
+    await CostService.sync_billing_data(session, org_id)
+    await session.flush()
+
+    today = date.today()
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(CostRecord).where(
+            CostRecord.organization_id == org_id,
+            CostRecord.record_date == today,
+            CostRecord.component == "node",
+        )
+    )
+    node = result.scalar_one()
+    # Default setting is 0.01/hr * 24 = 0.24/day
+    assert float(node.cost_amount) == pytest.approx(0.24, abs=0.01)
