@@ -49,16 +49,20 @@ class PipelineRunService:
         # 3. Resolve sample_ids
         if data.sample_ids:
             sample_result = await session.execute(
-                select(Sample).where(
+                select(Sample)
+                .where(
                     Sample.id.in_(data.sample_ids),
                     Sample.experiment_id == data.experiment_id,
                 )
+                .options(selectinload(Sample.files))
             )
             samples = list(sample_result.scalars().all())
             if len(samples) != len(data.sample_ids):
                 raise ValueError("Some sample IDs do not belong to this experiment")
         else:
-            sample_result = await session.execute(select(Sample).where(Sample.experiment_id == data.experiment_id))
+            sample_result = await session.execute(
+                select(Sample).where(Sample.experiment_id == data.experiment_id).options(selectinload(Sample.files))
+            )
             samples = list(sample_result.scalars().all())
 
         # 4. Check quota

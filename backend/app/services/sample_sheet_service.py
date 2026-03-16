@@ -5,6 +5,25 @@ import logging
 logger = logging.getLogger("bioaf.sample_sheet")
 
 
+def _extract_fastq_paths(sample) -> tuple[str, str]:
+    """Extract fastq_1 and fastq_2 GCS URIs from sample.files.
+
+    Sorts files so R1 comes before R2 using the _R1/_R2 filename convention.
+    Returns ("", "") if no FASTQ files are linked.
+    """
+    files = getattr(sample, "files", None) or []
+    fastq_files = [f for f in files if getattr(f, "gcs_uri", None)]
+    if not fastq_files:
+        return ("", "")
+
+    # Sort by filename so R1 < R2
+    fastq_files.sort(key=lambda f: getattr(f, "filename", "") or getattr(f, "gcs_uri", ""))
+
+    fastq_1 = fastq_files[0].gcs_uri if len(fastq_files) > 0 else ""
+    fastq_2 = fastq_files[1].gcs_uri if len(fastq_files) > 1 else ""
+    return (fastq_1, fastq_2)
+
+
 class SampleSheetService:
     @staticmethod
     def generate_scrnaseq_sheet(samples: list, parameters: dict) -> str:
@@ -21,8 +40,11 @@ class SampleSheetService:
         for sample in samples:
             sample_name = sample.sample_id_external or f"sample_{sample.id}"
             paths = input_paths.get(str(sample.id), [])
-            fastq_1 = paths[0] if len(paths) > 0 else ""
-            fastq_2 = paths[1] if len(paths) > 1 else ""
+            if paths:
+                fastq_1 = paths[0] if len(paths) > 0 else ""
+                fastq_2 = paths[1] if len(paths) > 1 else ""
+            else:
+                fastq_1, fastq_2 = _extract_fastq_paths(sample)
             expected_cells = parameters.get("expected_cells", 10000)
             writer.writerow([sample_name, fastq_1, fastq_2, expected_cells])
 
@@ -40,8 +62,11 @@ class SampleSheetService:
         for sample in samples:
             sample_name = sample.sample_id_external or f"sample_{sample.id}"
             paths = input_paths.get(str(sample.id), [])
-            fastq_1 = paths[0] if len(paths) > 0 else ""
-            fastq_2 = paths[1] if len(paths) > 1 else ""
+            if paths:
+                fastq_1 = paths[0] if len(paths) > 0 else ""
+                fastq_2 = paths[1] if len(paths) > 1 else ""
+            else:
+                fastq_1, fastq_2 = _extract_fastq_paths(sample)
             strandedness = parameters.get("strandedness", "auto")
             writer.writerow([sample_name, fastq_1, fastq_2, strandedness])
 
@@ -59,8 +84,11 @@ class SampleSheetService:
         for sample in samples:
             sample_name = sample.sample_id_external or f"sample_{sample.id}"
             paths = input_paths.get(str(sample.id), [])
-            fastq_1 = paths[0] if len(paths) > 0 else ""
-            fastq_2 = paths[1] if len(paths) > 1 else ""
+            if paths:
+                fastq_1 = paths[0] if len(paths) > 0 else ""
+                fastq_2 = paths[1] if len(paths) > 1 else ""
+            else:
+                fastq_1, fastq_2 = _extract_fastq_paths(sample)
             writer.writerow([sample_name, fastq_1, fastq_2])
 
         return output.getvalue()
