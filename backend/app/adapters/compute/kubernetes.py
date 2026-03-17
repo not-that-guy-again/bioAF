@@ -433,8 +433,9 @@ class KubernetesComputeProvider(ComputeProvider):
         if pipeline_version:
             parts.extend(["-r", pipeline_version])
 
-        # nf-core pipelines need a profile for container execution
-        parts.extend(["-profile", "docker"])
+        # Use a generated nextflow.config with K8s executor settings.
+        # GKE uses containerd (no Docker daemon), so -profile docker won't work.
+        parts.extend(["-c", "/data/nextflow.config"])
 
         if sample_sheet:
             parts.extend(["--input", "/data/samplesheet.csv"])
@@ -447,6 +448,37 @@ class KubernetesComputeProvider(ComputeProvider):
             parts.extend([f"--{key}", str(value)])
 
         return ["/bin/sh", "-c", " ".join(parts)]
+
+    @staticmethod
+    def _build_nextflow_k8s_config(namespace: str, has_gcs_secret: bool) -> str:
+        """Build a nextflow.config for K8s executor mode.
+
+        Each Nextflow process runs as its own K8s pod. The config ensures
+        pods land on the pipeline node pool, use the right service account,
+        and have GCS credentials when available.
+        """
+        lines = [
+            "process.executor = 'k8s'",
+            f"k8s.namespace = '{namespace}'",
+            "k8s.serviceAccount = 'bioaf-pipeline-runner'",
+            # Schedule process pods on the pipeline node pool
+            "k8s.pod = ["
+            "  [nodeSelector: 'bioaf.io/pool=pipelines'],"
+            "  [tolerations: [[key: 'bioaf.io/pool', value: 'pipelines', effect: 'NoSchedule']]]",
+        ]
+
+        if has_gcs_secret:
+            lines.append(
+                "  ,[secret: 'bioaf-gcs-sa-key', mountPath: '/secrets/gcp'],"
+                "  [env: 'GOOGLE_APPLICATION_CREDENTIALS', value: '/secrets/gcp/key.json']"
+            )
+
+        lines.append("]")
+
+        # Docker is the default container engine for nf-core
+        lines.append("docker.enabled = true")
+
+        return "\n".join(lines)
 
     def _ensure_gcs_secret(self, namespace: str) -> bool:
         """Create a K8s Secret with the GCP SA key for GCS access.
@@ -535,6 +567,19 @@ class KubernetesComputeProvider(ComputeProvider):
                     "name": "write-samplesheet",
                     "image": "alpine:3.19",
                     "command": ["/bin/sh", "-c", f"printf '%s' '{escaped_sheet}' > /data/samplesheet.csv"],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                }
+            )
+
+        # Write nextflow.config with K8s executor settings for Nextflow pipelines
+        if pipeline_source and not job_spec.get("command"):
+            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret)
+            escaped_config = nf_config.replace("'", "'\\''")
+            init_containers.append(
+                {
+                    "name": "write-nf-config",
+                    "image": "alpine:3.19",
+                    "command": ["/bin/sh", "-c", f"printf '%s' '{escaped_config}' > /data/nextflow.config"],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
                 }
             )

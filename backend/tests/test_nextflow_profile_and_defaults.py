@@ -1,16 +1,15 @@
-"""Tests that Nextflow command includes -profile docker and pipeline defaults.
+"""Tests that Nextflow command uses K8s executor config and pipeline defaults.
 
-nf-core pipelines running in K8s pods need '-profile docker' so Nextflow
-uses Docker-compatible resource settings. The pipeline catalog should also
-refresh stale default_params_json from the defaults files on disk.
+GKE uses containerd (no Docker daemon), so Nextflow must use a generated
+nextflow.config with the K8s executor instead of -profile docker.
 """
 
 from app.adapters.compute.kubernetes import KubernetesComputeProvider
 
 
-class TestNextflowProfileDocker:
-    def test_command_includes_profile_docker(self):
-        """Nextflow command should include '-profile docker' for container execution."""
+class TestNextflowK8sConfig:
+    def test_command_uses_config_file_not_docker_profile(self):
+        """Nextflow command should use -c /data/nextflow.config, not -profile docker."""
         job_spec = {
             "pipeline_source": "https://github.com/nf-core/scrnaseq",
             "pipeline_version": "2.7.1",
@@ -20,11 +19,12 @@ class TestNextflowProfileDocker:
 
         command = KubernetesComputeProvider._build_nextflow_command(job_spec)
 
-        shell_cmd = command[-1]  # The actual shell command string
-        assert "-profile docker" in shell_cmd
+        shell_cmd = command[-1]
+        assert "-c /data/nextflow.config" in shell_cmd
+        assert "-profile docker" not in shell_cmd
 
-    def test_profile_docker_before_params(self):
-        """'-profile docker' should appear before --params in the command."""
+    def test_config_flag_before_params(self):
+        """-c /data/nextflow.config should appear before --params in the command."""
         job_spec = {
             "pipeline_source": "https://github.com/nf-core/scrnaseq",
             "pipeline_version": "2.7.1",
@@ -35,6 +35,6 @@ class TestNextflowProfileDocker:
         command = KubernetesComputeProvider._build_nextflow_command(job_spec)
 
         shell_cmd = command[-1]
-        profile_pos = shell_cmd.index("-profile docker")
+        config_pos = shell_cmd.index("-c /data/nextflow.config")
         param_pos = shell_cmd.index("--protocol")
-        assert profile_pos < param_pos
+        assert config_pos < param_pos
