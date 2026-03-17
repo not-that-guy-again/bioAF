@@ -13,6 +13,7 @@ import json as _json
 import logging
 import os
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -59,10 +60,14 @@ def _sanitize_label_value(value: str) -> str:
 class KubernetesComputeProvider(ComputeProvider):
     """Kubernetes compute backend with local mode for development."""
 
+    # GCP access tokens expire after 3600s; rebuild client before that
+    _TOKEN_TTL_SECONDS = 2700  # 45 minutes
+
     def __init__(self, session_factory=None):
         self._mode = os.environ.get("BIOAF_COMPUTE_MODE", "local")
         self._session_factory = session_factory
         self._api_client: client.ApiClient | None = None
+        self._client_created_at: float = 0.0
         self._cluster_config: dict | None = None
 
     @property
@@ -297,17 +302,29 @@ class KubernetesComputeProvider(ComputeProvider):
         configuration.ssl_ca_cert = ca_file.name
         configuration.api_key = {"authorization": f"Bearer {token}"}
 
+        self._client_created_at = time.monotonic()
         return client.ApiClient(configuration)
+
+    def _is_token_expired(self) -> bool:
+        """Check if the cached GCP access token is older than the TTL."""
+        if self._client_created_at == 0.0:
+            return False
+        return (time.monotonic() - self._client_created_at) > self._TOKEN_TTL_SECONDS
 
     async def _get_api_client_async(self) -> client.ApiClient:
         """Get or create a K8s ApiClient, trying incluster first.
 
         If the cached config has a stale endpoint, reloads from platform_config
         before building the client. This handles the case where compute was
-        deployed after the backend started.
+        deployed after the backend started. Also rebuilds the client when the
+        GCP access token is about to expire.
         """
-        if self._api_client is not None:
+        if self._api_client is not None and not self._is_token_expired():
             return self._api_client
+
+        if self._is_token_expired():
+            logger.info("GCP access token approaching expiry, refreshing K8s client")
+            self._api_client = None
 
         try:
             config.load_incluster_config()
@@ -330,8 +347,12 @@ class KubernetesComputeProvider(ComputeProvider):
 
     def _get_api_client(self) -> client.ApiClient:
         """Get or create a K8s ApiClient, trying incluster first (sync version)."""
-        if self._api_client is not None:
+        if self._api_client is not None and not self._is_token_expired():
             return self._api_client
+
+        if self._is_token_expired():
+            logger.info("GCP access token approaching expiry, refreshing K8s client")
+            self._api_client = None
 
         try:
             config.load_incluster_config()
