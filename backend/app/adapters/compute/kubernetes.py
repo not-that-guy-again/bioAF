@@ -415,7 +415,7 @@ class KubernetesComputeProvider(ComputeProvider):
 
         return container_v1.ClusterManagerClient()
 
-    NEXTFLOW_IMAGE = "nextflow/nextflow:24.04.4"
+    NEXTFLOW_IMAGE = "nextflow/nextflow:25.10.4"
 
     @staticmethod
     def _build_nextflow_command(job_spec: dict) -> list[str]:
@@ -429,7 +429,8 @@ class KubernetesComputeProvider(ComputeProvider):
         parameters = job_spec.get("parameters", {})
         sample_sheet = job_spec.get("sample_sheet", "")
 
-        parts = ["nextflow", "run", pipeline_source]
+        # Log the config file before running so it appears in pod logs
+        parts = ["cat /data/nextflow.config &&", "nextflow", "run", pipeline_source]
 
         if pipeline_version:
             parts.extend(["-r", pipeline_version])
@@ -592,12 +593,17 @@ class KubernetesComputeProvider(ComputeProvider):
             raw_bucket = cfg.get("raw_bucket_name", "")
             gcs_work_dir = f"gs://{raw_bucket}/nextflow-work" if raw_bucket else None
             nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir)
-            escaped_config = nf_config.replace("'", "'\\''")
+            # Use heredoc to avoid shell escaping issues with single quotes
+            # in Nextflow config values (e.g., 'k8s', 'bioaf-pipelines')
             init_containers.append(
                 {
                     "name": "write-nf-config",
                     "image": "alpine:3.19",
-                    "command": ["/bin/sh", "-c", f"printf '%s' '{escaped_config}' > /data/nextflow.config"],
+                    "command": [
+                        "/bin/sh",
+                        "-c",
+                        f"cat > /data/nextflow.config << 'NFEOF'\n{nf_config}\nNFEOF",
+                    ],
                     "volumeMounts": [{"name": "data", "mountPath": "/data"}],
                 }
             )

@@ -198,3 +198,19 @@ class TestK8sExecutor:
         )
         assert "wave.enabled" not in config
         assert "fusion.enabled" not in config
+
+    def test_command_logs_config_before_run(self):
+        """Nextflow command should cat the config file for diagnostic logging."""
+        job_spec = {
+            "pipeline_source": "https://github.com/nf-core/scrnaseq",
+            "pipeline_version": "2.7.1",
+            "parameters": {"outdir": "/data/results"},
+            "sample_sheet": "sample,fastq_1\nS1,gs://bucket/R1.fastq.gz\n",
+        }
+        command = KubernetesComputeProvider._build_nextflow_command(job_spec)
+        shell_cmd = command[-1]
+        assert "cat /data/nextflow.config" in shell_cmd
+        # cat must come before the nextflow run
+        cat_pos = shell_cmd.index("cat /data/nextflow.config")
+        nf_pos = shell_cmd.index("nextflow run")
+        assert cat_pos < nf_pos
