@@ -19,6 +19,7 @@ def adapter(monkeypatch):
     provider._namespace_ready = True
     provider._cluster_config = {
         "gcp_service_account_key": '{"type": "service_account", "project_id": "test"}',
+        "raw_bucket_name": "bioaf-raw-test-abc123",
     }
     return provider
 
@@ -167,3 +168,21 @@ class TestK8sExecutor:
         # Nextflow doesn't support tolerations or nodeSelector in k8s.pod
         assert "tolerations" not in config_script
         assert "nodeSelector" not in config_script
+
+    def test_k8s_config_sets_gcs_work_dir(self):
+        """Nextflow workDir must point to GCS so head and process pods share files."""
+        config = KubernetesComputeProvider._build_nextflow_k8s_config(
+            namespace="bioaf-pipelines",
+            has_gcs_secret=True,
+            gcs_work_dir="gs://bioaf-raw-test-abc123/nextflow-work",
+        )
+        assert "workDir = 'gs://bioaf-raw-test-abc123/nextflow-work'" in config
+
+    def test_k8s_config_no_work_dir_without_bucket(self):
+        """workDir should not be set when no GCS bucket is available."""
+        config = KubernetesComputeProvider._build_nextflow_k8s_config(
+            namespace="bioaf-pipelines",
+            has_gcs_secret=True,
+            gcs_work_dir=None,
+        )
+        assert "workDir" not in config

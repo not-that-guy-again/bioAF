@@ -245,7 +245,8 @@ class KubernetesComputeProvider(ComputeProvider):
                     "WHERE key IN ("
                     "  'gke_cluster_endpoint', 'gke_cluster_ca_cert',"
                     "  'gcp_credential_source', 'gcp_service_account_key',"
-                    "  'gke_cluster_name', 'gcp_project_id', 'gcp_zone'"
+                    "  'gke_cluster_name', 'gcp_project_id', 'gcp_zone',"
+                    "  'raw_bucket_name'"
                     ")"
                 )
             )
@@ -450,18 +451,27 @@ class KubernetesComputeProvider(ComputeProvider):
         return ["/bin/sh", "-c", " ".join(parts)]
 
     @staticmethod
-    def _build_nextflow_k8s_config(namespace: str, has_gcs_secret: bool) -> str:
+    def _build_nextflow_k8s_config(
+        namespace: str,
+        has_gcs_secret: bool,
+        gcs_work_dir: str | None = None,
+    ) -> str:
         """Build a nextflow.config for K8s executor mode.
 
         Each Nextflow process runs as its own K8s pod. The config ensures
-        pods land on the pipeline node pool, use the right service account,
-        and have GCS credentials when available.
+        pods use the right service account, have GCS credentials when
+        available, and share a GCS-backed work directory so the head pod
+        and process pods can exchange command scripts and data.
         """
         lines = [
             "process.executor = 'k8s'",
             f"k8s.namespace = '{namespace}'",
             "k8s.serviceAccount = 'bioaf-pipeline-runner'",
         ]
+
+        # GCS work directory so head and process pods share files
+        if gcs_work_dir:
+            lines.append(f"workDir = '{gcs_work_dir}'")
 
         # Build k8s.pod directives for secrets/env (Nextflow doesn't
         # support tolerations in k8s.pod, so node placement is left to
@@ -470,9 +480,7 @@ class KubernetesComputeProvider(ComputeProvider):
         pod_directives: list[str] = []
         if has_gcs_secret:
             pod_directives.append("[secret: 'bioaf-gcs-sa-key', mountPath: '/secrets/gcp']")
-            pod_directives.append(
-                "[env: 'GOOGLE_APPLICATION_CREDENTIALS', value: '/secrets/gcp/key.json']"
-            )
+            pod_directives.append("[env: 'GOOGLE_APPLICATION_CREDENTIALS', value: '/secrets/gcp/key.json']")
 
         if pod_directives:
             lines.append("k8s.pod = [" + ", ".join(pod_directives) + "]")
@@ -575,7 +583,10 @@ class KubernetesComputeProvider(ComputeProvider):
 
         # Write nextflow.config with K8s executor settings for Nextflow pipelines
         if pipeline_source and not job_spec.get("command"):
-            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret)
+            cfg = self._cluster_config or {}
+            raw_bucket = cfg.get("raw_bucket_name", "")
+            gcs_work_dir = f"gs://{raw_bucket}/nextflow-work" if raw_bucket else None
+            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir)
             escaped_config = nf_config.replace("'", "'\\''")
             init_containers.append(
                 {
