@@ -97,3 +97,87 @@ class TestAutoPopulateFiles:
         r1_pos = data_row.index("R1")
         r2_pos = data_row.index("R2")
         assert r1_pos < r2_pos, "R1 should appear before R2 in the CSV row"
+
+    def test_excludes_index_reads_from_fastq_paths(self):
+        """I1 (index) files must be excluded; only R1 and R2 used."""
+        file_i1 = MagicMock()
+        file_i1.gcs_uri = "gs://bucket/PBMC_S1_L001_I1_001.fastq.gz"
+        file_i1.filename = "PBMC_S1_L001_I1_001.fastq.gz"
+        file_i1.tags_json = ["read:I1", "lane:001", "sample:PBMC"]
+
+        file_r1 = MagicMock()
+        file_r1.gcs_uri = "gs://bucket/PBMC_S1_L001_R1_001.fastq.gz"
+        file_r1.filename = "PBMC_S1_L001_R1_001.fastq.gz"
+        file_r1.tags_json = ["read:R1", "lane:001", "sample:PBMC"]
+
+        file_r2 = MagicMock()
+        file_r2.gcs_uri = "gs://bucket/PBMC_S1_L001_R2_001.fastq.gz"
+        file_r2.filename = "PBMC_S1_L001_R2_001.fastq.gz"
+        file_r2.tags_json = ["read:R2", "lane:001", "sample:PBMC"]
+
+        sample = _make_sample(1, "PBMC_donor1", files=[file_i1, file_r1, file_r2])
+
+        csv_output = SampleSheetService.generate_scrnaseq_sheet(
+            [sample],
+            {"expected_cells": 10000},
+        )
+
+        assert "I1" not in csv_output, "Index read I1 should not appear in samplesheet"
+        assert "gs://bucket/PBMC_S1_L001_R1_001.fastq.gz" in csv_output
+        assert "gs://bucket/PBMC_S1_L001_R2_001.fastq.gz" in csv_output
+
+    def test_multi_lane_produces_multiple_rows(self):
+        """Multi-lane data (L001+L002) should produce one row per lane."""
+        files = []
+        for lane in ["L001", "L002"]:
+            for read in ["I1", "R1", "R2"]:
+                f = MagicMock()
+                f.filename = f"PBMC_S1_{lane}_{read}_001.fastq.gz"
+                f.gcs_uri = f"gs://bucket/PBMC_S1_{lane}_{read}_001.fastq.gz"
+                f.tags_json = [f"read:{read}", f"lane:{lane[-3:]}", "sample:PBMC"]
+                files.append(f)
+
+        sample = _make_sample(1, "PBMC_donor1", files=files)
+
+        csv_output = SampleSheetService.generate_scrnaseq_sheet(
+            [sample],
+            {"expected_cells": 10000},
+        )
+
+        lines = csv_output.strip().split("\n")
+        # Header + 2 data rows (one per lane)
+        assert len(lines) == 3, f"Expected 3 lines (header + 2 lanes), got {len(lines)}"
+        assert "L001_R1" in lines[1]
+        assert "L001_R2" in lines[1]
+        assert "L002_R1" in lines[2]
+        assert "L002_R2" in lines[2]
+        # No I1 in any row
+        for line in lines:
+            assert "I1" not in line, f"Index read I1 found in: {line}"
+
+    def test_read_type_from_tags_json(self):
+        """Uses tags_json read type when available, not filename sort."""
+        file_r1 = MagicMock()
+        file_r1.gcs_uri = "gs://bucket/reads_barcode.fastq.gz"
+        file_r1.filename = "reads_barcode.fastq.gz"
+        file_r1.tags_json = ["read:R1"]
+
+        file_r2 = MagicMock()
+        file_r2.gcs_uri = "gs://bucket/reads_cdna.fastq.gz"
+        file_r2.filename = "reads_cdna.fastq.gz"
+        file_r2.tags_json = ["read:R2"]
+
+        # Pass R2 first to verify tag-based assignment beats sort order
+        sample = _make_sample(1, "PBMC_donor1", files=[file_r2, file_r1])
+
+        csv_output = SampleSheetService.generate_scrnaseq_sheet(
+            [sample],
+            {"expected_cells": 10000},
+        )
+
+        lines = csv_output.strip().split("\n")
+        data_row = lines[1].split(",")
+        # fastq_1 column (index 1) should be the R1 file
+        assert data_row[1] == "gs://bucket/reads_barcode.fastq.gz"
+        # fastq_2 column (index 2) should be the R2 file
+        assert data_row[2] == "gs://bucket/reads_cdna.fastq.gz"
