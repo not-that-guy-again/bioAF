@@ -7,6 +7,7 @@
 - POST /api/v1/infrastructure/stack/components/{key}/toggle - enable/disable component
 - GET  /api/v1/infrastructure/cluster/config     - current cluster config
 - POST /api/v1/infrastructure/cluster/config     - update cluster config (generates plan)
+- POST /api/v1/infrastructure/stack/sync-compute-config - re-read compute TF outputs
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from app.services.stack_deployment import (
     deploy_stack,
     destroy_storage,
     get_cluster_status,
+    sync_compute_config,
     sync_storage_config,
     teardown_stack,
 )
@@ -310,6 +312,25 @@ async def sync_storage_config_endpoint(
         return {"status": "ok", "populated": populated}
     except Exception as exc:
         logger.error("Storage config sync failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/api/v1/infrastructure/stack/sync-compute-config")
+async def sync_compute_config_endpoint(
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Re-read Terraform compute outputs and write cluster config to platform_config.
+
+    Use this after a deployment where the terraform output capture failed,
+    leaving gke_cluster_endpoint as 'null' in platform_config.
+    """
+    try:
+        populated = await sync_compute_config(session)
+        await session.commit()
+        return {"status": "ok", "populated": populated}
+    except Exception as exc:
+        logger.error("Compute config sync failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
