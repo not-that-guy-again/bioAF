@@ -49,7 +49,7 @@ BUILTIN_PIPELINES = [
     },
 ]
 
-DEFAULTS_DIR = Path(__file__).parent.parent.parent.parent / "scripts" / "pipelines" / "defaults"
+DEFAULTS_DIR = Path(__file__).parent.parent / "pipeline_defaults"
 
 
 class PipelineCatalogService:
