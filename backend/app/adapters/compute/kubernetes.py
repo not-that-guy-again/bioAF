@@ -222,15 +222,21 @@ class KubernetesComputeProvider(ComputeProvider):
 
     # -- K8s client helpers --
 
-    async def load_cluster_config(self) -> dict:
-        """Read GKE cluster config from platform_config (cached).
+    async def load_cluster_config(self, force: bool = False) -> dict:
+        """Read GKE cluster config from platform_config.
 
         Must be called during async initialization (e.g., app startup)
         so the DB query runs on the correct event loop. The result is
         cached in _cluster_config for later sync access.
+
+        If the cached config has a "null" or missing cluster endpoint,
+        re-reads from the database on each call so newly deployed
+        cluster info is picked up without a restart.
         """
-        if self._cluster_config is not None:
-            return self._cluster_config
+        if self._cluster_config is not None and not force:
+            endpoint = self._cluster_config.get("gke_cluster_endpoint", "")
+            if endpoint and endpoint != "null":
+                return self._cluster_config
 
         from sqlalchemy import text as sa_text
 
@@ -251,6 +257,10 @@ class KubernetesComputeProvider(ComputeProvider):
                 )
             )
             self._cluster_config = {r[0]: r[1] for r in result.fetchall()}
+
+        # Invalidate cached API client so it rebuilds with fresh config
+        if force:
+            self._api_client = None
 
         return self._cluster_config
 
@@ -289,8 +299,37 @@ class KubernetesComputeProvider(ComputeProvider):
 
         return client.ApiClient(configuration)
 
+    async def _get_api_client_async(self) -> client.ApiClient:
+        """Get or create a K8s ApiClient, trying incluster first.
+
+        If the cached config has a stale endpoint, reloads from platform_config
+        before building the client. This handles the case where compute was
+        deployed after the backend started.
+        """
+        if self._api_client is not None:
+            return self._api_client
+
+        try:
+            config.load_incluster_config()
+            self._api_client = client.ApiClient()
+            logger.info("Using incluster K8s config")
+        except Exception:
+            logger.info("Not running in cluster, using platform_config credentials")
+            # Reload config in case it was stale at startup
+            await self.load_cluster_config(force=True)
+            try:
+                self._api_client = self._build_out_of_cluster_client()
+                logger.info(
+                    "K8s client built for endpoint %s", (self._cluster_config or {}).get("gke_cluster_endpoint")
+                )
+            except Exception:
+                logger.exception("Failed to build out-of-cluster K8s client")
+                raise
+
+        return self._api_client
+
     def _get_api_client(self) -> client.ApiClient:
-        """Get or create a K8s ApiClient, trying incluster first."""
+        """Get or create a K8s ApiClient, trying incluster first (sync version)."""
         if self._api_client is not None:
             return self._api_client
 
@@ -822,9 +861,11 @@ class KubernetesComputeProvider(ComputeProvider):
 
     async def _k8s_get_cluster_status(self) -> dict:
         """Query GKE API for real cluster status."""
-        cluster_name = os.environ.get("GKE_CLUSTER_NAME", "")
-        project_id = os.environ.get("GCP_PROJECT_ID", "")
-        zone = os.environ.get("GCP_ZONE", "")
+        await self.load_cluster_config()
+        cfg = self._cluster_config or {}
+        cluster_name = cfg.get("gke_cluster_name") or os.environ.get("GKE_CLUSTER_NAME", "")
+        project_id = cfg.get("gcp_project_id") or os.environ.get("GCP_PROJECT_ID", "")
+        zone = cfg.get("gcp_zone") or os.environ.get("GCP_ZONE", "")
 
         gke_client = self._get_gke_client()
         cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
@@ -899,6 +940,7 @@ class KubernetesComputeProvider(ComputeProvider):
         If the GKE API call fails, returns safe zeros so the cost endpoint
         does not 500.
         """
+        await self.load_cluster_config()
         cfg = self._cluster_config or {}
         cluster_name = cfg.get("gke_cluster_name") or os.environ.get("GKE_CLUSTER_NAME", "")
         project_id = cfg.get("gcp_project_id") or os.environ.get("GCP_PROJECT_ID", "")

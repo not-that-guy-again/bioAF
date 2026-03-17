@@ -328,6 +328,15 @@ async def sync_compute_config_endpoint(
     try:
         populated = await sync_compute_config(session)
         await session.commit()
+        # Force the compute adapter to reload cluster config from DB
+        try:
+            from app.adapters.registry import get_compute_adapter
+
+            adapter = get_compute_adapter()
+            if hasattr(adapter, "load_cluster_config"):
+                await adapter.load_cluster_config(force=True)
+        except Exception:
+            pass  # Adapter may not be initialized yet
         return {"status": "ok", "populated": populated}
     except Exception as exc:
         logger.error("Compute config sync failed: %s", exc)
