@@ -118,6 +118,8 @@ export default function InfraComponentsPage() {
   const [destroyStoragePhrase, setDestroyStoragePhrase] = useState("");
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [componentErrors, setComponentErrors] = useState<Record<string, string>>({});
+  const [showAbandonModal, setShowAbandonModal] = useState(false);
+  const [abandonLoading, setAbandonLoading] = useState(false);
 
   const DESTROY_STORAGE_PHRASE = "delete my data";
 
@@ -181,6 +183,21 @@ export default function InfraComponentsPage() {
     setRefreshKey((k) => k + 1);
   }
 
+  async function handleAbandonRun() {
+    if (!tfStatus?.active_run_id) return;
+    setAbandonLoading(true);
+    try {
+      await api.post(`/api/v1/infrastructure/terraform/abandon/${tfStatus.active_run_id}`);
+      setShowAbandonModal(false);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Abandon failed";
+      alert(message);
+    } finally {
+      setAbandonLoading(false);
+    }
+  }
+
   async function handleComponentToggle(componentKey: string) {
     setComponentErrors((prev) => ({ ...prev, [componentKey]: "" }));
     try {
@@ -202,6 +219,31 @@ export default function InfraComponentsPage() {
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold mb-6">Components</h1>
+
+          {/* Stuck Terraform run banner */}
+          {tfStatus?.active_run_id && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-900">
+                    Terraform operation in progress
+                  </h3>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Run #{tfStatus.active_run_id} is in{" "}
+                    <span className="font-medium">{tfStatus.active_run_status}</span>{" "}
+                    status. New deployments and teardowns are blocked until this
+                    operation completes or is abandoned.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowAbandonModal(true)}
+                  className="ml-4 shrink-0 px-3 py-1.5 text-sm text-amber-800 bg-amber-200 hover:bg-amber-300 rounded font-medium"
+                >
+                  Abandon
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Bootstrap card (show if terraform not initialized) */}
           {tfStatus && !tfInitialized && (
@@ -633,6 +675,48 @@ export default function InfraComponentsPage() {
           onComplete={handleDestroyStorageComplete}
           onClose={() => setShowDestroyStorageProgress(false)}
         />
+      )}
+
+      {/* Abandon Run Confirmation Modal */}
+      {showAbandonModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-lg font-semibold mb-3">Abandon Terraform Operation</h2>
+
+            <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-4">
+              <p className="text-sm font-medium text-amber-800 mb-1">
+                This may leave infrastructure in a partial state
+              </p>
+              <p className="text-xs text-amber-700">
+                Abandoning a running operation releases the Terraform state lock
+                so you can start a new operation. If Terraform was mid-apply,
+                some resources may have been created or modified. You can re-run
+                the operation to reconcile.
+              </p>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              Run <span className="font-mono font-medium">#{tfStatus?.active_run_id}</span>{" "}
+              ({tfStatus?.active_run_status}) will be marked as cancelled.
+            </p>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowAbandonModal(false)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Keep Running
+              </button>
+              <button
+                onClick={handleAbandonRun}
+                disabled={abandonLoading}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
+              >
+                {abandonLoading ? "Abandoning..." : "Abandon Operation"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

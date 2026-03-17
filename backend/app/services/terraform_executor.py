@@ -918,6 +918,78 @@ class TerraformExecutor:
         await session.flush()
 
     @staticmethod
+    async def abandon_run(
+        session: AsyncSession,
+        run_id: int,
+        user_id: int,
+    ) -> TerraformRun:
+        """Abandon a stuck Terraform run.
+
+        Marks the run as cancelled, deletes the GCS state lock file so
+        future operations can proceed, and logs the action.
+
+        Only runs in planning/applying/awaiting_confirmation can be abandoned.
+        """
+        result = await session.execute(select(TerraformRun).where(TerraformRun.id == run_id))
+        run = result.scalar_one_or_none()
+        if not run:
+            raise ValueError(f"Run {run_id} not found")
+
+        abandonable = {"planning", "applying", "awaiting_confirmation"}
+        if run.status not in abandonable:
+            raise ValueError(f"Run {run_id} in status '{run.status}' cannot be abandoned")
+
+        config = await TerraformExecutor._read_gcp_config(session)
+        state_bucket = config.get("terraform_state_bucket", "")
+        module_name = run.module_name or "foundation"
+        lock_path = f"{module_name}/default.tflock"
+
+        if state_bucket:
+            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
+
+        run.status = "cancelled"
+        run.error_message = "Abandoned by user"
+        run.completed_at = datetime.now(timezone.utc)
+        await session.flush()
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="terraform",
+            entity_id=run.id,
+            action="abandon",
+            details={"module_name": module_name, "lock_path": lock_path},
+        )
+
+        return run
+
+    @staticmethod
+    async def _delete_gcs_lock_file(bucket_name: str, lock_path: str) -> None:
+        """Delete a Terraform lock file from a GCS bucket.
+
+        Uses gsutil to remove the lock. Failures are logged but not raised
+        since the run is already marked cancelled.
+        """
+        cmd = ["gsutil", "rm", f"gs://{bucket_name}/{lock_path}"]
+        try:
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    "Failed to delete lock file gs://%s/%s: %s",
+                    bucket_name,
+                    lock_path,
+                    result.stderr,
+                )
+        except Exception as exc:
+            logger.warning("Error deleting lock file: %s", exc)
+
+    @staticmethod
     async def _check_no_active_run(session: AsyncSession) -> None:
         """Raise ValueError if any run is currently in progress."""
         result = await session.execute(select(TerraformRun).where(TerraformRun.status.in_(["planning", "applying"])))
