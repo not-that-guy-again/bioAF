@@ -66,11 +66,13 @@ class PipelineCatalogService:
             )
             existing = result.scalar_one_or_none()
             if existing:
-                # Refresh defaults if the DB entry has empty params but the file has values
+                # Sync defaults from disk when they differ from what is in the DB
                 defaults_file = DEFAULTS_DIR / pipeline_def["defaults_file"]
-                if not existing.default_params_json and defaults_file.exists():
-                    existing.default_params_json = json.loads(defaults_file.read_text())
-                    logger.info("Refreshed defaults for %s", pipeline_def["pipeline_key"])
+                if defaults_file.exists():
+                    disk_defaults = json.loads(defaults_file.read_text())
+                    if existing.default_params_json != disk_defaults:
+                        existing.default_params_json = disk_defaults
+                        logger.info("Refreshed defaults for %s", pipeline_def["pipeline_key"])
                 continue
 
             default_params = {}
