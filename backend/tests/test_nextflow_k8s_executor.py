@@ -178,11 +178,23 @@ class TestK8sExecutor:
         )
         assert "workDir = 'gs://bioaf-raw-test-abc123/nextflow-work'" in config
 
-    def test_k8s_config_no_work_dir_without_bucket(self):
-        """workDir should not be set when no GCS bucket is available."""
+    def test_k8s_config_enables_wave_and_fusion_for_gcs(self):
+        """Wave + Fusion must be enabled so process pods can access GCS paths."""
+        config = KubernetesComputeProvider._build_nextflow_k8s_config(
+            namespace="bioaf-pipelines",
+            has_gcs_secret=True,
+            gcs_work_dir="gs://bioaf-raw-test-abc123/nextflow-work",
+        )
+        assert "wave.enabled = true" in config
+        assert "fusion.enabled = true" in config
+        assert "fusion.exportStorageCredentials = true" in config
+
+    def test_k8s_config_no_wave_fusion_without_gcs(self):
+        """Wave/Fusion should not be enabled when no GCS work dir is set."""
         config = KubernetesComputeProvider._build_nextflow_k8s_config(
             namespace="bioaf-pipelines",
             has_gcs_secret=True,
             gcs_work_dir=None,
         )
-        assert "workDir" not in config
+        assert "wave.enabled" not in config
+        assert "fusion.enabled" not in config

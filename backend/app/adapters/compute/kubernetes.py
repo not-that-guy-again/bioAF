@@ -469,9 +469,14 @@ class KubernetesComputeProvider(ComputeProvider):
             "k8s.serviceAccount = 'bioaf-pipeline-runner'",
         ]
 
-        # GCS work directory so head and process pods share files
+        # GCS work directory so head and process pods share files.
+        # Wave + Fusion mount GCS paths as a local filesystem inside
+        # process pods so they can access .command.run scripts.
         if gcs_work_dir:
             lines.append(f"workDir = '{gcs_work_dir}'")
+            lines.append("wave.enabled = true")
+            lines.append("fusion.enabled = true")
+            lines.append("fusion.exportStorageCredentials = true")
 
         # Build k8s.pod directives for secrets/env (Nextflow doesn't
         # support tolerations in k8s.pod, so node placement is left to
