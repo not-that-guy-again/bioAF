@@ -258,6 +258,10 @@ class TestClusterConfigEndpoint:
         mock_run.id = 99
         mock_run.status = "awaiting_confirmation"
         mock_run.plan_json = {"total": 1, "resources": []}
+        mock_run.plan_summary_json = {
+            "add": [], "change": [], "destroy": [],
+            "add_count": 0, "change_count": 1, "destroy_count": 0,
+        }
         mock_run.resources_planned = 1
 
         with patch("app.api.stack_deploy.TerraformExecutor.run_plan", new_callable=AsyncMock) as mock_plan:
@@ -274,6 +278,8 @@ class TestClusterConfigEndpoint:
         data = response.json()
         assert data["run_id"] == 99
         assert data["status"] == "awaiting_confirmation"
+        assert data["plan_summary"] is not None
+        assert data["plan_summary"]["change_count"] == 1
 
 
 # -----------------------------------------------------------------------

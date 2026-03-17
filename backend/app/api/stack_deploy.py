@@ -75,6 +75,7 @@ class ClusterConfigUpdate(BaseModel):
 class ClusterConfigPlanResponse(BaseModel):
     run_id: int
     status: str
+    plan_summary: dict | None = None
 
 
 class ComponentInfo(BaseModel):
@@ -568,4 +569,5 @@ async def update_cluster_config(
     return ClusterConfigPlanResponse(
         run_id=run.id,
         status=run.status,
+        plan_summary=run.plan_summary_json,
     )
