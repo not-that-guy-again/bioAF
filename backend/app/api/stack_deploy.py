@@ -566,8 +566,25 @@ async def update_cluster_config(
     run = await TerraformExecutor.run_plan(session, user_id, module_name="compute")
     await session.commit()
 
+    # Build plan_summary from plan_json (run_plan writes to plan_json, not plan_summary_json)
+    plan_summary = None
+    if run.plan_json:
+        pj = run.plan_json
+        add_list = [r for r in pj.get("resources", []) if r.get("action") == "create"]
+        change_list = [r for r in pj.get("resources", []) if r.get("action") == "update"]
+        destroy_list = [r for r in pj.get("resources", []) if r.get("action") == "delete"]
+        replace_list = [r for r in pj.get("resources", []) if r.get("action") == "replace"]
+        plan_summary = {
+            "add": add_list + replace_list,
+            "change": change_list,
+            "destroy": destroy_list + replace_list,
+            "add_count": pj.get("add_count", 0),
+            "change_count": pj.get("change_count", 0),
+            "destroy_count": pj.get("destroy_count", 0),
+        }
+
     return ClusterConfigPlanResponse(
         run_id=run.id,
         status=run.status,
-        plan_summary=run.plan_summary_json,
+        plan_summary=plan_summary,
     )

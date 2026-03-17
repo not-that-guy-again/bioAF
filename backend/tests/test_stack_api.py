@@ -257,10 +257,19 @@ class TestClusterConfigEndpoint:
         mock_run = MagicMock()
         mock_run.id = 99
         mock_run.status = "awaiting_confirmation"
-        mock_run.plan_json = {"total": 1, "resources": []}
-        mock_run.plan_summary_json = {
-            "add": [], "change": [], "destroy": [],
-            "add_count": 0, "change_count": 1, "destroy_count": 0,
+        mock_run.plan_json = {
+            "total": 1,
+            "add_count": 0,
+            "change_count": 1,
+            "destroy_count": 0,
+            "resources": [
+                {
+                    "type": "google_container_node_pool",
+                    "name": "pipeline",
+                    "address": "google_container_node_pool.pipeline",
+                    "action": "update",
+                },
+            ],
         }
         mock_run.resources_planned = 1
 
