@@ -135,8 +135,8 @@ class TestK8sExecutor:
         assert "GOOGLE_APPLICATION_CREDENTIALS" in config_script
 
     @pytest.mark.asyncio
-    async def test_k8s_config_includes_node_selector(self, adapter):
-        """K8s executor pods must target the pipelines node pool."""
+    async def test_k8s_config_omits_unsupported_tolerations(self, adapter):
+        """Nextflow K8s executor does not support tolerations in k8s.pod."""
         mock_batch = _mock_batch_client()
         mock_core = _mock_core_client()
 
@@ -164,5 +164,6 @@ class TestK8sExecutor:
         config_writers = [ic for ic in init_containers if ic["name"] == "write-nf-config"]
         config_script = config_writers[0]["command"][-1]
 
-        # K8s executor pods should be scheduled on pipeline nodes
-        assert "bioaf.io/pool" in config_script
+        # Nextflow doesn't support tolerations or nodeSelector in k8s.pod
+        assert "tolerations" not in config_script
+        assert "nodeSelector" not in config_script

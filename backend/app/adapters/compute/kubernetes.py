@@ -461,19 +461,21 @@ class KubernetesComputeProvider(ComputeProvider):
             "process.executor = 'k8s'",
             f"k8s.namespace = '{namespace}'",
             "k8s.serviceAccount = 'bioaf-pipeline-runner'",
-            # Schedule process pods on the pipeline node pool
-            "k8s.pod = ["
-            "  [nodeSelector: 'bioaf.io/pool=pipelines'],"
-            "  [tolerations: [[key: 'bioaf.io/pool', value: 'pipelines', effect: 'NoSchedule']]]",
         ]
 
+        # Build k8s.pod directives for secrets/env (Nextflow doesn't
+        # support tolerations in k8s.pod, so node placement is left to
+        # the cluster autoscaler; the head Job already targets the
+        # pipeline pool via nodeSelector + toleration in the Job manifest)
+        pod_directives: list[str] = []
         if has_gcs_secret:
-            lines.append(
-                "  ,[secret: 'bioaf-gcs-sa-key', mountPath: '/secrets/gcp'],"
-                "  [env: 'GOOGLE_APPLICATION_CREDENTIALS', value: '/secrets/gcp/key.json']"
+            pod_directives.append("[secret: 'bioaf-gcs-sa-key', mountPath: '/secrets/gcp']")
+            pod_directives.append(
+                "[env: 'GOOGLE_APPLICATION_CREDENTIALS', value: '/secrets/gcp/key.json']"
             )
 
-        lines.append("]")
+        if pod_directives:
+            lines.append("k8s.pod = [" + ", ".join(pod_directives) + "]")
 
         # Docker is the default container engine for nf-core
         lines.append("docker.enabled = true")
