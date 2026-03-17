@@ -448,6 +448,44 @@ class KubernetesComputeProvider(ComputeProvider):
 
         return ["/bin/sh", "-c", " ".join(parts)]
 
+    def _ensure_gcs_secret(self, namespace: str) -> bool:
+        """Create a K8s Secret with the GCP SA key for GCS access.
+
+        Returns True if the secret exists (created or already present).
+        """
+        import base64
+
+        from kubernetes.client.rest import ApiException
+
+        cfg = self._cluster_config or {}
+        sa_key = cfg.get("gcp_service_account_key", "")
+        if not sa_key:
+            return False
+
+        core_client = self._get_k8s_core_client()
+        secret_name = "bioaf-gcs-sa-key"
+
+        try:
+            core_client.read_namespaced_secret(name=secret_name, namespace=namespace)
+            return True
+        except ApiException as e:
+            if e.status != 404:
+                logger.warning("Error checking GCS secret: %s", e)
+                return False
+
+        core_client.create_namespaced_secret(
+            namespace=namespace,
+            body={
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {"name": secret_name, "labels": {"bioaf.io/managed": "true"}},
+                "type": "Opaque",
+                "data": {"key.json": base64.b64encode(sa_key.encode()).decode()},
+            },
+        )
+        logger.info("Created GCS SA key secret in %s", namespace)
+        return True
+
     async def _k8s_submit_job(self, job_spec: dict) -> dict:
         """Submit a real Kubernetes Job to the GKE cluster."""
         run_id = job_spec.get("run_id", 0)
@@ -462,6 +500,9 @@ class KubernetesComputeProvider(ComputeProvider):
         # Ensure namespace, service account, and role binding exist on first use
         if not self._namespace_ready:
             await self.ensure_pipeline_namespace(namespace)
+
+        # Ensure GCS credentials secret exists for bucket access
+        has_gcs_secret = self._ensure_gcs_secret(namespace)
 
         # Auto-build Nextflow command when pipeline_source is set and no
         # explicit command was provided
@@ -498,6 +539,15 @@ class KubernetesComputeProvider(ComputeProvider):
                 }
             )
 
+        # GCS credential mounts for all containers
+        gcs_volume_mount = {"name": "gcp-sa-key", "mountPath": "/secrets/gcp", "readOnly": True}
+        gcs_env = {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/secrets/gcp/key.json"}
+
+        if has_gcs_secret:
+            for ic in init_containers:
+                ic.setdefault("volumeMounts", []).append(gcs_volume_mount)
+                ic.setdefault("env", []).append(gcs_env)
+
         # Build main container
         main_container = {
             "name": "pipeline",
@@ -505,6 +555,9 @@ class KubernetesComputeProvider(ComputeProvider):
             "volumeMounts": [{"name": "data", "mountPath": "/data"}],
             "terminationMessagePolicy": "FallbackToLogsOnError",
         }
+        if has_gcs_secret:
+            main_container["volumeMounts"].append(gcs_volume_mount)
+            main_container["env"] = [gcs_env]
         if command:
             main_container["command"] = command
 
@@ -538,7 +591,12 @@ class KubernetesComputeProvider(ComputeProvider):
                         "containers": [main_container],
                         "volumes": [
                             {"name": "data", "emptyDir": {"sizeLimit": "50Gi"}},
-                        ],
+                        ]
+                        + (
+                            [{"name": "gcp-sa-key", "secret": {"secretName": "bioaf-gcs-sa-key"}}]
+                            if has_gcs_secret
+                            else []
+                        ),
                         "restartPolicy": "Never",
                     }
                 },
