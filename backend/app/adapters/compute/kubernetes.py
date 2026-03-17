@@ -168,7 +168,7 @@ class KubernetesComputeProvider(ComputeProvider):
                 },
                 {
                     "name": "bioaf-pipelines",
-                    "machine_type": "n2-highmem-8",
+                    "machine_type": "n2-highmem-16",
                     "min_nodes": 0,
                     "max_nodes": 20,
                     "current_nodes": 0,
