@@ -1,7 +1,6 @@
 """Tests for BigQuery billing export setup and cost sync (ADR-028)."""
 
 from datetime import date
-from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
