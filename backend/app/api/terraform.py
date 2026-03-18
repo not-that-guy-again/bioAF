@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.models.component import TerraformRun
 from app.schemas.component import TerraformRunListResponse, TerraformRunResponse
+from app.services.terraform_executor import TerraformExecutor
 from app.services.terraform_service import TerraformService
 
 router = APIRouter(prefix="/api/terraform", tags=["terraform"])
@@ -81,10 +84,28 @@ async def confirm_run(run_id: int, request: Request, session: AsyncSession = Dep
     current_user = _require_admin(request)
     user_id = int(current_user["sub"])
 
-    try:
-        run = await TerraformService.apply_plan(session, run_id, user_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # Check if this is a module-based run (created by TerraformExecutor)
+    result = await session.execute(select(TerraformRun).where(TerraformRun.id == run_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.module_name:
+        # Module-based run: use TerraformExecutor.run_apply (async generator)
+        try:
+            async for _event in TerraformExecutor.run_apply(session, run_id, user_id):
+                pass  # Consume all progress events
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # Re-fetch run after apply
+        result = await session.execute(select(TerraformRun).where(TerraformRun.id == run_id))
+        run = result.scalar_one_or_none()
+    else:
+        # Legacy run: use TerraformService
+        try:
+            run = await TerraformService.apply_plan(session, run_id, user_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     await session.commit()
     return TerraformRunResponse(

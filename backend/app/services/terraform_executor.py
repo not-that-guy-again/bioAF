@@ -809,6 +809,17 @@ class TerraformExecutor:
             tfvars["zone"] = zone
             tfvars["org_slug"] = org_slug
             tfvars["stack_uid"] = stack_uid
+            # Cluster configuration from platform_config
+            if config.get("k8s_pipeline_machine_type"):
+                tfvars["k8s_pipeline_machine_type"] = config["k8s_pipeline_machine_type"]
+            if config.get("k8s_pipeline_max_nodes"):
+                tfvars["k8s_pipeline_max_nodes"] = int(config["k8s_pipeline_max_nodes"])
+            if config.get("k8s_pipeline_use_spot"):
+                tfvars["k8s_pipeline_use_spot"] = config["k8s_pipeline_use_spot"] == "true"
+            if config.get("k8s_interactive_machine_type"):
+                tfvars["k8s_interactive_machine_type"] = config["k8s_interactive_machine_type"]
+            if config.get("k8s_interactive_max_nodes"):
+                tfvars["k8s_interactive_max_nodes"] = int(config["k8s_interactive_max_nodes"])
 
         tfvars_path = work_dir / "terraform.tfvars.json"
         tfvars_path.write_text(json.dumps(tfvars, indent=2))
@@ -893,6 +904,11 @@ class TerraformExecutor:
             "terraform_initialized",
             "terraform_state_bucket",
             "backend_service_account_email",
+            "k8s_pipeline_machine_type",
+            "k8s_pipeline_max_nodes",
+            "k8s_pipeline_use_spot",
+            "k8s_interactive_machine_type",
+            "k8s_interactive_max_nodes",
         ]
         rows = (
             await session.execute(
