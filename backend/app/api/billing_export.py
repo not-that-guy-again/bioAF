@@ -84,15 +84,20 @@ async def deploy_billing_export_module(session: AsyncSession, user_id: int) -> d
     if run.status != "awaiting_confirmation":
         return {"status": "failed", "message": run.error_message or "Plan failed"}
 
+    # Fully consume the generator to avoid closing it mid-iteration, which
+    # would trigger GeneratorExit while asyncpg still has an operation in
+    # flight (run_apply flushes progress updates internally).
     dataset_id = "billing_export"
+    error_message: str | None = None
     async for event in TerraformExecutor.run_apply(session, run.id, user_id):
         if event.event_type == "apply_error":
-            return {"status": "failed", "message": event.message}
-        if event.event_type == "apply_complete":
+            error_message = event.message
+        elif event.event_type == "apply_complete":
             dataset_id = event.extra.get("outputs", {}).get("dataset_id", {}).get("value", "billing_export")
 
-    # Write dataset ID after the generator is fully consumed to avoid
-    # concurrent session operations with run_apply's internal flushes.
+    if error_message is not None:
+        return {"status": "failed", "message": error_message}
+
     await session.execute(
         text(
             "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
