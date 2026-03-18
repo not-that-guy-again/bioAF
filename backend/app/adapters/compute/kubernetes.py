@@ -648,17 +648,23 @@ class KubernetesComputeProvider(ComputeProvider):
             container_image = self.NEXTFLOW_IMAGE
             command = self._build_nextflow_command(job_spec)
 
-            # Append a one-shot trace upload after the pipeline finishes.
-            # Nextflow writes trace.tsv locally; we copy it to GCS so the
-            # monitor can parse final progress at completion time.
+            # Wrap the pipeline command to capture output and persist
+            # artifacts (logs + trace) to GCS so they survive pod cleanup.
+            # command is ["/bin/sh", "-c", "<shell script>"]
             nf_cfg = self._cluster_config or {}
             trace_bucket = nf_cfg.get("raw_bucket_name", "")
             if trace_bucket:
-                gcs_trace_dest = f"gs://{trace_bucket}/nextflow-traces/{job_name}/trace.tsv"
-                # command is ["/bin/sh", "-c", "<shell script>"]
-                # Append the copy with ; so it runs even if nextflow exits non-zero
-                # (we still want the trace for failed runs)
-                command[2] += f"; gsutil -q cp /data/trace.tsv {gcs_trace_dest} 2>/dev/null || true"
+                gcs_prefix = f"gs://{trace_bucket}/nextflow-traces/{job_name}"
+                # Tee stdout+stderr to a log file, preserve the pipeline exit code,
+                # then upload both trace and log to GCS before exiting.
+                pipeline_cmd = command[2]
+                command[2] = (
+                    f"set -o pipefail; "
+                    f"{{ {pipeline_cmd}; }} 2>&1 | tee /data/pipeline.log; NF_EXIT=${{PIPESTATUS[0]}}; "
+                    f"gsutil -q cp /data/trace.tsv {gcs_prefix}/trace.tsv 2>/dev/null || true; "
+                    f"gsutil -q cp /data/pipeline.log {gcs_prefix}/pipeline.log 2>/dev/null || true; "
+                    f"exit $NF_EXIT"
+                )
 
         # Build init containers for GCS input staging
         init_containers = []
@@ -864,10 +870,10 @@ class KubernetesComputeProvider(ComputeProvider):
         return jobs
 
     async def _k8s_get_job_logs(self, job_id: str) -> str:
-        """Retrieve logs from the pipeline pod.
+        """Retrieve logs from the pipeline pod, falling back to GCS.
 
-        Falls back to pod container status (exit code, reason, message)
-        when the kubelet is unavailable (e.g., node scaled down).
+        Tries the live pod first, then the persisted log in GCS (uploaded
+        at pipeline exit), then pod termination status as a last resort.
         """
         core_client = self._get_k8s_core_client()
         namespace = "bioaf-pipelines"
@@ -876,24 +882,61 @@ class KubernetesComputeProvider(ComputeProvider):
             namespace=namespace,
             label_selector=f"job-name={job_id}",
         )
-        if not pod_list.items:
-            return f"No pods found for job {job_id}"
 
-        pod = pod_list.items[0]
-        pod_name = pod.metadata.name
+        # Try live pod logs first
+        if pod_list.items:
+            pod = pod_list.items[0]
+            pod_name = pod.metadata.name
+            try:
+                logs = core_client.read_namespaced_pod_log(
+                    name=pod_name,
+                    namespace=namespace,
+                    container="pipeline",
+                )
+                return logs
+            except Exception:
+                logger.warning("Could not read logs from %s, trying GCS fallback", pod_name)
+
+        # Fall back to persisted log in GCS
+        gcs_logs = await self._read_gcs_log(job_id)
+        if gcs_logs:
+            return gcs_logs
+
+        # Last resort: pod termination info
+        if pod_list.items:
+            return self._extract_pod_termination_info(pod_list.items[0])
+
+        return f"No logs available for job {job_id} (pod cleaned up, no GCS log found)"
+
+    async def _read_gcs_log(self, job_id: str) -> str | None:
+        """Read persisted pipeline.log from GCS. Returns None if unavailable."""
+        cfg = self._cluster_config or {}
+        raw_bucket = cfg.get("raw_bucket_name", "")
+        if not raw_bucket:
+            return None
+
+        sa_key = cfg.get("gcp_service_account_key", "")
+        log_path = f"nextflow-traces/{job_id}/pipeline.log"
 
         try:
-            logs = core_client.read_namespaced_pod_log(
-                name=pod_name,
-                namespace=namespace,
-                container="pipeline",
-            )
-            return logs
-        except Exception:
-            logger.warning("Could not read logs from %s (node likely scaled down), using pod status", pod_name)
+            from google.cloud import storage as gcs_storage
 
-        # Fallback: extract termination info from pod status
-        return self._extract_pod_termination_info(pod)
+            if sa_key:
+                credentials = _get_gcp_credentials(sa_key)
+                storage_client = gcs_storage.Client(credentials=credentials)
+            else:
+                storage_client = gcs_storage.Client()
+
+            bucket = storage_client.bucket(raw_bucket)
+            blob = bucket.blob(log_path)
+
+            if not blob.exists():
+                return None
+
+            return blob.download_as_text()
+        except Exception:
+            logger.warning("Could not read log file gs://%s/%s", raw_bucket, log_path)
+            return None
 
     async def _k8s_get_job_progress(self, job_id: str) -> dict:
         """Read Nextflow trace.tsv from GCS and return normalized progress.
