@@ -1,12 +1,17 @@
+import asyncio
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
+from app.database import async_session_factory, get_session
 from app.models.component import TerraformRun
 from app.schemas.component import TerraformRunListResponse, TerraformRunResponse
 from app.services.terraform_executor import TerraformExecutor
 from app.services.terraform_service import TerraformService
+
+logger = logging.getLogger("bioaf.terraform")
 
 router = APIRouter(prefix="/api/terraform", tags=["terraform"])
 
@@ -79,6 +84,18 @@ async def get_run(run_id: int, request: Request, session: AsyncSession = Depends
     )
 
 
+async def _run_apply_background(run_id: int, user_id: int) -> None:
+    """Run TerraformExecutor.run_apply in the background with its own session."""
+    async with async_session_factory() as bg_session:
+        try:
+            async for _event in TerraformExecutor.run_apply(bg_session, run_id, user_id):
+                pass
+            await bg_session.commit()
+        except Exception:
+            logger.exception("Background terraform apply failed for run %d", run_id)
+            await bg_session.rollback()
+
+
 @router.post("/runs/{run_id}/confirm", response_model=TerraformRunResponse)
 async def confirm_run(run_id: int, request: Request, session: AsyncSession = Depends(get_session)):
     current_user = _require_admin(request)
@@ -89,25 +106,22 @@ async def confirm_run(run_id: int, request: Request, session: AsyncSession = Dep
     run = result.scalar_one_or_none()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != "awaiting_confirmation":
+        raise HTTPException(status_code=400, detail=f"Run is not awaiting confirmation (status: {run.status})")
 
     if run.module_name:
-        # Module-based run: use TerraformExecutor.run_apply (async generator)
-        try:
-            async for _event in TerraformExecutor.run_apply(session, run_id, user_id):
-                pass  # Consume all progress events
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        # Re-fetch run after apply
-        result = await session.execute(select(TerraformRun).where(TerraformRun.id == run_id))
-        run = result.scalar_one_or_none()
+        # Module-based run: kick off apply in background, return immediately
+        run.status = "applying"
+        await session.commit()
+        asyncio.create_task(_run_apply_background(run_id, user_id))
     else:
-        # Legacy run: use TerraformService
+        # Legacy run: use TerraformService (synchronous)
         try:
             run = await TerraformService.apply_plan(session, run_id, user_id)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        await session.commit()
 
-    await session.commit()
     return TerraformRunResponse(
         id=run.id,
         triggered_by_user_id=run.triggered_by_user_id,

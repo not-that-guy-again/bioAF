@@ -138,7 +138,7 @@ class TerraformExecutor:
         run = result.scalar_one_or_none()
         if not run:
             raise ValueError(f"Run {run_id} not found")
-        if run.status != "awaiting_confirmation":
+        if run.status not in ("awaiting_confirmation", "applying"):
             raise ValueError(f"Run {run_id} is not awaiting confirmation (status: {run.status})")
 
         run.action = "apply"
