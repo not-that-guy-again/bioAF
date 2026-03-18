@@ -74,6 +74,7 @@ const RECOMMENDED_ROLES = [
   { role: "roles/resourcemanager.projectIamAdmin", description: "Project IAM Admin" },
   { role: "roles/bigquery.dataEditor", description: "BigQuery Data Editor" },
   { role: "roles/serviceusage.serviceUsageViewer", description: "Service Usage Viewer" },
+  { role: "roles/viewer", description: "Viewer" },
 ];
 
 const REQUIRED_APIS = [
@@ -194,34 +195,39 @@ export default function GcpSettingsPage() {
             </div>
           )}
 
-          {/* Recommended Roles */}
-          <div data-testid="recommended-roles" className="bg-white rounded-lg shadow p-6 max-w-2xl mb-6">
-            <h2 className="text-lg font-semibold mb-2">Recommended IAM Roles</h2>
-            <p className="text-sm text-gray-600 mb-3">
-              Assign these roles to your service account. They cover all permissions
-              bioAF needs. How you grant them is up to you, but these roles are the
-              simplest path.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-3">
-              {RECOMMENDED_ROLES.map(({ role, description }) => (
-                <div key={role} className="flex items-center gap-2 text-xs">
-                  <code className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-800">{role}</code>
-                  <span className="text-gray-400">{description}</span>
-                </div>
-              ))}
-            </div>
-            <details className="text-xs">
-              <summary className="text-bioaf-600 cursor-pointer font-medium">gcloud command</summary>
-              <pre className="mt-2 bg-gray-50 border rounded p-3 overflow-x-auto">
+          {/* Recommended Roles (collapsible) */}
+          <details data-testid="recommended-roles" className="bg-white rounded-lg shadow max-w-2xl mb-6">
+            <summary className="px-6 py-4 cursor-pointer text-lg font-semibold select-none">
+              Recommended IAM Roles
+              <span className="ml-2 text-sm font-normal text-gray-400">({RECOMMENDED_ROLES.length} roles)</span>
+            </summary>
+            <div className="px-6 pb-6">
+              <p className="text-sm text-gray-600 mb-3">
+                Assign these roles to your service account. They cover all permissions
+                bioAF needs. How you grant them is up to you, but these roles are the
+                simplest path.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-3">
+                {RECOMMENDED_ROLES.map(({ role, description }) => (
+                  <div key={role} className="flex items-center gap-2 text-xs">
+                    <code className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-800">{role}</code>
+                    <span className="text-gray-400">{description}</span>
+                  </div>
+                ))}
+              </div>
+              <details className="text-xs">
+                <summary className="text-bioaf-600 cursor-pointer font-medium">gcloud command</summary>
+                <pre className="mt-2 bg-gray-50 border rounded p-3 overflow-x-auto">
 {`SA_EMAIL="your-sa@your-project.iam.gserviceaccount.com"
 PROJECT_ID="your-project-id"
 
 ${RECOMMENDED_ROLES.map(({ role }) => `gcloud projects add-iam-policy-binding $PROJECT_ID \\
   --member="serviceAccount:$SA_EMAIL" \\
   --role="${role}"`).join("\n\n")}`}
-              </pre>
-            </details>
-          </div>
+                </pre>
+              </details>
+            </div>
+          </details>
 
           {/* Configuration form */}
           <div className="bg-white rounded-lg shadow p-6 max-w-2xl space-y-5">

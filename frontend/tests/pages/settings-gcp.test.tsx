@@ -158,6 +158,7 @@ describe("GCP Settings Page", () => {
     const rolesSection = screen.getByTestId("recommended-roles");
     expect(rolesSection.textContent).toContain("roles/bigquery.dataEditor");
     expect(rolesSection.textContent).toContain("roles/storage.admin");
+    expect(rolesSection.textContent).toContain("roles/viewer");
   });
 
   // Test 25: Per-permission results are shown after validation
