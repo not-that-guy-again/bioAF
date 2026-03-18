@@ -235,12 +235,18 @@ export function BillingSetupModal({ onComplete, onClose }: BillingSetupModalProp
         {step === "error" && (
           <div>
             <p className="text-sm text-red-600 mb-4">{errorMessage}</p>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={onClose}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
               >
                 Close
+              </button>
+              <button
+                onClick={handleEnable}
+                className="px-4 py-2 bg-bioaf-600 text-white rounded-lg text-sm font-medium hover:bg-bioaf-700"
+              >
+                Retry
               </button>
             </div>
           </div>

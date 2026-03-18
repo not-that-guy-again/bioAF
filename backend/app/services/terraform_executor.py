@@ -286,8 +286,24 @@ class TerraformExecutor:
                 )
             else:
                 run.status = "failed"
-                run.error_message = stderr_output or "Terraform apply failed"
                 run.completed_at = datetime.now(timezone.utc)
+
+                # TF in JSON mode writes diagnostic errors to stdout, not
+                # stderr.  Extract them so callers see the real error.
+                diagnostics: list[str] = []
+                for log_line in log_lines:
+                    try:
+                        entry = json.loads(log_line)
+                        if entry.get("type") == "diagnostic":
+                            diag = entry.get("diagnostic", {})
+                            detail = diag.get("detail") or diag.get("summary", "")
+                            if detail:
+                                diagnostics.append(detail)
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+
+                run.error_message = "; ".join(diagnostics) or stderr_output or "Terraform apply failed"
+                logger.error("Terraform apply failed for run %s: %s", run_id, run.error_message)
                 yield TerraformProgressEvent(
                     event_type="apply_error",
                     message=run.error_message,
