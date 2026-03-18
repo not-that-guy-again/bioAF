@@ -129,3 +129,39 @@ describe("GCP Configuration step fields", () => {
     expect(screen.getByRole("heading", { name: "GCP Configuration" })).toBeInTheDocument();
   });
 });
+
+describe("Compute Stack step triggers background deploy", () => {
+  async function advanceToComputeStep() {
+    await advanceToGcpStep();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await screen.findByRole("heading", { name: "Compute Stack" });
+  }
+
+  test("clicking Continue fires background deploy and advances to Invite Team", async () => {
+    await advanceToComputeStep();
+
+    // Mock both the configure-compute-stack and deploy-background calls
+    mockPost.mockResolvedValueOnce({}); // configure-compute-stack
+    mockPost.mockResolvedValueOnce({ message: "Deployment started" }); // deploy-background
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Kubernetes + GCS" }));
+
+    await screen.findByRole("heading", { name: "Invite Team" });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/infrastructure/stack/deploy-background",
+      expect.objectContaining({ stack_type: "kubernetes" }),
+    );
+  });
+
+  test("advances even if background deploy fails", async () => {
+    await advanceToComputeStep();
+
+    mockPost.mockRejectedValueOnce(new Error("not found")); // configure-compute-stack
+    mockPost.mockRejectedValueOnce(new Error("preconditions")); // deploy-background
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Kubernetes + GCS" }));
+
+    await screen.findByRole("heading", { name: "Invite Team" });
+  });
+});

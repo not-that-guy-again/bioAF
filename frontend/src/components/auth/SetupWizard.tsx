@@ -153,13 +153,29 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const handleSelectComputeStack = async () => {
     setError("");
     try {
-      await api.post("/api/bootstrap/configure-compute-stack", {
-        compute_stack: computeStack,
-      });
+      // Save the stack selection (non-critical if endpoint doesn't exist)
+      try {
+        await api.post("/api/bootstrap/configure-compute-stack", {
+          compute_stack: computeStack,
+        });
+      } catch {
+        // Non-critical
+      }
+
+      // Start deployment in the background -- the DeploymentBanner will
+      // track progress and show a toast when complete.
+      try {
+        await api.post("/api/v1/infrastructure/stack/deploy-background", {
+          stack_type: computeStack,
+        });
+      } catch {
+        // Deployment may fail if bootstrap hasn't run yet or preconditions
+        // aren't met. The user can trigger deployment later from the
+        // Infrastructure page.
+      }
+
       setStep(6);
     } catch (e) {
-      // Non-critical: the endpoint may not exist yet during bootstrap
-      // Default to kubernetes and continue
       setStep(6);
     }
   };
