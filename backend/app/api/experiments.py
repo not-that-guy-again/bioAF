@@ -416,7 +416,11 @@ async def list_experiment_files(
     from app.services.file_service import FileService
 
     files, total = await FileService.list_files(
-        session, org_id, experiment_id=experiment_id, page=page, page_size=page_size,
+        session,
+        org_id,
+        experiment_id=experiment_id,
+        page=page,
+        page_size=page_size,
     )
     return FileListResponse(
         files=[
@@ -428,7 +432,9 @@ async def list_experiment_files(
                 md5_checksum=f.md5_checksum,
                 file_type=f.file_type,
                 tags=f.tags_json if isinstance(f.tags_json, list) else [],
-                uploader=UserSummary(id=f.uploader.id, name=f.uploader.name, email=f.uploader.email) if f.uploader else None,
+                uploader=UserSummary(id=f.uploader.id, name=f.uploader.name, email=f.uploader.email)
+                if f.uploader
+                else None,
                 experiment_id=f.experiment_id,
                 upload_timestamp=f.upload_timestamp,
                 created_at=f.created_at,
