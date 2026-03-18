@@ -354,6 +354,39 @@ async def test_reconcile_requires_admin(client, viewer_token):
     assert resp.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_list_files_filter_by_experiment_id(client, admin_token, sample_file, sample_experiment, session):
+    """GET /api/files?experiment_id=N should return only files for that experiment."""
+    # Link sample_file to the experiment
+    sample_file.experiment_id = sample_experiment.id
+    await session.commit()
+
+    # Create a second file NOT linked to the experiment
+    from app.models.file import File
+
+    unlinked = File(
+        organization_id=sample_file.organization_id,
+        gcs_uri="gs://test-bucket/other.csv",
+        filename="other.csv",
+        size_bytes=500,
+        file_type="csv",
+        uploader_user_id=sample_file.uploader_user_id,
+    )
+    session.add(unlinked)
+    await session.flush()
+    await session.commit()
+
+    resp = await client.get(
+        f"/api/files?experiment_id={sample_experiment.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["files"][0]["id"] == sample_file.id
+    assert data["files"][0]["experiment_id"] == sample_experiment.id
+
+
 # --- Upload Service Unit Tests ---
 
 
