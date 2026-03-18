@@ -535,6 +535,7 @@ class KubernetesComputeProvider(ComputeProvider):
         namespace: str,
         has_gcs_secret: bool,
         gcs_work_dir: str | None = None,
+        trace_file: str | None = None,
     ) -> str:
         """Build a nextflow.config for K8s executor mode.
 
@@ -557,6 +558,13 @@ class KubernetesComputeProvider(ComputeProvider):
             lines.append("wave.enabled = true")
             lines.append("fusion.enabled = true")
             lines.append("fusion.exportStorageCredentials = true")
+
+        # Write trace file to a known GCS path so the monitor can read
+        # live progress without waiting for pipeline completion.
+        if trace_file:
+            lines.append("trace.enabled = true")
+            lines.append("trace.overwrite = true")
+            lines.append(f"trace.file = '{trace_file}'")
 
         # Build k8s.pod directives for secrets/env (Nextflow doesn't
         # support tolerations in k8s.pod, so node placement is left to
@@ -671,7 +679,8 @@ class KubernetesComputeProvider(ComputeProvider):
             cfg = self._cluster_config or {}
             raw_bucket = cfg.get("raw_bucket_name", "")
             gcs_work_dir = f"gs://{raw_bucket}/nextflow-work" if raw_bucket else None
-            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir)
+            trace_file = f"gs://{raw_bucket}/nextflow-traces/{job_name}/trace.tsv" if raw_bucket else None
+            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir, trace_file)
             # Use heredoc to avoid shell escaping issues with single quotes
             # in Nextflow config values (e.g., 'k8s', 'bioaf-pipelines')
             init_containers.append(
@@ -880,7 +889,7 @@ class KubernetesComputeProvider(ComputeProvider):
             return {"percent_complete": 0.0, "processes": []}
 
         sa_key = cfg.get("gcp_service_account_key", "")
-        trace_path = f"nextflow-work/{job_id}/trace.tsv"
+        trace_path = f"nextflow-traces/{job_id}/trace.tsv"
 
         try:
             from google.cloud import storage as gcs_storage

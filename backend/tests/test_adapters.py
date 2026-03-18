@@ -258,3 +258,49 @@ class TestGetJobProgress:
 
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
             IncompleteProvider()  # type: ignore[abstract]
+
+    def test_parse_trace_to_progress(self):
+        """K8s adapter parses Nextflow trace TSV into normalized progress."""
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        trace = (
+            "task_id\tprocess\tstatus\t%cpu\tpeak_rss\trealtime\n"
+            "1\tSTARSOLO\tCOMPLETED\t85.2\t4.5 GB\t29m 45s\n"
+            "2\tSAMTOOLS_SORT\tRUNNING\t-\t-\t-\n"
+            "3\tFASTQC\tCACHED\t20.5\t500 MB\t4m 30s\n"
+        )
+        result = KubernetesComputeProvider._parse_trace_to_progress(trace)
+
+        assert result["percent_complete"] == 66.7
+        assert len(result["processes"]) == 3
+        assert result["processes"][0]["name"] == "STARSOLO"
+        assert result["processes"][0]["status"] == "completed"
+        assert result["processes"][0]["cpu"] == 85.2
+        assert result["processes"][0]["memory_gb"] == 4.5
+        assert result["processes"][0]["duration_s"] == 1785
+        assert result["processes"][1]["status"] == "running"
+        assert result["processes"][2]["status"] == "cached"
+
+    def test_nf_config_includes_trace_settings(self):
+        """Nextflow config builder includes trace settings when trace_file is set."""
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        config = KubernetesComputeProvider._build_nextflow_k8s_config(
+            namespace="bioaf-pipelines",
+            has_gcs_secret=True,
+            gcs_work_dir="gs://my-bucket/nextflow-work",
+            trace_file="gs://my-bucket/nextflow-traces/bioaf-pipeline-1/trace.tsv",
+        )
+        assert "trace.enabled = true" in config
+        assert "trace.overwrite = true" in config
+        assert "gs://my-bucket/nextflow-traces/bioaf-pipeline-1/trace.tsv" in config
+
+    def test_nf_config_omits_trace_when_not_set(self):
+        """Nextflow config builder omits trace settings when trace_file is None."""
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        config = KubernetesComputeProvider._build_nextflow_k8s_config(
+            namespace="bioaf-pipelines",
+            has_gcs_secret=False,
+        )
+        assert "trace.enabled" not in config
