@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 interface BillingSetupModalProps {
   onComplete: () => void;
   onClose: () => void;
+  datasetExists?: boolean;
+  consoleUrl?: string;
 }
 
 interface BillingExportStatusResponse {
@@ -28,9 +30,9 @@ interface BillingExportVerifyResponse {
 
 type Step = "intro" | "creating" | "instructions" | "verifying" | "verified" | "not_yet" | "error";
 
-export function BillingSetupModal({ onComplete, onClose }: BillingSetupModalProps) {
-  const [step, setStep] = useState<Step>("intro");
-  const [consoleUrl, setConsoleUrl] = useState("");
+export function BillingSetupModal({ onComplete, onClose, datasetExists, consoleUrl: initialConsoleUrl }: BillingSetupModalProps) {
+  const [step, setStep] = useState<Step>(datasetExists ? "instructions" : "intro");
+  const [consoleUrl, setConsoleUrl] = useState(initialConsoleUrl || "");
   const [errorMessage, setErrorMessage] = useState("");
   const [verifyMessage, setVerifyMessage] = useState("");
 

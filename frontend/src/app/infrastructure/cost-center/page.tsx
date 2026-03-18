@@ -140,7 +140,7 @@ export default function InfraCostCenterPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-6">Cost Center</h1>
 
-          {billingExport && !billingExport.configured && (
+          {billingExport && !billingExport.configured && !billingExport.dataset_id && (
             <div className="mb-4 p-4 rounded-lg border border-amber-200 bg-amber-50 flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-amber-800">Cost data is estimated</p>
@@ -157,6 +157,23 @@ export default function InfraCostCenterPage() {
             </div>
           )}
 
+          {billingExport && !billingExport.configured && billingExport.dataset_id && (
+            <div className="mb-4 p-4 rounded-lg border border-blue-200 bg-blue-50 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-800">Waiting for billing export data</p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  Dataset created. Data typically appears within 24 hours after enabling export in the Google Cloud Console.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowBillingSetupModal(true)}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700 whitespace-nowrap"
+              >
+                Check Status
+              </button>
+            </div>
+          )}
+
           {billingExport?.configured && (
             <div className="mb-4 flex items-center gap-2 text-xs text-green-700">
               <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
@@ -166,6 +183,8 @@ export default function InfraCostCenterPage() {
 
           {showBillingSetupModal && (
             <BillingSetupModal
+              datasetExists={!!billingExport?.dataset_id}
+              consoleUrl={billingExport?.console_url}
               onComplete={() => {
                 setShowBillingSetupModal(false);
                 // Refresh data
