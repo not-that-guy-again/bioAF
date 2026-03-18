@@ -122,25 +122,29 @@ async def k8s_running_run(session, admin_user):
 
 
 @pytest.mark.asyncio
-async def test_k8s_monitor_uses_adapter_progress(session, k8s_running_run):
-    """Monitor uses adapter.get_job_progress() for K8s runs instead of hardcoding."""
+async def test_k8s_monitor_uses_adapter_progress_on_completion(session, k8s_running_run):
+    """Monitor fetches adapter.get_job_progress() at completion, not while running."""
     mock_compute = AsyncMock()
     mock_compute.get_job_status.return_value = {
-        "status": "running",
+        "status": "completed",
         "pod_name": "bioaf-pipeline-99-xyz",
     }
     mock_compute.get_job_progress.return_value = {
-        "percent_complete": 66.7,
+        "percent_complete": 100.0,
         "processes": [
             {"name": "STARSOLO", "status": "completed", "cpu": 85.0, "memory_gb": 4.5, "duration_s": 1800},
-            {"name": "SAMTOOLS_SORT", "status": "running", "cpu": 50.0, "memory_gb": 2.1, "duration_s": 300},
-            {"name": "FASTQC", "status": "pending", "cpu": 0.0, "memory_gb": 0.0, "duration_s": 0},
+            {"name": "SAMTOOLS_SORT", "status": "completed", "cpu": 50.0, "memory_gb": 2.1, "duration_s": 300},
+            {"name": "FASTQC", "status": "completed", "cpu": 20.0, "memory_gb": 0.5, "duration_s": 270},
         ],
     }
 
-    with patch(
-        "app.services.pipeline_monitor_service.get_compute_adapter",
-        return_value=mock_compute,
+    mock_storage = AsyncMock()
+    mock_storage.collect_outputs.return_value = []
+
+    with (
+        patch("app.services.pipeline_monitor_service.get_compute_adapter", return_value=mock_compute),
+        patch("app.services.pipeline_monitor_service.get_storage_adapter", return_value=mock_storage),
+        patch("app.services.experiment_service.ExperimentService.update_status", new_callable=AsyncMock),
     ):
         await PipelineMonitorService.sync_run_statuses(session)
 
@@ -151,31 +155,34 @@ async def test_k8s_monitor_uses_adapter_progress(session, k8s_running_run):
     result = await session.execute(select(PipelineRun).where(PipelineRun.id == k8s_running_run.id))
     run = result.scalar_one()
     assert run.progress_json is not None
-    assert run.progress_json["percent_complete"] == 66.7
+    assert run.progress_json["percent_complete"] == 100.0
     assert run.progress_json["total_processes"] == 3
-    assert run.progress_json["completed"] == 1
-    assert run.progress_json["running"] == 1
+    assert run.progress_json["completed"] == 3
 
 
 @pytest.mark.asyncio
-async def test_k8s_monitor_creates_process_records_from_progress(session, k8s_running_run):
-    """Monitor creates PipelineProcess records from adapter progress data."""
+async def test_k8s_monitor_creates_process_records_on_completion(session, k8s_running_run):
+    """Monitor creates PipelineProcess records from adapter progress at completion."""
     mock_compute = AsyncMock()
     mock_compute.get_job_status.return_value = {
-        "status": "running",
+        "status": "completed",
         "pod_name": "bioaf-pipeline-99-xyz",
     }
     mock_compute.get_job_progress.return_value = {
-        "percent_complete": 50.0,
+        "percent_complete": 100.0,
         "processes": [
             {"name": "STARSOLO", "status": "completed", "cpu": 85.0, "memory_gb": 4.5, "duration_s": 1800},
-            {"name": "SAMTOOLS_SORT", "status": "running", "cpu": 50.0, "memory_gb": 2.1, "duration_s": 300},
+            {"name": "SAMTOOLS_SORT", "status": "completed", "cpu": 50.0, "memory_gb": 2.1, "duration_s": 300},
         ],
     }
 
-    with patch(
-        "app.services.pipeline_monitor_service.get_compute_adapter",
-        return_value=mock_compute,
+    mock_storage = AsyncMock()
+    mock_storage.collect_outputs.return_value = []
+
+    with (
+        patch("app.services.pipeline_monitor_service.get_compute_adapter", return_value=mock_compute),
+        patch("app.services.pipeline_monitor_service.get_storage_adapter", return_value=mock_storage),
+        patch("app.services.experiment_service.ExperimentService.update_status", new_callable=AsyncMock),
     ):
         await PipelineMonitorService.sync_run_statuses(session)
 
@@ -191,15 +198,11 @@ async def test_k8s_monitor_creates_process_records_from_progress(session, k8s_ru
 
 @pytest.mark.asyncio
 async def test_k8s_monitor_keeps_running(session, k8s_running_run):
-    """Test 20: monitor keeps running status when K8s reports running."""
+    """Monitor keeps running status when K8s reports running, does not fetch progress."""
     mock_compute = AsyncMock()
     mock_compute.get_job_status.return_value = {
         "status": "running",
         "pod_name": "bioaf-pipeline-99-xyz",
-    }
-    mock_compute.get_job_progress.return_value = {
-        "percent_complete": 0.0,
-        "processes": [],
     }
 
     with patch(
@@ -207,6 +210,9 @@ async def test_k8s_monitor_keeps_running(session, k8s_running_run):
         return_value=mock_compute,
     ):
         await PipelineMonitorService.sync_run_statuses(session)
+
+    # Progress is only fetched at completion, not while running
+    mock_compute.get_job_progress.assert_not_called()
 
     from sqlalchemy import select
 

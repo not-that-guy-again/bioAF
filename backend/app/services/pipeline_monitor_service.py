@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import csv
 import io
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +14,9 @@ from app.models.pipeline_process import PipelineProcess
 from app.models.pipeline_run import PipelineRun
 from app.services.audit_service import log_action
 from app.adapters.registry import get_compute_adapter, get_storage_adapter
+
+if TYPE_CHECKING:
+    from app.adapters.base import ComputeProvider
 
 logger = logging.getLogger("bioaf.pipeline_monitor")
 
@@ -118,7 +124,12 @@ class PipelineMonitorService:
 
     @staticmethod
     async def _sync_k8s_run(session: AsyncSession, run: PipelineRun, job_id: str) -> None:
-        """Sync a K8s Job run by querying the compute adapter for job status and progress."""
+        """Sync a K8s Job run by querying the compute adapter for job status.
+
+        Progress data (trace file) is only available after the pipeline
+        container exits, so we fetch it on completion/failure transitions
+        rather than on every sync cycle.
+        """
         try:
             compute_adapter = get_compute_adapter()
             status_result = await compute_adapter.get_job_status(job_id)
@@ -133,70 +144,13 @@ class PipelineMonitorService:
         if pod_name:
             run.k8s_pod_name = pod_name
 
-        # Fetch live progress from the adapter
-        try:
-            progress = await compute_adapter.get_job_progress(job_id)
-        except Exception as e:
-            logger.warning("Failed to get job progress for run %d: %s", run.id, e)
-            progress = {"percent_complete": 0.0, "processes": []}
-
-        # Update progress_json and PipelineProcess records from adapter data
-        adapter_processes = progress.get("processes", [])
-        if adapter_processes:
-            existing_by_name = {p.process_name: p for p in run.processes}
-
-            completed = 0
-            running = 0
-            failed = 0
-            cached = 0
-            for proc_data in adapter_processes:
-                name = proc_data.get("name", "")
-                status = proc_data.get("status", "")
-
-                if status == "completed":
-                    completed += 1
-                elif status == "running":
-                    running += 1
-                elif status == "failed":
-                    failed += 1
-                elif status == "cached":
-                    cached += 1
-
-                if name in existing_by_name:
-                    proc = existing_by_name[name]
-                else:
-                    proc = PipelineProcess(
-                        pipeline_run_id=run.id,
-                        process_name=name,
-                    )
-                    session.add(proc)
-
-                proc.status = status
-                cpu_val = proc_data.get("cpu")
-                if cpu_val is not None:
-                    proc.cpu_usage = cpu_val
-                mem_val = proc_data.get("memory_gb")
-                if mem_val is not None:
-                    proc.memory_peak_gb = mem_val
-                dur_val = proc_data.get("duration_s")
-                if dur_val is not None:
-                    proc.duration_seconds = dur_val
-
-            total = len(adapter_processes)
-            run.progress_json = {
-                "total_processes": total,
-                "completed": completed,
-                "running": running,
-                "failed": failed,
-                "cached": cached,
-                "percent_complete": progress.get("percent_complete", 0.0),
-            }
-
         if k8s_status == "completed" and run.status != "completed":
             run.status = "completed"
             run.completed_at = datetime.now(timezone.utc)
-            # If adapter returned no processes, set 100% complete
-            if not adapter_processes:
+
+            # Fetch final progress from the adapter (trace uploaded at exit)
+            await PipelineMonitorService._populate_progress(session, run, compute_adapter, job_id)
+            if not run.progress_json:
                 run.progress_json = {
                     "total_processes": 1,
                     "completed": 1,
@@ -211,6 +165,9 @@ class PipelineMonitorService:
             run.status = "failed"
             run.completed_at = datetime.now(timezone.utc)
 
+            # Fetch final progress (trace may or may not exist for failures)
+            await PipelineMonitorService._populate_progress(session, run, compute_adapter, job_id)
+
             # Try to get error info from logs
             try:
                 log_content = await compute_adapter.get_job_logs(job_id)
@@ -222,6 +179,73 @@ class PipelineMonitorService:
                 run.error_message = "Job failed (could not retrieve logs)"
 
             await PipelineMonitorService._handle_completion(session, run)
+
+    @staticmethod
+    async def _populate_progress(
+        session: AsyncSession,
+        run: PipelineRun,
+        compute_adapter: ComputeProvider,
+        job_id: str,
+    ) -> None:
+        """Fetch progress from the adapter and update run + PipelineProcess records."""
+        try:
+            progress = await compute_adapter.get_job_progress(job_id)
+        except Exception as e:
+            logger.warning("Failed to get job progress for run %d: %s", run.id, e)
+            return
+
+        adapter_processes = progress.get("processes", [])
+        if not adapter_processes:
+            return
+
+        existing_by_name = {p.process_name: p for p in run.processes}
+
+        completed = 0
+        running = 0
+        failed = 0
+        cached = 0
+        for proc_data in adapter_processes:
+            name = proc_data.get("name", "")
+            status = proc_data.get("status", "")
+
+            if status == "completed":
+                completed += 1
+            elif status == "running":
+                running += 1
+            elif status == "failed":
+                failed += 1
+            elif status == "cached":
+                cached += 1
+
+            if name in existing_by_name:
+                proc = existing_by_name[name]
+            else:
+                proc = PipelineProcess(
+                    pipeline_run_id=run.id,
+                    process_name=name,
+                )
+                session.add(proc)
+
+            proc.status = status
+            cpu_val = proc_data.get("cpu")
+            if cpu_val is not None:
+                proc.cpu_usage = cpu_val
+            mem_val = proc_data.get("memory_gb")
+            if mem_val is not None:
+                proc.memory_peak_gb = mem_val
+            dur_val = proc_data.get("duration_s")
+            if dur_val is not None:
+                proc.duration_seconds = dur_val
+
+        total = len(adapter_processes)
+        run.progress_json = {
+            "total_processes": total,
+            "completed": completed,
+            "running": running,
+            "failed": failed,
+            "cached": cached,
+            "percent_complete": progress.get("percent_complete", 0.0),
+        }
 
     @staticmethod
     async def _handle_completion(session: AsyncSession, run: PipelineRun) -> None:

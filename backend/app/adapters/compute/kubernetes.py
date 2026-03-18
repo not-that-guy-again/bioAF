@@ -559,8 +559,8 @@ class KubernetesComputeProvider(ComputeProvider):
             lines.append("fusion.enabled = true")
             lines.append("fusion.exportStorageCredentials = true")
 
-        # Write trace to a local file on the head pod. A background sync
-        # loop in the container command copies it to GCS periodically.
+        # Write trace to a local file on the head pod. The main container
+        # command copies it to GCS as a one-shot step after the pipeline exits.
         # Nextflow's trace.file only supports local paths (not gs:// URIs).
         if trace_enabled:
             lines.append("trace.enabled = true")
@@ -648,6 +648,18 @@ class KubernetesComputeProvider(ComputeProvider):
             container_image = self.NEXTFLOW_IMAGE
             command = self._build_nextflow_command(job_spec)
 
+            # Append a one-shot trace upload after the pipeline finishes.
+            # Nextflow writes trace.tsv locally; we copy it to GCS so the
+            # monitor can parse final progress at completion time.
+            nf_cfg = self._cluster_config or {}
+            trace_bucket = nf_cfg.get("raw_bucket_name", "")
+            if trace_bucket:
+                gcs_trace_dest = f"gs://{trace_bucket}/nextflow-traces/{job_name}/trace.tsv"
+                # command is ["/bin/sh", "-c", "<shell script>"]
+                # Append the copy with ; so it runs even if nextflow exits non-zero
+                # (we still want the trace for failed runs)
+                command[2] += f"; gsutil -q cp /data/trace.tsv {gcs_trace_dest} 2>/dev/null || true"
+
         # Build init containers for GCS input staging
         init_containers = []
         if stage_commands:
@@ -720,30 +732,6 @@ class KubernetesComputeProvider(ComputeProvider):
         if command:
             main_container["command"] = command
 
-        # Build trace-sync sidecar: copies /data/trace.tsv to GCS every 30s
-        # so the monitor can read live pipeline progress. Only added for
-        # Nextflow pipelines with a GCS bucket configured.
-        containers = [main_container]
-        trace_cfg = self._cluster_config or {}
-        trace_bucket = trace_cfg.get("raw_bucket_name", "")
-        if pipeline_source and trace_bucket and not job_spec.get("command"):
-            gcs_trace_dest = f"gs://{trace_bucket}/nextflow-traces/{job_name}/trace.tsv"
-            sync_cmd = (
-                f"while true; do sleep 30; "
-                f"[ -f /data/trace.tsv ] && gsutil -q cp /data/trace.tsv {gcs_trace_dest}; "
-                f"done"
-            )
-            trace_sidecar = {
-                "name": "trace-sync",
-                "image": "google/cloud-sdk:slim",
-                "command": ["/bin/sh", "-c", sync_cmd],
-                "volumeMounts": [{"name": "data", "mountPath": "/data"}],
-            }
-            if has_gcs_secret:
-                trace_sidecar["volumeMounts"].append(gcs_volume_mount)
-                trace_sidecar["env"] = [gcs_env]
-            containers.append(trace_sidecar)
-
         # Build job manifest
         job_manifest = {
             "apiVersion": "batch/v1",
@@ -771,7 +759,7 @@ class KubernetesComputeProvider(ComputeProvider):
                             }
                         ],
                         "serviceAccountName": "bioaf-pipeline-runner",
-                        "containers": containers,
+                        "containers": [main_container],
                         "volumes": [
                             {"name": "data", "emptyDir": {"sizeLimit": "50Gi"}},
                         ]
@@ -908,7 +896,11 @@ class KubernetesComputeProvider(ComputeProvider):
         return self._extract_pod_termination_info(pod)
 
     async def _k8s_get_job_progress(self, job_id: str) -> dict:
-        """Read Nextflow trace.tsv from GCS work directory and return normalized progress."""
+        """Read Nextflow trace.tsv from GCS and return normalized progress.
+
+        The trace file is uploaded to GCS as a one-shot copy when the pipeline
+        container exits, so this only returns data after completion/failure.
+        """
         cfg = self._cluster_config or {}
         raw_bucket = cfg.get("raw_bucket_name", "")
         if not raw_bucket:
