@@ -84,18 +84,21 @@ async def deploy_billing_export_module(session: AsyncSession, user_id: int) -> d
     if run.status != "awaiting_confirmation":
         return {"status": "failed", "message": run.error_message or "Plan failed"}
 
+    dataset_id = "billing_export"
     async for event in TerraformExecutor.run_apply(session, run.id, user_id):
         if event.event_type == "apply_error":
             return {"status": "failed", "message": event.message}
         if event.event_type == "apply_complete":
             dataset_id = event.extra.get("outputs", {}).get("dataset_id", {}).get("value", "billing_export")
-            await session.execute(
-                text(
-                    "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
-                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()"
-                ).bindparams(k="billing_export_dataset", v=dataset_id)
-            )
 
+    # Write dataset ID after the generator is fully consumed to avoid
+    # concurrent session operations with run_apply's internal flushes.
+    await session.execute(
+        text(
+            "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()"
+        ).bindparams(k="billing_export_dataset", v=dataset_id)
+    )
     await session.commit()
     return {"status": "completed"}
 
