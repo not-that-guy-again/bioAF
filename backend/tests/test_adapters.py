@@ -184,3 +184,77 @@ class TestAdapterRegistry:
         registry.reset_registry()
         with pytest.raises(RuntimeError, match="Adapter registry not initialized"):
             registry.get_compute_adapter()
+
+
+# -- get_job_progress tests --
+
+
+class TestGetJobProgress:
+    """Tests for ComputeProvider.get_job_progress() method."""
+
+    @pytest.mark.asyncio
+    async def test_slurm_get_job_progress_raises(self):
+        """SLURM stub raises NotImplementedError for get_job_progress."""
+        provider = SlurmComputeProvider()
+        with pytest.raises(NotImplementedError, match="SLURM compute backend coming soon"):
+            await provider.get_job_progress("job-123")
+
+    @pytest.mark.asyncio
+    async def test_k8s_local_returns_progress_structure(self):
+        """K8s local mode returns a valid normalized progress dict."""
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        provider = KubernetesComputeProvider()
+        result = await provider.get_job_progress("local-abc123")
+
+        assert "percent_complete" in result
+        assert "processes" in result
+        assert isinstance(result["percent_complete"], (int, float))
+        assert isinstance(result["processes"], list)
+
+    @pytest.mark.asyncio
+    async def test_k8s_local_progress_has_process_fields(self):
+        """K8s local mode progress processes have required fields."""
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        provider = KubernetesComputeProvider()
+        result = await provider.get_job_progress("local-abc123")
+
+        for proc in result["processes"]:
+            assert "name" in proc
+            assert "status" in proc
+
+    @pytest.mark.asyncio
+    async def test_abc_requires_get_job_progress(self):
+        """ComputeProvider subclass missing get_job_progress cannot instantiate."""
+
+        class IncompleteProvider(ComputeProvider):
+            async def submit_job(self, job_spec: dict) -> dict:
+                return {}
+
+            async def cancel_job(self, job_id: str) -> dict:
+                return {}
+
+            async def get_job_status(self, job_id: str) -> dict:
+                return {}
+
+            async def list_jobs(self, filters: dict | None = None) -> list[dict]:
+                return []
+
+            async def get_job_logs(self, job_id: str) -> str:
+                return ""
+
+            async def get_cluster_status(self) -> dict:
+                return {}
+
+            async def get_cluster_metrics(self) -> dict:
+                return {}
+
+            async def get_cost_estimate(self, job_spec: dict) -> dict:
+                return {}
+
+            async def get_connection_command(self, job_id: str) -> str:
+                return ""
+
+        with pytest.raises(TypeError, match="Can't instantiate abstract class"):
+            IncompleteProvider()  # type: ignore[abstract]

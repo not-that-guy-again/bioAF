@@ -118,7 +118,7 @@ class PipelineMonitorService:
 
     @staticmethod
     async def _sync_k8s_run(session: AsyncSession, run: PipelineRun, job_id: str) -> None:
-        """Sync a K8s Job run by querying the compute adapter for job status."""
+        """Sync a K8s Job run by querying the compute adapter for job status and progress."""
         try:
             compute_adapter = get_compute_adapter()
             status_result = await compute_adapter.get_job_status(job_id)
@@ -133,17 +133,78 @@ class PipelineMonitorService:
         if pod_name:
             run.k8s_pod_name = pod_name
 
+        # Fetch live progress from the adapter
+        try:
+            progress = await compute_adapter.get_job_progress(job_id)
+        except Exception as e:
+            logger.warning("Failed to get job progress for run %d: %s", run.id, e)
+            progress = {"percent_complete": 0.0, "processes": []}
+
+        # Update progress_json and PipelineProcess records from adapter data
+        adapter_processes = progress.get("processes", [])
+        if adapter_processes:
+            existing_by_name = {p.process_name: p for p in run.processes}
+
+            completed = 0
+            running = 0
+            failed = 0
+            cached = 0
+            for proc_data in adapter_processes:
+                name = proc_data.get("name", "")
+                status = proc_data.get("status", "")
+
+                if status == "completed":
+                    completed += 1
+                elif status == "running":
+                    running += 1
+                elif status == "failed":
+                    failed += 1
+                elif status == "cached":
+                    cached += 1
+
+                if name in existing_by_name:
+                    proc = existing_by_name[name]
+                else:
+                    proc = PipelineProcess(
+                        pipeline_run_id=run.id,
+                        process_name=name,
+                    )
+                    session.add(proc)
+
+                proc.status = status
+                cpu_val = proc_data.get("cpu")
+                if cpu_val is not None:
+                    proc.cpu_usage = cpu_val
+                mem_val = proc_data.get("memory_gb")
+                if mem_val is not None:
+                    proc.memory_peak_gb = mem_val
+                dur_val = proc_data.get("duration_s")
+                if dur_val is not None:
+                    proc.duration_seconds = dur_val
+
+            total = len(adapter_processes)
+            run.progress_json = {
+                "total_processes": total,
+                "completed": completed,
+                "running": running,
+                "failed": failed,
+                "cached": cached,
+                "percent_complete": progress.get("percent_complete", 0.0),
+            }
+
         if k8s_status == "completed" and run.status != "completed":
             run.status = "completed"
             run.completed_at = datetime.now(timezone.utc)
-            run.progress_json = {
-                "total_processes": 1,
-                "completed": 1,
-                "running": 0,
-                "failed": 0,
-                "cached": 0,
-                "percent_complete": 100.0,
-            }
+            # If adapter returned no processes, set 100% complete
+            if not adapter_processes:
+                run.progress_json = {
+                    "total_processes": 1,
+                    "completed": 1,
+                    "running": 0,
+                    "failed": 0,
+                    "cached": 0,
+                    "percent_complete": 100.0,
+                }
             await PipelineMonitorService._handle_completion(session, run)
 
         elif k8s_status == "failed" and run.status != "failed":
@@ -154,7 +215,6 @@ class PipelineMonitorService:
             try:
                 log_content = await compute_adapter.get_job_logs(job_id)
                 if log_content:
-                    # Take last 500 chars of logs as error message
                     run.error_message = log_content[-500:] if len(log_content) > 500 else log_content
                 else:
                     run.error_message = "Job failed (no logs available)"

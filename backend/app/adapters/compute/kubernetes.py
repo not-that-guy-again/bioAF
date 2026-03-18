@@ -121,6 +121,11 @@ class KubernetesComputeProvider(ComputeProvider):
             "basis": "input file count heuristic",
         }
 
+    async def get_job_progress(self, job_id: str) -> dict:
+        if self.is_local:
+            return await self._local_get_job_progress(job_id)
+        return await self._k8s_get_job_progress(job_id)
+
     async def get_connection_command(self, job_id: str) -> str:
         namespace = "bioaf-pipelines"
         return f"kubectl exec -it -n {namespace} job/{job_id} -- /bin/bash"
@@ -154,6 +159,20 @@ class KubernetesComputeProvider(ComputeProvider):
             "started_at": datetime.now(timezone.utc).isoformat(),
             "completed_at": datetime.now(timezone.utc).isoformat(),
             "exit_code": 0,
+        }
+
+    async def _local_get_job_progress(self, job_id: str) -> dict:
+        return {
+            "percent_complete": 100.0,
+            "processes": [
+                {
+                    "name": "LOCAL_PROCESS",
+                    "status": "completed",
+                    "cpu": 0.0,
+                    "memory_gb": 0.0,
+                    "duration_s": 0,
+                }
+            ],
         }
 
     async def _local_list_jobs(self, filters: dict | None = None) -> list[dict]:
@@ -852,6 +871,126 @@ class KubernetesComputeProvider(ComputeProvider):
 
         # Fallback: extract termination info from pod status
         return self._extract_pod_termination_info(pod)
+
+    async def _k8s_get_job_progress(self, job_id: str) -> dict:
+        """Read Nextflow trace.tsv from GCS work directory and return normalized progress."""
+        cfg = self._cluster_config or {}
+        raw_bucket = cfg.get("raw_bucket_name", "")
+        if not raw_bucket:
+            return {"percent_complete": 0.0, "processes": []}
+
+        sa_key = cfg.get("gcp_service_account_key", "")
+        trace_path = f"nextflow-work/{job_id}/trace.tsv"
+
+        try:
+            from google.cloud import storage as gcs_storage
+
+            if sa_key:
+                credentials = _get_gcp_credentials(sa_key)
+                storage_client = gcs_storage.Client(credentials=credentials)
+            else:
+                storage_client = gcs_storage.Client()
+
+            bucket = storage_client.bucket(raw_bucket)
+            blob = bucket.blob(trace_path)
+
+            if not blob.exists():
+                return {"percent_complete": 0.0, "processes": []}
+
+            content = blob.download_as_text()
+        except Exception:
+            logger.warning("Could not read trace file gs://%s/%s", raw_bucket, trace_path)
+            return {"percent_complete": 0.0, "processes": []}
+
+        return self._parse_trace_to_progress(content)
+
+    @staticmethod
+    def _parse_trace_to_progress(content: str) -> dict:
+        """Parse Nextflow trace TSV content into normalized progress structure."""
+        import csv
+        import io
+
+        reader = csv.DictReader(io.StringIO(content), delimiter="\t")
+        rows = list(reader)
+
+        if not rows:
+            return {"percent_complete": 0.0, "processes": []}
+
+        status_map = {
+            "COMPLETED": "completed",
+            "RUNNING": "running",
+            "FAILED": "failed",
+            "CACHED": "cached",
+            "SUBMITTED": "pending",
+            "PENDING": "pending",
+            "ABORTED": "failed",
+        }
+
+        processes = []
+        completed_count = 0
+        for row in rows:
+            nf_status = row.get("status", "").upper()
+            mapped_status = status_map.get(nf_status, nf_status.lower())
+            if mapped_status in ("completed", "cached"):
+                completed_count += 1
+
+            cpu_raw = row.get("%cpu", "0")
+            try:
+                cpu = float(str(cpu_raw).replace("%", "")) if cpu_raw and cpu_raw != "-" else 0.0
+            except (ValueError, TypeError):
+                cpu = 0.0
+
+            mem_raw = row.get("peak_rss", "")
+            memory_gb = 0.0
+            if mem_raw and mem_raw != "-":
+                try:
+                    val = str(mem_raw).strip()
+                    if "GB" in val.upper():
+                        memory_gb = float(val.upper().replace("GB", "").strip())
+                    elif "MB" in val.upper():
+                        memory_gb = round(float(val.upper().replace("MB", "").strip()) / 1024, 2)
+                except (ValueError, TypeError):
+                    pass
+
+            dur_raw = row.get("realtime", "")
+            duration_s = 0
+            if dur_raw and dur_raw != "-":
+                try:
+                    dur_str = str(dur_raw).strip()
+                    if dur_str.endswith("ms"):
+                        duration_s = int(float(dur_str[:-2]) / 1000)
+                    elif dur_str.endswith("s") and "m" not in dur_str and "h" not in dur_str:
+                        duration_s = int(float(dur_str[:-1]))
+                    else:
+                        secs = 0
+                        if "h" in dur_str:
+                            parts = dur_str.split("h")
+                            secs += int(parts[0].strip()) * 3600
+                            dur_str = parts[1].strip()
+                        if "m" in dur_str:
+                            parts = dur_str.split("m")
+                            secs += int(parts[0].strip()) * 60
+                            dur_str = parts[1].strip()
+                        if dur_str.endswith("s"):
+                            secs += int(float(dur_str[:-1]))
+                        duration_s = secs
+                except (ValueError, TypeError):
+                    pass
+
+            processes.append(
+                {
+                    "name": row.get("process", ""),
+                    "status": mapped_status,
+                    "cpu": cpu,
+                    "memory_gb": memory_gb,
+                    "duration_s": duration_s,
+                }
+            )
+
+        total = len(processes)
+        pct = round(completed_count / total * 100, 1) if total > 0 else 0.0
+
+        return {"percent_complete": pct, "processes": processes}
 
     @staticmethod
     def _extract_pod_termination_info(pod) -> str:
