@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncIterator
 
+from google.api_core.exceptions import NotFound
+from google.cloud import storage
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -985,27 +987,23 @@ class TerraformExecutor:
     async def _delete_gcs_lock_file(bucket_name: str, lock_path: str) -> None:
         """Delete a Terraform lock file from a GCS bucket.
 
-        Uses gsutil to remove the lock. Failures are logged but not raised
-        since the run is already marked cancelled.
+        Uses google-cloud-storage Python client. Failures are logged but not
+        raised since the run is already marked cancelled.
         """
-        cmd = ["gsutil", "rm", f"gs://{bucket_name}/{lock_path}"]
+
+        def _delete() -> None:
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(lock_path)
+            blob.delete()
+
         try:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                logger.warning(
-                    "Failed to delete lock file gs://%s/%s: %s",
-                    bucket_name,
-                    lock_path,
-                    result.stderr,
-                )
+            await asyncio.to_thread(_delete)
+            logger.info("Deleted lock file gs://%s/%s", bucket_name, lock_path)
+        except NotFound:
+            logger.info("Lock file gs://%s/%s already gone", bucket_name, lock_path)
         except Exception as exc:
-            logger.warning("Error deleting lock file: %s", exc)
+            logger.warning("Error deleting lock file gs://%s/%s: %s", bucket_name, lock_path, exc)
 
     @staticmethod
     async def _check_no_active_run(session: AsyncSession) -> None:
