@@ -282,21 +282,21 @@ class TestGetJobProgress:
         assert result["processes"][2]["status"] == "cached"
 
     def test_nf_config_includes_trace_settings(self):
-        """Nextflow config builder includes trace settings when trace_file is set."""
+        """Nextflow config builder includes trace settings when trace_enabled is True."""
         from app.adapters.compute.kubernetes import KubernetesComputeProvider
 
         config = KubernetesComputeProvider._build_nextflow_k8s_config(
             namespace="bioaf-pipelines",
             has_gcs_secret=True,
             gcs_work_dir="gs://my-bucket/nextflow-work",
-            trace_file="gs://my-bucket/nextflow-traces/bioaf-pipeline-1/trace.tsv",
+            trace_enabled=True,
         )
         assert "trace.enabled = true" in config
         assert "trace.overwrite = true" in config
-        assert "gs://my-bucket/nextflow-traces/bioaf-pipeline-1/trace.tsv" in config
+        assert "trace.file = '/data/trace.tsv'" in config
 
-    def test_nf_config_omits_trace_when_not_set(self):
-        """Nextflow config builder omits trace settings when trace_file is None."""
+    def test_nf_config_omits_trace_when_not_enabled(self):
+        """Nextflow config builder omits trace settings when trace_enabled is False."""
         from app.adapters.compute.kubernetes import KubernetesComputeProvider
 
         config = KubernetesComputeProvider._build_nextflow_k8s_config(

@@ -535,7 +535,7 @@ class KubernetesComputeProvider(ComputeProvider):
         namespace: str,
         has_gcs_secret: bool,
         gcs_work_dir: str | None = None,
-        trace_file: str | None = None,
+        trace_enabled: bool = False,
     ) -> str:
         """Build a nextflow.config for K8s executor mode.
 
@@ -559,12 +559,13 @@ class KubernetesComputeProvider(ComputeProvider):
             lines.append("fusion.enabled = true")
             lines.append("fusion.exportStorageCredentials = true")
 
-        # Write trace file to a known GCS path so the monitor can read
-        # live progress without waiting for pipeline completion.
-        if trace_file:
+        # Write trace to a local file on the head pod. A background sync
+        # loop in the container command copies it to GCS periodically.
+        # Nextflow's trace.file only supports local paths (not gs:// URIs).
+        if trace_enabled:
             lines.append("trace.enabled = true")
             lines.append("trace.overwrite = true")
-            lines.append(f"trace.file = '{trace_file}'")
+            lines.append("trace.file = '/data/trace.tsv'")
 
         # Build k8s.pod directives for secrets/env (Nextflow doesn't
         # support tolerations in k8s.pod, so node placement is left to
@@ -639,13 +640,13 @@ class KubernetesComputeProvider(ComputeProvider):
         # Ensure GCS credentials secret exists for bucket access
         has_gcs_secret = self._ensure_gcs_secret(namespace)
 
+        job_name = f"bioaf-pipeline-{run_id}"
+
         # Auto-build Nextflow command when pipeline_source is set and no
         # explicit command was provided
         if pipeline_source and not command:
             container_image = self.NEXTFLOW_IMAGE
             command = self._build_nextflow_command(job_spec)
-
-        job_name = f"bioaf-pipeline-{run_id}"
 
         # Build init containers for GCS input staging
         init_containers = []
@@ -676,11 +677,12 @@ class KubernetesComputeProvider(ComputeProvider):
 
         # Write nextflow.config with K8s executor settings for Nextflow pipelines
         if pipeline_source and not job_spec.get("command"):
-            cfg = self._cluster_config or {}
-            raw_bucket = cfg.get("raw_bucket_name", "")
+            nf_cfg = self._cluster_config or {}
+            raw_bucket = nf_cfg.get("raw_bucket_name", "")
             gcs_work_dir = f"gs://{raw_bucket}/nextflow-work" if raw_bucket else None
-            trace_file = f"gs://{raw_bucket}/nextflow-traces/{job_name}/trace.tsv" if raw_bucket else None
-            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir, trace_file)
+            nf_config = self._build_nextflow_k8s_config(
+                namespace, has_gcs_secret, gcs_work_dir, trace_enabled=bool(raw_bucket)
+            )
             # Use heredoc to avoid shell escaping issues with single quotes
             # in Nextflow config values (e.g., 'k8s', 'bioaf-pipelines')
             init_containers.append(
@@ -718,6 +720,30 @@ class KubernetesComputeProvider(ComputeProvider):
         if command:
             main_container["command"] = command
 
+        # Build trace-sync sidecar: copies /data/trace.tsv to GCS every 30s
+        # so the monitor can read live pipeline progress. Only added for
+        # Nextflow pipelines with a GCS bucket configured.
+        containers = [main_container]
+        trace_cfg = self._cluster_config or {}
+        trace_bucket = trace_cfg.get("raw_bucket_name", "")
+        if pipeline_source and trace_bucket and not job_spec.get("command"):
+            gcs_trace_dest = f"gs://{trace_bucket}/nextflow-traces/{job_name}/trace.tsv"
+            sync_cmd = (
+                f"while true; do sleep 30; "
+                f"[ -f /data/trace.tsv ] && gsutil -q cp /data/trace.tsv {gcs_trace_dest}; "
+                f"done"
+            )
+            trace_sidecar = {
+                "name": "trace-sync",
+                "image": "google/cloud-sdk:slim",
+                "command": ["/bin/sh", "-c", sync_cmd],
+                "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+            }
+            if has_gcs_secret:
+                trace_sidecar["volumeMounts"].append(gcs_volume_mount)
+                trace_sidecar["env"] = [gcs_env]
+            containers.append(trace_sidecar)
+
         # Build job manifest
         job_manifest = {
             "apiVersion": "batch/v1",
@@ -745,7 +771,7 @@ class KubernetesComputeProvider(ComputeProvider):
                             }
                         ],
                         "serviceAccountName": "bioaf-pipeline-runner",
-                        "containers": [main_container],
+                        "containers": containers,
                         "volumes": [
                             {"name": "data", "emptyDir": {"sizeLimit": "50Gi"}},
                         ]
