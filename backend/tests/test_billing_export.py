@@ -234,6 +234,36 @@ async def test_query_mtd_costs_returns_mapped_data():
     assert storage_row["component"] == "storage"
 
 
+@pytest.mark.asyncio
+async def test_verify_dataset_passes_credentials_to_bq_client():
+    """verify_dataset must pass explicit credentials to the BQ client."""
+    from app.services.billing_export_service import BillingExportService
+
+    mock_creds = MagicMock()
+    mock_bq_client = MagicMock()
+    mock_bq_client.list_tables.return_value = []
+
+    with patch("app.services.billing_export_service.bigquery.Client", return_value=mock_bq_client) as mock_ctor:
+        await BillingExportService.verify_dataset("proj", "ds", credentials=mock_creds)
+        mock_ctor.assert_called_once_with(project="proj", credentials=mock_creds)
+
+
+@pytest.mark.asyncio
+async def test_query_mtd_costs_passes_credentials_to_bq_client():
+    """query_mtd_costs must pass explicit credentials to the BQ client."""
+    from app.services.billing_export_service import BillingExportService
+
+    mock_creds = MagicMock()
+    mock_query_job = MagicMock()
+    mock_query_job.result.return_value = []
+    mock_bq_client = MagicMock()
+    mock_bq_client.query.return_value = mock_query_job
+
+    with patch("app.services.billing_export_service.bigquery.Client", return_value=mock_bq_client) as mock_ctor:
+        await BillingExportService.query_mtd_costs("proj", "ds", "table", credentials=mock_creds)
+        mock_ctor.assert_called_once_with(project="proj", credentials=mock_creds)
+
+
 # ---------------------------------------------------------------------------
 # CostService BQ integration
 # ---------------------------------------------------------------------------

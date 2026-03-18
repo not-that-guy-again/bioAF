@@ -9,8 +9,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from google.cloud import bigquery
+
+if TYPE_CHECKING:
+    from google.auth.credentials import Credentials
 
 logger = logging.getLogger("bioaf.billing_export_service")
 
@@ -29,14 +33,18 @@ class BillingExportService:
         return _SERVICE_COMPONENT_MAP.get(service_name, "other")
 
     @staticmethod
-    async def verify_dataset(project_id: str, dataset_id: str) -> dict:
+    async def verify_dataset(
+        project_id: str,
+        dataset_id: str,
+        credentials: Credentials | None = None,
+    ) -> dict:
         """Check if the billing export table exists in the given dataset.
 
         Returns {"found": True, "table_id": "..."} or {"found": False}.
         """
 
         def _verify() -> dict:
-            client = bigquery.Client(project=project_id)
+            client = bigquery.Client(project=project_id, credentials=credentials)
             tables = list(client.list_tables(f"{project_id}.{dataset_id}"))
             for table in tables:
                 if table.table_id.startswith("gcp_billing_export_v1_"):
@@ -50,6 +58,7 @@ class BillingExportService:
         project_id: str,
         dataset_id: str,
         table_id: str,
+        credentials: Credentials | None = None,
     ) -> list[dict]:
         """Query month-to-date costs from the BQ billing export table.
 
@@ -74,7 +83,7 @@ class BillingExportService:
         """  # noqa: S608
 
         def _query() -> list[dict]:
-            client = bigquery.Client(project=project_id)
+            client = bigquery.Client(project=project_id, credentials=credentials)
             job_config = bigquery.QueryJobConfig(
                 query_parameters=[
                     bigquery.ScalarQueryParameter("invoice_month", "STRING", invoice_month),

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_role
 from app.database import get_session
 from app.services.billing_export_service import BillingExportService
+from app.services.credential_injector import load_gcp_credentials
 
 logger = logging.getLogger("bioaf.billing_export_api")
 
@@ -53,6 +54,9 @@ class BillingExportVerifyResponse(BaseModel):
 BILLING_EXPORT_CONFIG_KEYS = [
     "gcp_project_id",
     "gcp_credentials_configured",
+    "gcp_credential_source",
+    "gcp_service_account_key",
+    "gcp_service_account_email",
     "terraform_initialized",
     "billing_export_configured",
     "billing_export_dataset",
@@ -179,7 +183,12 @@ async def billing_export_verify(
             detail="Billing export dataset has not been created. Run enable first.",
         )
 
-    result = await BillingExportService.verify_dataset(project_id, dataset_id)
+    try:
+        creds = load_gcp_credentials(config)
+    except Exception:
+        logger.exception("Failed to load GCP credentials for BQ verification")
+        creds = None
+    result = await BillingExportService.verify_dataset(project_id, dataset_id, credentials=creds)
 
     if not result["found"]:
         return BillingExportVerifyResponse(

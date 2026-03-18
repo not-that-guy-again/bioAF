@@ -157,7 +157,9 @@ class CostService:
                 sa_text(
                     "SELECT key, value FROM platform_config "
                     "WHERE key IN ('billing_export_configured', 'billing_export_dataset', "
-                    "'billing_export_table', 'gcp_project_id')"
+                    "'billing_export_table', 'gcp_project_id', "
+                    "'gcp_credential_source', 'gcp_service_account_key', "
+                    "'gcp_service_account_email')"
                 )
             )
         ).fetchall()
@@ -188,7 +190,16 @@ class CostService:
         # Historical data from BQ (excludes today due to export lag)
         if project_id and dataset_id and table_id:
             try:
-                bq_results = await BillingExportService.query_mtd_costs(project_id, dataset_id, table_id)
+                from app.services.credential_injector import load_gcp_credentials
+
+                try:
+                    creds = load_gcp_credentials(bq_config)
+                except Exception:
+                    logger.warning("Failed to load GCP credentials for BQ sync, using ADC")
+                    creds = None
+                bq_results = await BillingExportService.query_mtd_costs(
+                    project_id, dataset_id, table_id, credentials=creds
+                )
                 # Aggregate by date + component
                 daily_components: dict[tuple[date, str], Decimal] = {}
                 for row in bq_results:
