@@ -437,6 +437,32 @@ export default function InfraComponentsPage() {
                                 className="w-full border rounded px-2 py-1 text-sm mt-1"
                               />
                             </div>
+                            <div className="flex items-center gap-2 pt-5">
+                              <label className="text-xs text-gray-500">Pipeline Spot Instances</label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const current = configEdits.k8s_pipeline_use_spot ?? clusterConfig.k8s_pipeline_use_spot;
+                                  setConfigEdits({ ...configEdits, k8s_pipeline_use_spot: !current });
+                                }}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                                  (configEdits.k8s_pipeline_use_spot ?? clusterConfig.k8s_pipeline_use_spot)
+                                    ? "bg-blue-600"
+                                    : "bg-gray-300"
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                                    (configEdits.k8s_pipeline_use_spot ?? clusterConfig.k8s_pipeline_use_spot)
+                                      ? "translate-x-4.5"
+                                      : "translate-x-0.5"
+                                  }`}
+                                />
+                              </button>
+                              <span className="text-xs text-gray-600">
+                                {(configEdits.k8s_pipeline_use_spot ?? clusterConfig.k8s_pipeline_use_spot) ? "On" : "Off"}
+                              </span>
+                            </div>
                             <div>
                               <label className="text-xs text-gray-500">Interactive Machine Type</label>
                               <input
