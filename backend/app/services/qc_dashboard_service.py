@@ -1,5 +1,7 @@
 import io
+import json
 import logging
+import tempfile
 from datetime import datetime, timezone
 
 from sqlalchemy import select, text
@@ -40,8 +42,8 @@ class QCDashboardService:
         await session.flush()
 
         try:
-            # Extract metrics from pipeline outputs
-            metrics = await QCDashboardService._extract_metrics(run)
+            # Extract metrics from pipeline outputs (reads from GCS)
+            metrics = await QCDashboardService._extract_metrics(session, run)
 
             # Compute quality rating
             quality = QCDashboardService._compute_quality_rating(metrics)
@@ -115,9 +117,91 @@ class QCDashboardService:
         return any(metrics.get(k) is not None for k in plottable_keys)
 
     @staticmethod
-    async def _extract_metrics(run: PipelineRun) -> dict:
-        """Extract QC metrics from pipeline output h5ad or metrics files."""
-        metrics = {
+    async def _extract_metrics(session: AsyncSession, run: PipelineRun) -> dict:
+        """Extract QC metrics from GCS.
+
+        Checks for a cached qc_metrics.json first. If not found, downloads
+        the h5ad output from GCS, extracts metrics locally, and writes the
+        result back to GCS as a cache for future reads.
+        """
+        empty_metrics: dict = {
+            "cell_count": None,
+            "median_reads_per_cell": None,
+            "median_genes_per_cell": None,
+            "median_umi_per_cell": None,
+            "mito_pct_median": None,
+            "doublet_score_median": None,
+            "saturation": None,
+        }
+
+        results_bucket = await QCDashboardService._get_results_bucket(session)
+        if not results_bucket:
+            logger.warning("No results bucket configured, cannot extract metrics")
+            return empty_metrics
+
+        credentials = await GcsStorageService.get_credentials(session)
+
+        try:
+            from google.cloud import storage
+
+            client = storage.Client(credentials=credentials)
+            bucket = client.bucket(results_bucket)
+            prefix = f"experiments/{run.experiment_id}/pipeline-runs/{run.id}/"
+
+            # 1. Check for cached metrics JSON
+            cache_blob = bucket.blob(f"{prefix}qc_metrics.json")
+            if cache_blob.exists():
+                cached = json.loads(cache_blob.download_as_text())
+                logger.info("Using cached qc_metrics.json for run %d", run.id)
+                return cached
+
+            # 2. Find h5ad file in GCS outputs
+            output_files = run.output_files_json or {}
+            files = output_files.get("files", [])
+            h5ad_filename = None
+            for f in files:
+                if f.endswith(".h5ad"):
+                    h5ad_filename = f
+                    break
+
+            if not h5ad_filename:
+                logger.info("No h5ad output for run %d, skipping metrics", run.id)
+                return empty_metrics
+
+            # Find the actual blob (may be nested under the prefix)
+            h5ad_blob = None
+            for blob in bucket.list_blobs(prefix=prefix):
+                if blob.name.endswith(".h5ad"):
+                    h5ad_blob = blob
+                    break
+
+            if not h5ad_blob:
+                logger.warning("h5ad file listed but not found in GCS for run %d", run.id)
+                return empty_metrics
+
+            # 3. Download to temp file and extract metrics
+            with tempfile.NamedTemporaryFile(suffix=".h5ad") as tmp:
+                h5ad_blob.download_to_filename(tmp.name)
+                metrics = QCDashboardService._read_h5ad_metrics(tmp.name)
+
+            # 4. Upload metrics cache to GCS
+            cache_upload_blob = bucket.blob(f"{prefix}qc_metrics_cache.json")
+            cache_upload_blob.upload_from_string(
+                json.dumps(metrics, indent=2),
+                content_type="application/json",
+            )
+            logger.info("Wrote qc_metrics_cache.json for run %d", run.id)
+
+            return metrics
+
+        except Exception as e:
+            logger.warning("Metric extraction from GCS failed for run %d: %s", run.id, e)
+            return empty_metrics
+
+    @staticmethod
+    def _read_h5ad_metrics(path: str) -> dict:
+        """Read an h5ad file and extract QC metrics."""
+        metrics: dict = {
             "cell_count": None,
             "median_reads_per_cell": None,
             "median_genes_per_cell": None,
@@ -128,45 +212,32 @@ class QCDashboardService:
         }
 
         try:
-            # Lazy import heavy dependencies
             import anndata
             import numpy as np
 
-            output_files = run.output_files_json or {}
-            files = output_files.get("files", [])
+            adata = anndata.read_h5ad(path)
+            metrics["cell_count"] = int(adata.n_obs)
 
-            # Find h5ad file in outputs
-            h5ad_path = None
-            for f in files:
-                if f.endswith(".h5ad"):
-                    h5ad_path = f
-                    break
+            if "n_genes" in adata.obs.columns:
+                metrics["median_genes_per_cell"] = float(np.median(adata.obs["n_genes"]))
+            elif "n_genes_by_counts" in adata.obs.columns:
+                metrics["median_genes_per_cell"] = float(np.median(adata.obs["n_genes_by_counts"]))
 
-            if h5ad_path:
-                adata = anndata.read_h5ad(h5ad_path)
-                metrics["cell_count"] = adata.n_obs
+            if "total_counts" in adata.obs.columns:
+                metrics["median_umi_per_cell"] = float(np.median(adata.obs["total_counts"]))
 
-                if "n_genes" in adata.obs.columns:
-                    metrics["median_genes_per_cell"] = float(np.median(adata.obs["n_genes"]))
-                elif "n_genes_by_counts" in adata.obs.columns:
-                    metrics["median_genes_per_cell"] = float(np.median(adata.obs["n_genes_by_counts"]))
+            if "pct_counts_mt" in adata.obs.columns:
+                metrics["mito_pct_median"] = float(np.median(adata.obs["pct_counts_mt"]))
+            elif "pct_counts_mito" in adata.obs.columns:
+                metrics["mito_pct_median"] = float(np.median(adata.obs["pct_counts_mito"]))
 
-                if "total_counts" in adata.obs.columns:
-                    metrics["median_umi_per_cell"] = float(np.median(adata.obs["total_counts"]))
-
-                if "pct_counts_mt" in adata.obs.columns:
-                    metrics["mito_pct_median"] = float(np.median(adata.obs["pct_counts_mt"]))
-                elif "pct_counts_mito" in adata.obs.columns:
-                    metrics["mito_pct_median"] = float(np.median(adata.obs["pct_counts_mito"]))
-
-                if "doublet_score" in adata.obs.columns:
-                    metrics["doublet_score_median"] = float(np.median(adata.obs["doublet_score"]))
+            if "doublet_score" in adata.obs.columns:
+                metrics["doublet_score_median"] = float(np.median(adata.obs["doublet_score"]))
 
         except ImportError:
-            logger.warning("anndata not installed, using placeholder metrics")
-            metrics["cell_count"] = 0
+            logger.warning("anndata not installed, cannot extract h5ad metrics")
         except Exception as e:
-            logger.warning("Metric extraction failed: %s", e)
+            logger.warning("h5ad metric extraction failed: %s", e)
 
         return metrics
 
