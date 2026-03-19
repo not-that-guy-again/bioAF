@@ -14,6 +14,10 @@ jest.mock("next/link", () => {
   };
 });
 
+jest.mock("@/components/shared/LoadingSpinner", () => ({
+  LoadingSpinner: () => <div data-testid="spinner" />,
+}));
+
 // Mock the api module
 jest.mock("@/lib/api", () => ({
   api: {

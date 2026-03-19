@@ -12,6 +12,10 @@ jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+jest.mock("@/components/shared/LoadingSpinner", () => ({
+  LoadingSpinner: () => <div data-testid="spinner" />,
+}));
+
 // Mock API
 const mockApiGet = jest.fn();
 jest.mock("@/lib/api", () => ({
