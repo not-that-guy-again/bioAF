@@ -535,7 +535,6 @@ class KubernetesComputeProvider(ComputeProvider):
         namespace: str,
         has_gcs_secret: bool,
         gcs_work_dir: str | None = None,
-        trace_enabled: bool = False,
     ) -> str:
         """Build a nextflow.config for K8s executor mode.
 
@@ -558,14 +557,6 @@ class KubernetesComputeProvider(ComputeProvider):
             lines.append("wave.enabled = true")
             lines.append("fusion.enabled = true")
             lines.append("fusion.exportStorageCredentials = true")
-
-        # Write trace to a local file on the head pod. Read from the live
-        # pod at completion time for progress data. Pipeline logs are
-        # persisted via GKE Cloud Logging (no gsutil needed).
-        if trace_enabled:
-            lines.append("trace.enabled = true")
-            lines.append("trace.overwrite = true")
-            lines.append("trace.file = '/data/trace.tsv'")
 
         # Build k8s.pod directives for secrets/env (Nextflow doesn't
         # support tolerations in k8s.pod, so node placement is left to
@@ -684,9 +675,7 @@ class KubernetesComputeProvider(ComputeProvider):
             nf_cfg = self._cluster_config or {}
             raw_bucket = nf_cfg.get("raw_bucket_name", "")
             gcs_work_dir = f"gs://{raw_bucket}/nextflow-work" if raw_bucket else None
-            nf_config = self._build_nextflow_k8s_config(
-                namespace, has_gcs_secret, gcs_work_dir, trace_enabled=bool(raw_bucket)
-            )
+            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir)
             # Use heredoc to avoid shell escaping issues with single quotes
             # in Nextflow config values (e.g., 'k8s', 'bioaf-pipelines')
             init_containers.append(
