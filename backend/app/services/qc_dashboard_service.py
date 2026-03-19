@@ -113,7 +113,14 @@ class QCDashboardService:
     @staticmethod
     def _has_plottable_metrics(metrics: dict) -> bool:
         """Check whether any metric needed for plot generation is present."""
-        plottable_keys = ("median_genes_per_cell", "median_umi_per_cell", "mito_pct_median")
+        plottable_keys = (
+            "median_genes_per_cell",
+            "median_umi_per_cell",
+            "mito_pct_median",
+            "total_sequences",
+            "percent_duplicates",
+            "percent_gc",
+        )
         return any(metrics.get(k) is not None for k in plottable_keys)
 
     @staticmethod
@@ -132,6 +139,11 @@ class QCDashboardService:
             "mito_pct_median": None,
             "doublet_score_median": None,
             "saturation": None,
+            "total_sequences": None,
+            "percent_duplicates": None,
+            "percent_gc": None,
+            "avg_sequence_length": None,
+            "total_samples": None,
         }
 
         results_bucket = await QCDashboardService._get_results_bucket(session)
@@ -163,36 +175,46 @@ class QCDashboardService:
                 logger.info("Using cached qc_metrics.json for run %d", run.id)
                 return cached
 
-            # 2. Find h5ad file in GCS outputs
-            output_files = run.output_files_json or {}
-            files = output_files.get("files", [])
-            h5ad_filename = None
-            for f in files:
-                if f.endswith(".h5ad"):
-                    h5ad_filename = f
-                    break
-
-            if not h5ad_filename:
-                logger.info("No h5ad output for run %d, skipping metrics", run.id)
-                return empty_metrics
-
-            # Find the actual blob (may be nested under the prefix)
+            # 2. Try h5ad (single-cell pipelines)
             h5ad_blob = None
             for blob in bucket.list_blobs(prefix=prefix):
                 if blob.name.endswith(".h5ad"):
                     h5ad_blob = blob
                     break
 
-            if not h5ad_blob:
-                logger.warning("h5ad file listed but not found in GCS for run %d", run.id)
-                return empty_metrics
+            if h5ad_blob:
+                with tempfile.NamedTemporaryFile(suffix=".h5ad") as tmp:
+                    h5ad_blob.download_to_filename(tmp.name)
+                    metrics = QCDashboardService._read_h5ad_metrics(tmp.name)
+            else:
+                # 3. Try MultiQC data (bulk/FastQC pipelines)
+                multiqc_blob = None
+                for blob in bucket.list_blobs(prefix=f"{prefix}multiqc/multiqc_data/"):
+                    if blob.name.endswith("multiqc_data.json"):
+                        multiqc_blob = blob
+                        break
 
-            # 3. Download to temp file and extract metrics
-            with tempfile.NamedTemporaryFile(suffix=".h5ad") as tmp:
-                h5ad_blob.download_to_filename(tmp.name)
-                metrics = QCDashboardService._read_h5ad_metrics(tmp.name)
+                if multiqc_blob:
+                    logger.info("Found multiqc_data.json for run %d", run.id)
+                    multiqc_text = multiqc_blob.download_as_text()
+                    metrics = QCDashboardService._read_multiqc_metrics(multiqc_text)
+                else:
+                    # 4. Try parsing FastQC general stats from TSV
+                    general_stats_blob = None
+                    for blob in bucket.list_blobs(prefix=f"{prefix}multiqc/multiqc_data/"):
+                        if "general_stats" in blob.name and blob.name.endswith(".txt"):
+                            general_stats_blob = blob
+                            break
 
-            # 4. Upload metrics cache to GCS
+                    if general_stats_blob:
+                        logger.info("Found multiqc general stats for run %d", run.id)
+                        stats_text = general_stats_blob.download_as_text()
+                        metrics = QCDashboardService._read_multiqc_general_stats(stats_text)
+                    else:
+                        logger.info("No h5ad or multiqc data for run %d", run.id)
+                        return empty_metrics
+
+            # 5. Upload metrics cache to GCS
             cache_upload_blob = bucket.blob(f"{prefix}qc_metrics_cache.json")
             cache_upload_blob.upload_from_string(
                 json.dumps(metrics, indent=2),
@@ -250,17 +272,127 @@ class QCDashboardService:
         return metrics
 
     @staticmethod
+    def _read_multiqc_metrics(multiqc_json_text: str) -> dict:
+        """Parse multiqc_data.json and extract aggregate FastQC metrics."""
+        metrics: dict = {
+            "total_sequences": None,
+            "percent_duplicates": None,
+            "percent_gc": None,
+            "avg_sequence_length": None,
+            "total_samples": None,
+        }
+        try:
+            data = json.loads(multiqc_json_text)
+            general_stats = data.get("report_general_stats_data", [])
+
+            total_seqs = []
+            dup_pcts = []
+            gc_pcts = []
+            seq_lengths = []
+
+            for stats_section in general_stats:
+                for _sample_name, sample_stats in stats_section.items():
+                    if "Total Sequences" in sample_stats:
+                        total_seqs.append(sample_stats["Total Sequences"])
+                    if "total_deduplicated_percentage" in sample_stats:
+                        dup_pcts.append(100 - sample_stats["total_deduplicated_percentage"])
+                    if "%GC" in sample_stats:
+                        gc_pcts.append(sample_stats["%GC"])
+                    if "avg_sequence_length" in sample_stats:
+                        seq_lengths.append(sample_stats["avg_sequence_length"])
+
+            if total_seqs:
+                metrics["total_sequences"] = int(sum(total_seqs))
+                metrics["total_samples"] = len(total_seqs)
+            if dup_pcts:
+                metrics["percent_duplicates"] = round(sum(dup_pcts) / len(dup_pcts), 1)
+            if gc_pcts:
+                metrics["percent_gc"] = round(sum(gc_pcts) / len(gc_pcts), 1)
+            if seq_lengths:
+                metrics["avg_sequence_length"] = round(sum(seq_lengths) / len(seq_lengths), 1)
+
+        except Exception as e:
+            logger.warning("MultiQC JSON parsing failed: %s", e)
+
+        return metrics
+
+    @staticmethod
+    def _read_multiqc_general_stats(stats_tsv_text: str) -> dict:
+        """Parse multiqc_general_stats.txt (TSV) as fallback."""
+        import csv
+
+        metrics: dict = {
+            "total_sequences": None,
+            "percent_duplicates": None,
+            "percent_gc": None,
+            "avg_sequence_length": None,
+            "total_samples": None,
+        }
+        try:
+            reader = csv.DictReader(stats_tsv_text.strip().splitlines(), delimiter="\t")
+            total_seqs = []
+            dup_pcts = []
+            gc_pcts = []
+            seq_lengths = []
+
+            for row in reader:
+                for key, val in row.items():
+                    if not val or not key:
+                        continue
+                    k = key.lower()
+                    try:
+                        v = float(val)
+                    except ValueError:
+                        continue
+                    if "total_sequences" in k or "total sequences" in k:
+                        total_seqs.append(v)
+                    if "deduplicated_percentage" in k:
+                        dup_pcts.append(100 - v)
+                    if "%gc" in k or "percent_gc" in k:
+                        gc_pcts.append(v)
+                    if "avg_sequence_length" in k:
+                        seq_lengths.append(v)
+
+            if total_seqs:
+                metrics["total_sequences"] = int(sum(total_seqs))
+                metrics["total_samples"] = len(total_seqs)
+            if dup_pcts:
+                metrics["percent_duplicates"] = round(sum(dup_pcts) / len(dup_pcts), 1)
+            if gc_pcts:
+                metrics["percent_gc"] = round(sum(gc_pcts) / len(gc_pcts), 1)
+            if seq_lengths:
+                metrics["avg_sequence_length"] = round(sum(seq_lengths) / len(seq_lengths), 1)
+
+        except Exception as e:
+            logger.warning("MultiQC general stats parsing failed: %s", e)
+
+        return metrics
+
+    @staticmethod
     def _compute_quality_rating(metrics: dict) -> str:
         """Compute quality rating based on metrics thresholds."""
         mito = metrics.get("mito_pct_median")
         genes = metrics.get("median_genes_per_cell")
         reads = metrics.get("median_reads_per_cell")
 
+        # Single-cell metrics
         if mito is not None and mito < 5 and genes is not None and genes > 1000:
             if reads is None or reads > 2000:
                 return "good"
         if mito is not None and mito < 10 and genes is not None and genes > 500:
             return "acceptable"
+
+        # Bulk/FastQC metrics
+        dup = metrics.get("percent_duplicates")
+        gc = metrics.get("percent_gc")
+        total = metrics.get("total_sequences")
+        if total is not None:
+            if dup is not None and dup < 30 and gc is not None and 35 <= gc <= 65:
+                return "good"
+            if dup is not None and dup < 50:
+                return "acceptable"
+            return "acceptable" if dup is None else "concerning"
+
         return "concerning"
 
     @staticmethod
@@ -280,12 +412,31 @@ class QCDashboardService:
         if umi is not None:
             parts.append(f"and **{umi:,.0f} UMIs per cell**")
 
+        # Bulk/FastQC metrics
+        total_seqs = metrics.get("total_sequences")
+        if total_seqs is not None:
+            n_samples = metrics.get("total_samples", 0)
+            parts.append(f"**{total_seqs:,} total sequences** across **{n_samples} samples**")
+
+        avg_len = metrics.get("avg_sequence_length")
+        if avg_len is not None:
+            parts.append(f"with average read length **{avg_len:.0f} bp**")
+
         summary = " ".join(parts) + "." if parts else "No metrics available."
 
         mito = metrics.get("mito_pct_median")
         if mito is not None:
             health = "healthy, under 5% threshold" if mito < 5 else "elevated" if mito < 10 else "high"
             summary += f" Mitochondrial content is **{mito:.1f}%** ({health})."
+
+        dup = metrics.get("percent_duplicates")
+        if dup is not None:
+            health = "low" if dup < 30 else "moderate" if dup < 50 else "high"
+            summary += f" Duplication rate is **{dup:.1f}%** ({health})."
+
+        gc = metrics.get("percent_gc")
+        if gc is not None:
+            summary += f" GC content is **{gc:.0f}%**."
 
         sat = metrics.get("saturation")
         if sat is not None:

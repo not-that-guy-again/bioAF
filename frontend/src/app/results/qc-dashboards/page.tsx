@@ -123,6 +123,21 @@ export default function QCDashboardsPage() {
                   {selected.metrics.saturation != null && (
                     <MetricCard label="Saturation" value={`${(selected.metrics.saturation * 100).toFixed(1)}%`} />
                   )}
+                  {selected.metrics.total_sequences != null && (
+                    <MetricCard label="Total Sequences" value={selected.metrics.total_sequences.toLocaleString()} />
+                  )}
+                  {selected.metrics.total_samples != null && (
+                    <MetricCard label="Samples" value={String(selected.metrics.total_samples)} />
+                  )}
+                  {selected.metrics.percent_duplicates != null && (
+                    <MetricCard label="Duplication" value={`${selected.metrics.percent_duplicates.toFixed(1)}%`} />
+                  )}
+                  {selected.metrics.percent_gc != null && (
+                    <MetricCard label="GC Content" value={`${selected.metrics.percent_gc.toFixed(0)}%`} />
+                  )}
+                  {selected.metrics.avg_sequence_length != null && (
+                    <MetricCard label="Avg Read Length" value={`${selected.metrics.avg_sequence_length.toFixed(0)} bp`} />
+                  )}
                 </div>
 
                 {selected.plots.length > 0 && (

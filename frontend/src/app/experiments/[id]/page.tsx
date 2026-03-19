@@ -1196,6 +1196,21 @@ function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
               {selectedQc.metrics.saturation != null && (
                 <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Saturation</p><p className="font-semibold">{(selectedQc.metrics.saturation * 100).toFixed(1)}%</p></div>
               )}
+              {selectedQc.metrics.total_sequences != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Total Sequences</p><p className="font-semibold">{selectedQc.metrics.total_sequences.toLocaleString()}</p></div>
+              )}
+              {selectedQc.metrics.total_samples != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Samples</p><p className="font-semibold">{selectedQc.metrics.total_samples}</p></div>
+              )}
+              {selectedQc.metrics.percent_duplicates != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Duplication</p><p className="font-semibold">{selectedQc.metrics.percent_duplicates.toFixed(1)}%</p></div>
+              )}
+              {selectedQc.metrics.percent_gc != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">GC Content</p><p className="font-semibold">{selectedQc.metrics.percent_gc.toFixed(0)}%</p></div>
+              )}
+              {selectedQc.metrics.avg_sequence_length != null && (
+                <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Avg Read Length</p><p className="font-semibold">{selectedQc.metrics.avg_sequence_length.toFixed(0)} bp</p></div>
+              )}
             </div>
           </div>
         ) : qcDashboards.length === 0 ? (
