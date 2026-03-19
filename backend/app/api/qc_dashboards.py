@@ -122,3 +122,31 @@ async def generate_dashboard(
         return _dashboard_response(d)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@router.post("/regenerate/{pipeline_run_id}", response_model=QCDashboardResponse)
+async def regenerate_dashboard(
+    pipeline_run_id: int,
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Delete existing QC dashboard for a run and regenerate from current GCS data."""
+    org_id = int(current_user["org_id"])
+
+    from app.services.component_service import ComponentService
+
+    if not await ComponentService.is_enabled(session, "qc_dashboard"):
+        raise HTTPException(400, "QC Dashboard component is not enabled")
+
+    # Delete existing dashboard if present
+    existing = await QCDashboardService.get_dashboard_by_run(session, org_id, pipeline_run_id)
+    if existing:
+        await session.delete(existing)
+        await session.flush()
+
+    try:
+        d = await QCDashboardService.generate_qc_dashboard(session, org_id, pipeline_run_id)
+        await session.commit()
+        return _dashboard_response(d)
+    except ValueError as e:
+        raise HTTPException(400, str(e))

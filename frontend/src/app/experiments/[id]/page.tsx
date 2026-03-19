@@ -1098,6 +1098,7 @@ export default function ExperimentDetailPage() {
 function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
   const [qcDashboards, setQcDashboards] = useState<QCDashboardSummary[]>([]);
   const [selectedQc, setSelectedQc] = useState<QCDashboardResponse | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
   const [cellxgenePubs, setCellxgenePubs] = useState<CellxgenePublicationResponse[]>([]);
   const [plots, setPlots] = useState<PlotArchiveResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1130,6 +1131,21 @@ function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
     }
   };
 
+  const regenerateQc = async (runId: number) => {
+    setRegenerating(true);
+    try {
+      const data = await api.post<QCDashboardResponse>(`/api/qc-dashboards/regenerate/${runId}`, {});
+      setSelectedQc(data);
+      // Refresh the list
+      const updated = await api.get<QCDashboardSummary[]>(`/api/qc-dashboards?experiment_id=${experimentId}`);
+      setQcDashboards(updated);
+    } catch {
+      // ignore
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   const qualityColor = (rating: string) => {
     switch (rating) {
       case "excellent": return "bg-green-100 text-green-700";
@@ -1153,9 +1169,18 @@ function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
             </button>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold">Run #{selectedQc.pipeline_run_id}</h3>
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${qualityColor(selectedQc.metrics.quality_rating)}`}>
-                {selectedQc.metrics.quality_rating}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => regenerateQc(selectedQc.pipeline_run_id)}
+                  disabled={regenerating}
+                  className="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {regenerating ? "Regenerating..." : "Regenerate"}
+                </button>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${qualityColor(selectedQc.metrics.quality_rating)}`}>
+                  {selectedQc.metrics.quality_rating}
+                </span>
+              </div>
             </div>
             {selectedQc.summary_text && <p className="text-sm text-gray-600 mb-4">{selectedQc.summary_text}</p>}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

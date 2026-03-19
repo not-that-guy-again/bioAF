@@ -19,6 +19,7 @@ export default function QCDashboardsPage() {
   const [dashboards, setDashboards] = useState<QCDashboardSummary[]>([]);
   const [selected, setSelected] = useState<QCDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -39,6 +40,20 @@ export default function QCDashboardsPage() {
       setSelected(data);
     } catch {
       // ignore
+    }
+  };
+
+  const regenerateQc = async (runId: number) => {
+    setRegenerating(true);
+    try {
+      const data = await api.post<QCDashboardResponse>(`/api/qc-dashboards/regenerate/${runId}`, {});
+      setSelected(data);
+      const updated = await api.get<QCDashboardSummary[]>("/api/qc-dashboards");
+      setDashboards(updated);
+    } catch {
+      // ignore
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -68,9 +83,18 @@ export default function QCDashboardsPage() {
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold">QC Dashboard - Run #{selected.pipeline_run_id}</h2>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${qualityColor(selected.metrics.quality_rating)}`}>
-                    {selected.metrics.quality_rating}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => regenerateQc(selected.pipeline_run_id)}
+                      disabled={regenerating}
+                      className="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+                    >
+                      {regenerating ? "Regenerating..." : "Regenerate"}
+                    </button>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${qualityColor(selected.metrics.quality_rating)}`}>
+                      {selected.metrics.quality_rating}
+                    </span>
+                  </div>
                 </div>
 
                 {selected.summary_text && (
