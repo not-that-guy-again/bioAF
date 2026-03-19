@@ -648,11 +648,25 @@ class KubernetesComputeProvider(ComputeProvider):
         if pipeline_source and not command:
             container_image = self.NEXTFLOW_IMAGE
 
-            # Write the Nextflow HTML report directly to GCS so it persists
-            # after the head pod is cleaned up.
             nf_cfg = self._cluster_config or {}
             raw_bucket = nf_cfg.get("raw_bucket_name", "")
+
+            # Write the Nextflow HTML report directly to GCS so it persists
+            # after the head pod is cleaned up.
             report_gcs_path = f"gs://{raw_bucket}/nextflow-reports/{job_name}/report.html" if raw_bucket else ""
+
+            # Set --outdir to a GCS path so pipeline outputs persist after
+            # pod cleanup.  The path mirrors the prefix that
+            # _gcs_collect_outputs and _extract_metrics use to find outputs.
+            experiment_id = job_spec.get("experiment_id", "unknown")
+            # Derive results bucket from raw_bucket_name (bioaf-raw-X -> bioaf-results-X)
+            results_bucket = (
+                raw_bucket.replace("bioaf-raw-", "bioaf-results-", 1) if raw_bucket.startswith("bioaf-raw-") else ""
+            )
+            if results_bucket and "outdir" not in job_spec.get("parameters", {}):
+                gcs_outdir = f"gs://{results_bucket}/experiments/{experiment_id}/pipeline-runs/{run_id}"
+                job_spec = {**job_spec, "parameters": {**job_spec.get("parameters", {}), "outdir": gcs_outdir}}
+
             command = self._build_nextflow_command(job_spec, report_gcs_path=report_gcs_path)
 
         # Build init containers for GCS input staging
