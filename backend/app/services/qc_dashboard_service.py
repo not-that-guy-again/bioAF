@@ -139,6 +139,10 @@ class QCDashboardService:
             logger.warning("No results bucket configured, cannot extract metrics")
             return empty_metrics
 
+        logger.info(
+            "Looking for metrics in gs://%s/experiments/%s/pipeline-runs/%s/", results_bucket, run.experiment_id, run.id
+        )
+
         credentials = await GcsStorageService.get_credentials(session)
 
         try:
@@ -147,6 +151,10 @@ class QCDashboardService:
             client = storage.Client(credentials=credentials)
             bucket = client.bucket(results_bucket)
             prefix = f"experiments/{run.experiment_id}/pipeline-runs/{run.id}/"
+
+            # Log what files are at this prefix
+            blobs_at_prefix = [b.name for b in bucket.list_blobs(prefix=prefix, max_results=20)]
+            logger.info("Files at prefix for run %d: %s", run.id, blobs_at_prefix)
 
             # 1. Check for cached metrics JSON
             cache_blob = bucket.blob(f"{prefix}qc_metrics.json")
@@ -294,12 +302,27 @@ class QCDashboardService:
 
     @staticmethod
     async def _get_results_bucket(session: AsyncSession) -> str | None:
-        """Read results bucket name from platform_config."""
-        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'"))
-        name = result.scalar_one_or_none()
-        if not name or name == "null":
-            return None
-        return name
+        """Read results bucket name from platform_config.
+
+        Checks results_bucket_name first, then falls back to deriving it
+        from raw_bucket_name (bioaf-raw-X -> bioaf-results-X) since the
+        raw bucket is populated by Terraform before results_bucket_name.
+        """
+        result = await session.execute(
+            text("SELECT key, value FROM platform_config WHERE key IN ('results_bucket_name', 'raw_bucket_name')")
+        )
+        config = {r[0]: r[1] for r in result.fetchall()}
+
+        results = config.get("results_bucket_name")
+        if results and results != "null":
+            return results
+
+        # Derive from raw_bucket_name as fallback
+        raw = config.get("raw_bucket_name", "")
+        if raw and raw.startswith("bioaf-raw-"):
+            return raw.replace("bioaf-raw-", "bioaf-results-", 1)
+
+        return None
 
     @staticmethod
     async def _upload_plot_to_gcs(
