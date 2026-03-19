@@ -154,6 +154,23 @@ export default function PipelineRunDetailPage() {
     );
   }
 
+  function formatDateTime(dateStr: string | null | undefined): string {
+    if (!dateStr) return "—";
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " " +
+      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  }
+
+  function formatDuration(startedAt: string | null | undefined, completedAt: string | null | undefined): string {
+    if (!startedAt) return "—";
+    const start = new Date(startedAt).getTime();
+    const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+    const seconds = Math.floor((end - start) / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  }
+
   const isActive = ["running", "pending"].includes(run.status);
   const tabs: { key: Tab; label: string }[] = [
     { key: "logs", label: "Logs" },
@@ -179,6 +196,15 @@ export default function PipelineRunDetailPage() {
             {!isActive && (
               <button onClick={handleReproduce} className="ml-auto bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm hover:bg-bioaf-700">Reproduce</button>
             )}
+          </div>
+
+          {/* Timing metadata */}
+          <div className="bg-white rounded-lg shadow p-4 mb-6 flex gap-6">
+            <div><span className="text-xs text-gray-500">Started</span><p className="text-sm font-medium">{formatDateTime(run.started_at)}</p></div>
+            {run.completed_at && (
+              <div><span className="text-xs text-gray-500">Completed</span><p className="text-sm font-medium">{formatDateTime(run.completed_at)}</p></div>
+            )}
+            <div><span className="text-xs text-gray-500">Duration</span><p className="text-sm font-medium">{formatDuration(run.started_at, run.completed_at)}</p></div>
           </div>
 
           {/* Overall progress */}

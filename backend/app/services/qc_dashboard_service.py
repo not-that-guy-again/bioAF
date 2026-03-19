@@ -9,6 +9,7 @@ from app.models.pipeline_run import PipelineRun
 from app.models.qc_dashboard import QCDashboard
 from app.services.audit_service import log_action
 from app.services.file_service import FileService
+from app.services.gcs_storage import GcsStorageService
 
 logger = logging.getLogger("bioaf.qc_dashboard_service")
 
@@ -49,13 +50,15 @@ class QCDashboardService:
             # Generate summary text
             summary = QCDashboardService._generate_summary(metrics)
 
-            # Generate plots
-            plots_meta = await QCDashboardService._generate_plots(session, org_id, dashboard.id, metrics)
+            # Only generate plots when we have real metric values to plot
+            plots_meta: list[dict] = []
+            if QCDashboardService._has_plottable_metrics(metrics):
+                plots_meta = await QCDashboardService._generate_plots(session, org_id, dashboard.id, metrics)
 
             dashboard.metrics_json = metrics
             dashboard.summary_text = summary
             dashboard.plots_json = plots_meta
-            dashboard.status = "ready"
+            dashboard.status = "ready" if QCDashboardService._has_plottable_metrics(metrics) else "awaiting_metrics"
             dashboard.generated_at = datetime.now(timezone.utc)
 
         except Exception as e:
@@ -104,6 +107,12 @@ class QCDashboardService:
         query = query.order_by(QCDashboard.created_at.desc())
         result = await session.execute(query)
         return list(result.scalars().all())
+
+    @staticmethod
+    def _has_plottable_metrics(metrics: dict) -> bool:
+        """Check whether any metric needed for plot generation is present."""
+        plottable_keys = ("median_genes_per_cell", "median_umi_per_cell", "mito_pct_median")
+        return any(metrics.get(k) is not None for k in plottable_keys)
 
     @staticmethod
     async def _extract_metrics(run: PipelineRun) -> dict:
@@ -222,10 +231,24 @@ class QCDashboardService:
         return name
 
     @staticmethod
+    async def _upload_plot_to_gcs(
+        bucket_name: str, blob_path: str, buf: io.BytesIO, credentials: object = None
+    ) -> None:
+        """Upload a plot image buffer to GCS."""
+        from google.cloud import storage
+
+        client = storage.Client(credentials=credentials)
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        buf.seek(0)
+        blob.upload_from_file(buf, content_type="image/png")
+
+    @staticmethod
     async def _generate_plots(session: AsyncSession, org_id: int, dashboard_id: int, metrics: dict) -> list[dict]:
         """Generate QC plot images and upload to GCS."""
         plots_meta = []
         results_bucket = await QCDashboardService._get_results_bucket(session)
+        credentials = await GcsStorageService.get_credentials(session)
 
         try:
             # Lazy import matplotlib
@@ -278,16 +301,26 @@ class QCDashboardService:
                     plt.close(fig)
                     buf.seek(0)
 
-                    # Create file record
+                    # Build GCS path and create file record
                     plot_filename = f"qc_dashboard_{dashboard_id}_{prefix}.png"
+                    blob_path = f"qc_plots/{plot_filename}"
+                    gcs_uri = f"gs://{results_bucket}/{blob_path}" if results_bucket else f"gs://unset/{plot_filename}"
+
+                    # Upload PNG to GCS so the file actually exists
+                    if results_bucket:
+                        try:
+                            await QCDashboardService._upload_plot_to_gcs(
+                                results_bucket, blob_path, buf, credentials=credentials
+                            )
+                        except Exception as e:
+                            logger.warning("Failed to upload plot %s to GCS: %s", plot_filename, e)
+
                     file = await FileService.create_file_record(
                         session,
                         org_id=org_id,
                         user_id=None,
                         filename=plot_filename,
-                        gcs_uri=f"gs://{results_bucket}/qc_plots/{plot_filename}"
-                        if results_bucket
-                        else f"gs://unset/{plot_filename}",
+                        gcs_uri=gcs_uri,
                         size_bytes=buf.getbuffer().nbytes,
                         md5_checksum=None,
                         file_type="png",
