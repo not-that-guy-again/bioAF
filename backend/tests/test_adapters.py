@@ -281,29 +281,26 @@ class TestGetJobProgress:
         assert result["processes"][1]["status"] == "running"
         assert result["processes"][2]["status"] == "cached"
 
-    def test_nf_config_includes_trace_settings(self):
-        """Nextflow config builder includes trace settings when trace_enabled is True."""
+    def test_nf_command_includes_report_flag(self):
+        """Nextflow command includes -with-report when report_gcs_path is set."""
         from app.adapters.compute.kubernetes import KubernetesComputeProvider
 
-        config = KubernetesComputeProvider._build_nextflow_k8s_config(
-            namespace="bioaf-pipelines",
-            has_gcs_secret=True,
-            gcs_work_dir="gs://my-bucket/nextflow-work",
-            trace_enabled=True,
+        cmd = KubernetesComputeProvider._build_nextflow_command(
+            {"pipeline_source": "nf-core/rnaseq", "parameters": {}},
+            report_gcs_path="gs://my-bucket/nextflow-reports/bioaf-pipeline-1/report.html",
         )
-        assert "trace.enabled = true" in config
-        assert "trace.overwrite = true" in config
-        assert "trace.file = '/data/trace.tsv'" in config
+        shell_cmd = cmd[2]
+        assert "-with-report gs://my-bucket/nextflow-reports/bioaf-pipeline-1/report.html" in shell_cmd
 
-    def test_nf_config_omits_trace_when_not_enabled(self):
-        """Nextflow config builder omits trace settings when trace_enabled is False."""
+    def test_nf_command_omits_report_flag_when_empty(self):
+        """Nextflow command omits -with-report when no path is given."""
         from app.adapters.compute.kubernetes import KubernetesComputeProvider
 
-        config = KubernetesComputeProvider._build_nextflow_k8s_config(
-            namespace="bioaf-pipelines",
-            has_gcs_secret=False,
+        cmd = KubernetesComputeProvider._build_nextflow_command(
+            {"pipeline_source": "nf-core/rnaseq", "parameters": {}},
         )
-        assert "trace.enabled" not in config
+        shell_cmd = cmd[2]
+        assert "-with-report" not in shell_cmd
 
 
 class TestCloudLoggingFallback:

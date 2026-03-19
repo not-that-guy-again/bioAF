@@ -121,6 +121,12 @@ class KubernetesComputeProvider(ComputeProvider):
             "basis": "input file count heuristic",
         }
 
+    async def get_job_report(self, job_id: str) -> str:
+        """Read the Nextflow HTML report from GCS."""
+        if self.is_local:
+            return ""
+        return await self._read_gcs_report(job_id)
+
     async def get_job_progress(self, job_id: str) -> dict:
         if self.is_local:
             return await self._local_get_job_progress(job_id)
@@ -497,7 +503,7 @@ class KubernetesComputeProvider(ComputeProvider):
     NEXTFLOW_IMAGE = "nextflow/nextflow:25.10.4"
 
     @staticmethod
-    def _build_nextflow_command(job_spec: dict) -> list[str]:
+    def _build_nextflow_command(job_spec: dict, report_gcs_path: str = "") -> list[str]:
         """Build a Nextflow run command from the job spec.
 
         Translates pipeline_source, pipeline_version, parameters, and
@@ -520,6 +526,10 @@ class KubernetesComputeProvider(ComputeProvider):
 
         if sample_sheet:
             parts.extend(["--input", "/data/samplesheet.csv"])
+
+        # Write Nextflow HTML report to GCS so it persists after pod cleanup
+        if report_gcs_path:
+            parts.extend(["-with-report", report_gcs_path])
 
         # Ensure outdir is always set (nf-core pipelines require it)
         if "outdir" not in parameters:
@@ -637,11 +647,13 @@ class KubernetesComputeProvider(ComputeProvider):
         # explicit command was provided
         if pipeline_source and not command:
             container_image = self.NEXTFLOW_IMAGE
-            command = self._build_nextflow_command(job_spec)
 
-            # Pipeline logs are persisted via GKE Cloud Logging (automatic).
-            # Trace file is written to /data/trace.tsv by Nextflow config and
-            # read from the live pod or parsed at completion time.
+            # Write the Nextflow HTML report directly to GCS so it persists
+            # after the head pod is cleaned up.
+            nf_cfg = self._cluster_config or {}
+            raw_bucket = nf_cfg.get("raw_bucket_name", "")
+            report_gcs_path = f"gs://{raw_bucket}/nextflow-reports/{job_name}/report.html" if raw_bucket else ""
+            command = self._build_nextflow_command(job_spec, report_gcs_path=report_gcs_path)
 
         # Build init containers for GCS input staging
         init_containers = []
@@ -917,6 +929,36 @@ class KubernetesComputeProvider(ComputeProvider):
         except Exception:
             logger.warning("Could not read log file gs://%s/%s", raw_bucket, log_path)
             return None
+
+    async def _read_gcs_report(self, job_id: str) -> str:
+        """Read the Nextflow HTML report from GCS. Returns empty string if unavailable."""
+        cfg = self._cluster_config or {}
+        raw_bucket = cfg.get("raw_bucket_name", "")
+        if not raw_bucket:
+            return ""
+
+        sa_key = cfg.get("gcp_service_account_key", "")
+        report_path = f"nextflow-reports/{job_id}/report.html"
+
+        try:
+            from google.cloud import storage as gcs_storage
+
+            if sa_key:
+                credentials = _get_gcp_credentials(sa_key)
+                storage_client = gcs_storage.Client(credentials=credentials)
+            else:
+                storage_client = gcs_storage.Client()
+
+            bucket = storage_client.bucket(raw_bucket)
+            blob = bucket.blob(report_path)
+
+            if not blob.exists():
+                return ""
+
+            return blob.download_as_text()
+        except Exception:
+            logger.warning("Could not read report gs://%s/%s", raw_bucket, report_path)
+            return ""
 
     def _read_cloud_logging(self, job_id: str) -> str | None:
         """Read pipeline logs from GKE Cloud Logging.
