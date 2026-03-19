@@ -77,7 +77,7 @@ export function CostBudgetWidget() {
 
   useEffect(() => {
     api
-      .get<CostSummaryResponse>("/api/costs/summary")
+      .getWithRetry<CostSummaryResponse>("/api/costs/summary")
       .then((res) => {
         setData({
           current_spend: res.current_month_spend,

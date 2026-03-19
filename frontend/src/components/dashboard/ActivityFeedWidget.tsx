@@ -20,7 +20,7 @@ export function ActivityFeedWidget() {
 
   useEffect(() => {
     api
-      .get<{ events: ActivityEvent[] }>("/api/activity-feed?page_size=10")
+      .getWithRetry<{ events: ActivityEvent[] }>("/api/activity-feed?page_size=10")
       .then((data) => setEvents(data.events))
       .catch(() => setError("Failed to load activity feed"))
       .finally(() => setLoading(false));

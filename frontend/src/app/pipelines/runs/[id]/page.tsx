@@ -43,7 +43,9 @@ export default function PipelineRunDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("logs");
   const [report, setReport] = useState<string>("");
+  const [reportLoading, setReportLoading] = useState(false);
   const [logs, setLogs] = useState<{ stdout: string; stderr: string }>({ stdout: "", stderr: "" });
+  const [logsLoading, setLogsLoading] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState<string>("");
   const [provenance, setProvenance] = useState<Record<string, unknown> | null>(null);
   const [references, setReferences] = useState<ReferenceDataset[]>([]);
@@ -90,22 +92,24 @@ export default function PipelineRunDetailPage() {
   }
 
   async function loadReport() {
+    setReportLoading(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/api/pipeline-runs/${runId}/report`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("bioaf_token")}` },
       });
       setReport(await res.text());
-    } catch {}
+    } catch {} finally { setReportLoading(false); }
   }
 
   async function loadLogs(processName?: string) {
+    setLogsLoading(true);
     try {
       const url = processName
         ? `/api/pipeline-runs/${runId}/logs/${encodeURIComponent(processName)}`
         : `/api/pipeline-runs/${runId}/logs`;
       const data = await api.get<{ stdout: string; stderr: string }>(url);
       setLogs(data);
-    } catch {}
+    } catch {} finally { setLogsLoading(false); }
   }
 
   async function loadProvenance() {
@@ -123,10 +127,10 @@ export default function PipelineRunDetailPage() {
   }
 
   useEffect(() => {
-    if (activeTab === "report") loadReport();
+    if (activeTab === "report" && !["running", "pending"].includes(run?.status ?? "")) loadReport();
     if (activeTab === "provenance") loadProvenance();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, runId]);
+  }, [activeTab, runId, run?.status]);
 
   useEffect(() => {
     if (activeTab !== "logs") return;
@@ -340,7 +344,13 @@ export default function PipelineRunDetailPage() {
               <h2 className="text-lg font-semibold mb-4">Nextflow Report</h2>
               {report ? (
                 <iframe srcDoc={report} className="w-full h-[600px] border rounded" title="Nextflow Report" />
-              ) : <p className="text-gray-400">No report available yet</p>}
+              ) : isActive ? (
+                <p className="text-gray-400">Reports are available after the pipeline run completes.</p>
+              ) : reportLoading ? (
+                <div className="flex items-center gap-2 text-gray-400"><LoadingSpinner size="sm" /><span>Loading report...</span></div>
+              ) : (
+                <p className="text-gray-400">No report available.</p>
+              )}
             </div>
           )}
 
@@ -357,18 +367,22 @@ export default function PipelineRunDetailPage() {
                 )}
               </div>
               {(selectedProcess || (run.k8s_job_name && !run.processes.length)) ? (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium mb-1">stdout</h3>
-                    <pre className="text-xs bg-gray-900 text-green-400 p-4 rounded overflow-auto max-h-96 whitespace-pre-wrap">{logs.stdout || "(empty)"}</pre>
-                  </div>
-                  {logs.stderr && (
+                logsLoading ? (
+                  <div className="flex items-center gap-2 text-gray-400"><LoadingSpinner size="sm" /><span>Loading logs...</span></div>
+                ) : (
+                  <div className="space-y-4">
                     <div>
-                      <h3 className="text-sm font-medium mb-1">stderr</h3>
-                      <pre className="text-xs bg-gray-900 text-red-400 p-4 rounded overflow-auto max-h-64 whitespace-pre-wrap">{logs.stderr || "(empty)"}</pre>
+                      <h3 className="text-sm font-medium mb-1">stdout</h3>
+                      <pre className="text-xs bg-gray-900 text-green-400 p-4 rounded overflow-auto max-h-96 whitespace-pre-wrap">{logs.stdout || "(empty)"}</pre>
                     </div>
-                  )}
-                </div>
+                    {logs.stderr && (
+                      <div>
+                        <h3 className="text-sm font-medium mb-1">stderr</h3>
+                        <pre className="text-xs bg-gray-900 text-red-400 p-4 rounded overflow-auto max-h-64 whitespace-pre-wrap">{logs.stderr || "(empty)"}</pre>
+                      </div>
+                    )}
+                  </div>
+                )
               ) : <p className="text-gray-400">Select a process to view logs</p>}
             </div>
           )}

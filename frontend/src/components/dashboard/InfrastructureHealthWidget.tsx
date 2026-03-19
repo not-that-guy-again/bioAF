@@ -16,7 +16,7 @@ export function InfrastructureHealthWidget() {
 
   useEffect(() => {
     api
-      .get<{ components: ComponentHealth[] }>("/api/components")
+      .getWithRetry<{ components: ComponentHealth[] }>("/api/components")
       .then((data) => setComponents(data.components.filter((c) => c.enabled)))
       .catch(() => setError("Failed to load component health"))
       .finally(() => setLoading(false));

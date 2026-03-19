@@ -18,8 +18,8 @@ export function RunningJobsWidget() {
 
   useEffect(() => {
     Promise.all([
-      api.get<{ total: number }>("/api/pipeline-runs?status=running&page_size=1").catch(() => ({ total: 0 })),
-      api.get<{ total: number }>("/api/pipeline-runs?status=pending&page_size=1").catch(() => ({ total: 0 })),
+      api.getWithRetry<{ total: number }>("/api/pipeline-runs?status=running&page_size=1").catch(() => ({ total: 0 })),
+      api.getWithRetry<{ total: number }>("/api/pipeline-runs?status=pending&page_size=1").catch(() => ({ total: 0 })),
     ])
       .then(([running, pending]) => {
         setStats({

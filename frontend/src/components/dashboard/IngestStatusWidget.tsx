@@ -17,9 +17,9 @@ export function IngestStatusWidget() {
 
   useEffect(() => {
     Promise.all([
-      api.get<{ total: number }>("/api/files?page_size=1").catch(() => ({ total: 0 })),
-      api.get<unknown[]>("/api/ingest/unmatched").catch(() => []),
-      api.get<unknown[]>("/api/ingest/unclaimed").catch(() => []),
+      api.getWithRetry<{ total: number }>("/api/files?page_size=1").catch(() => ({ total: 0 })),
+      api.getWithRetry<unknown[]>("/api/ingest/unmatched").catch(() => []),
+      api.getWithRetry<unknown[]>("/api/ingest/unclaimed").catch(() => []),
     ])
       .then(([filesResp, unmatched, unclaimed]) => {
         setStats({

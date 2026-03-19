@@ -15,7 +15,10 @@ jest.mock("next/navigation", () => ({
 // Mock API
 const mockApiGet = jest.fn();
 jest.mock("@/lib/api", () => ({
-  api: { get: (...args: unknown[]) => mockApiGet(...args) },
+  api: {
+    get: (...args: unknown[]) => mockApiGet(...args),
+    getWithRetry: (...args: unknown[]) => mockApiGet(...args),
+  },
 }));
 
 describe("Dashboard Widgets", () => {
