@@ -304,3 +304,107 @@ class TestGetJobProgress:
             has_gcs_secret=False,
         )
         assert "trace.enabled" not in config
+
+
+class TestCloudLoggingFallback:
+    """Tests for Cloud Logging fallback in _k8s_get_job_logs."""
+
+    def test_read_cloud_logging_returns_log_entries(self):
+        """_read_cloud_logging returns joined log text from Cloud Logging."""
+        from unittest.mock import MagicMock, patch
+
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        provider = KubernetesComputeProvider()
+        provider._cluster_config = {
+            "gcp_project_id": "my-project",
+            "gcp_service_account_key": '{"type": "service_account"}',
+        }
+
+        mock_entry_1 = MagicMock()
+        mock_entry_1.payload = "Launching nf-core/scrnaseq"
+        mock_entry_2 = MagicMock()
+        mock_entry_2.payload = "Process STARSOLO completed"
+
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = [mock_entry_1, mock_entry_2]
+
+        with (
+            patch("google.cloud.logging.Client", return_value=mock_client),
+            patch(
+                "app.adapters.compute.kubernetes._get_gcp_credentials",
+                return_value=MagicMock(),
+            ),
+        ):
+            result = provider._read_cloud_logging("bioaf-pipeline-9")
+
+        assert result is not None
+        assert "Launching nf-core/scrnaseq" in result
+        assert "Process STARSOLO completed" in result
+        mock_client.list_entries.assert_called_once()
+
+    def test_read_cloud_logging_returns_none_without_project_id(self):
+        """_read_cloud_logging returns None when no GCP project ID is configured."""
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        provider = KubernetesComputeProvider()
+        provider._cluster_config = {}
+
+        result = provider._read_cloud_logging("bioaf-pipeline-9")
+        assert result is None
+
+    def test_read_cloud_logging_returns_none_on_empty_results(self):
+        """_read_cloud_logging returns None when Cloud Logging has no entries."""
+        from unittest.mock import MagicMock, patch
+
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        provider = KubernetesComputeProvider()
+        provider._cluster_config = {
+            "gcp_project_id": "my-project",
+            "gcp_service_account_key": '{"type": "service_account"}',
+        }
+
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = []
+
+        with (
+            patch("google.cloud.logging.Client", return_value=mock_client),
+            patch(
+                "app.adapters.compute.kubernetes._get_gcp_credentials",
+                return_value=MagicMock(),
+            ),
+        ):
+            result = provider._read_cloud_logging("bioaf-pipeline-9")
+
+        assert result is None
+
+    def test_read_cloud_logging_filters_by_pod_name(self):
+        """_read_cloud_logging uses the correct filter for the job's pod."""
+        from unittest.mock import MagicMock, patch
+
+        from app.adapters.compute.kubernetes import KubernetesComputeProvider
+
+        provider = KubernetesComputeProvider()
+        provider._cluster_config = {
+            "gcp_project_id": "my-project",
+            "gcp_service_account_key": '{"type": "service_account"}',
+        }
+
+        mock_client = MagicMock()
+        mock_client.list_entries.return_value = []
+
+        with (
+            patch("google.cloud.logging.Client", return_value=mock_client),
+            patch(
+                "app.adapters.compute.kubernetes._get_gcp_credentials",
+                return_value=MagicMock(),
+            ),
+        ):
+            provider._read_cloud_logging("bioaf-pipeline-9")
+
+        call_kwargs = mock_client.list_entries.call_args
+        filter_str = call_kwargs.kwargs.get("filter_") or call_kwargs[1].get("filter_", "")
+        assert "bioaf-pipeline-9" in filter_str
+        assert "k8s_container" in filter_str
+        assert 'container_name="pipeline"' in filter_str

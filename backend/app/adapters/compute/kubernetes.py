@@ -559,9 +559,9 @@ class KubernetesComputeProvider(ComputeProvider):
             lines.append("fusion.enabled = true")
             lines.append("fusion.exportStorageCredentials = true")
 
-        # Write trace to a local file on the head pod. The main container
-        # command copies it to GCS as a one-shot step after the pipeline exits.
-        # Nextflow's trace.file only supports local paths (not gs:// URIs).
+        # Write trace to a local file on the head pod. Read from the live
+        # pod at completion time for progress data. Pipeline logs are
+        # persisted via GKE Cloud Logging (no gsutil needed).
         if trace_enabled:
             lines.append("trace.enabled = true")
             lines.append("trace.overwrite = true")
@@ -648,23 +648,9 @@ class KubernetesComputeProvider(ComputeProvider):
             container_image = self.NEXTFLOW_IMAGE
             command = self._build_nextflow_command(job_spec)
 
-            # Wrap the pipeline command to capture output and persist
-            # artifacts (logs + trace) to GCS so they survive pod cleanup.
-            # command is ["/bin/sh", "-c", "<shell script>"]
-            nf_cfg = self._cluster_config or {}
-            trace_bucket = nf_cfg.get("raw_bucket_name", "")
-            if trace_bucket:
-                gcs_prefix = f"gs://{trace_bucket}/nextflow-traces/{job_name}"
-                # Tee stdout+stderr to a log file, preserve the pipeline exit code,
-                # then upload both trace and log to GCS before exiting.
-                pipeline_cmd = command[2]
-                command[2] = (
-                    f"set -o pipefail; "
-                    f"{{ {pipeline_cmd}; }} 2>&1 | tee /data/pipeline.log; NF_EXIT=${{PIPESTATUS[0]}}; "
-                    f"gsutil -q cp /data/trace.tsv {gcs_prefix}/trace.tsv 2>/dev/null || true; "
-                    f"gsutil -q cp /data/pipeline.log {gcs_prefix}/pipeline.log 2>/dev/null || true; "
-                    f"exit $NF_EXIT"
-                )
+            # Pipeline logs are persisted via GKE Cloud Logging (automatic).
+            # Trace file is written to /data/trace.tsv by Nextflow config and
+            # read from the live pod or parsed at completion time.
 
         # Build init containers for GCS input staging
         init_containers = []
@@ -897,6 +883,11 @@ class KubernetesComputeProvider(ComputeProvider):
             except Exception:
                 logger.warning("Could not read logs from %s, trying GCS fallback", pod_name)
 
+        # Fall back to Cloud Logging (GKE ships all pod stdout/stderr here)
+        cloud_logs = self._read_cloud_logging(job_id)
+        if cloud_logs:
+            return cloud_logs
+
         # Fall back to persisted log in GCS
         gcs_logs = await self._read_gcs_log(job_id)
         if gcs_logs:
@@ -906,7 +897,7 @@ class KubernetesComputeProvider(ComputeProvider):
         if pod_list.items:
             return self._extract_pod_termination_info(pod_list.items[0])
 
-        return f"No logs available for job {job_id} (pod cleaned up, no GCS log found)"
+        return f"No logs available for job {job_id} (pod cleaned up, no Cloud Logging or GCS log found)"
 
     async def _read_gcs_log(self, job_id: str) -> str | None:
         """Read persisted pipeline.log from GCS. Returns None if unavailable."""
@@ -936,6 +927,53 @@ class KubernetesComputeProvider(ComputeProvider):
             return blob.download_as_text()
         except Exception:
             logger.warning("Could not read log file gs://%s/%s", raw_bucket, log_path)
+            return None
+
+    def _read_cloud_logging(self, job_id: str) -> str | None:
+        """Read pipeline logs from GKE Cloud Logging.
+
+        GKE automatically ships all container stdout/stderr to Cloud Logging.
+        Logs persist for 30 days even after pods are cleaned up.
+        Returns None if unavailable or no entries found.
+        """
+        cfg = self._cluster_config or {}
+        project_id = cfg.get("gcp_project_id", "")
+        if not project_id:
+            return None
+
+        sa_key = cfg.get("gcp_service_account_key", "")
+
+        try:
+            import google.cloud.logging
+
+            if sa_key:
+                credentials = _get_gcp_credentials(sa_key)
+                log_client = google.cloud.logging.Client(project=project_id, credentials=credentials)
+            else:
+                log_client = google.cloud.logging.Client(project=project_id)
+
+            log_filter = (
+                'resource.type="k8s_container" '
+                f'resource.labels.container_name="pipeline" '
+                f'resource.labels.pod_name:("{job_id}")'
+            )
+
+            entries = list(log_client.list_entries(filter_=log_filter, order_by="timestamp asc"))
+
+            if not entries:
+                return None
+
+            lines = []
+            for entry in entries:
+                payload = entry.payload
+                if isinstance(payload, str) and payload.strip():
+                    lines.append(payload)
+                elif isinstance(payload, dict):
+                    lines.append(str(payload.get("message", payload)))
+            return "\n".join(lines) if lines else None
+
+        except Exception:
+            logger.warning("Could not read Cloud Logging for job %s", job_id)
             return None
 
     async def _k8s_get_job_progress(self, job_id: str) -> dict:

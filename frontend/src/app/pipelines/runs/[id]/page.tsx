@@ -21,7 +21,7 @@ const STATUS_COLORS: Record<PipelineRunStatus | PipelineProcessStatus, string> =
   cached: "bg-purple-100 text-purple-700",
 };
 
-type Tab = "progress" | "parameters" | "provenance" | "report" | "logs" | "review";
+type Tab = "logs" | "report" | "parameters" | "provenance" | "review";
 
 function getUserRole(): string {
   try {
@@ -41,7 +41,7 @@ export default function PipelineRunDetailPage() {
 
   const [run, setRun] = useState<PipelineRunDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("progress");
+  const [activeTab, setActiveTab] = useState<Tab>("logs");
   const [report, setReport] = useState<string>("");
   const [logs, setLogs] = useState<{ stdout: string; stderr: string }>({ stdout: "", stderr: "" });
   const [selectedProcess, setSelectedProcess] = useState<string>("");
@@ -156,11 +156,10 @@ export default function PipelineRunDetailPage() {
 
   const isActive = ["running", "pending"].includes(run.status);
   const tabs: { key: Tab; label: string }[] = [
-    { key: "progress", label: "Progress" },
+    { key: "logs", label: "Logs" },
+    { key: "report", label: "Report" },
     { key: "parameters", label: "Parameters" },
     { key: "provenance", label: "Provenance" },
-    { key: "report", label: "Report" },
-    { key: "logs", label: "Logs" },
     { key: "review", label: "Review" },
   ];
 
@@ -235,39 +234,6 @@ export default function PipelineRunDetailPage() {
               ))}
             </nav>
           </div>
-
-          {/* Progress tab */}
-          {activeTab === "progress" && (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Process</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPU</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Memory</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Exit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {run.processes.map((p) => (
-                    <tr key={p.id}>
-                      <td className="px-4 py-3 text-sm font-mono">{p.process_name}</td>
-                      <td className="px-4 py-3"><span className={`px-2 py-0.5 text-xs rounded-full ${STATUS_COLORS[p.status]}`}>{p.status}</span></td>
-                      <td className="px-4 py-3 text-sm">{p.cpu_usage != null ? `${p.cpu_usage.toFixed(1)}%` : "—"}</td>
-                      <td className="px-4 py-3 text-sm">{p.memory_peak_gb != null ? `${p.memory_peak_gb.toFixed(2)} GB` : "—"}</td>
-                      <td className="px-4 py-3 text-sm">{p.duration_seconds != null ? `${Math.floor(p.duration_seconds / 60)}m ${p.duration_seconds % 60}s` : "—"}</td>
-                      <td className="px-4 py-3 text-sm">{p.exit_code ?? "—"}</td>
-                    </tr>
-                  ))}
-                  {run.processes.length === 0 && (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No processes yet</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
 
           {/* Parameters tab */}
           {activeTab === "parameters" && (
