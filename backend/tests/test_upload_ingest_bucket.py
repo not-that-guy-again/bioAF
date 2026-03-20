@@ -270,6 +270,90 @@ async def test_simple_upload_streams_file_without_buffering(client, admin_token,
 
 
 @pytest.mark.asyncio
+async def test_signed_upload_links_experiment_id(client, admin_token, configured_ingest_bucket, session):
+    """Signed upload flow (initiate -> complete) must persist experiment_id on the file record."""
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from app.models.user import User
+    from sqlalchemy import select
+
+    user = (await session.execute(select(User).limit(1))).scalar_one()
+    exp = Experiment(
+        organization_id=user.organization_id,
+        name="Signed Upload Link Test",
+        owner_user_id=user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+    await session.commit()
+
+    from app.services.upload_service import UploadService
+
+    with patch.object(
+        UploadService,
+        "_generate_signed_upload_url",
+        new=AsyncMock(return_value="https://storage.googleapis.com/fake-signed-url"),
+    ):
+        initiate_resp = await client.post(
+            "/api/files/upload/initiate",
+            json={
+                "filename": "linked.fastq.gz",
+                "expected_size_bytes": 5000,
+                "experiment_id": exp.id,
+            },
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert initiate_resp.status_code == 200
+    upload_id = initiate_resp.json()["upload_id"]
+
+    complete_resp = await client.post(
+        "/api/files/upload/complete",
+        json={"upload_id": upload_id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert complete_resp.status_code == 200
+    assert complete_resp.json()["experiment_id"] == exp.id
+
+    file_row = (await session.execute(select(File).where(File.filename == "linked.fastq.gz"))).scalar_one_or_none()
+    assert file_row is not None
+    assert file_row.experiment_id == exp.id
+
+
+@pytest.mark.asyncio
+async def test_signed_upload_without_experiment_id(client, admin_token, configured_ingest_bucket, session):
+    """Signed upload flow without experiment_id must leave experiment_id as None."""
+    from app.models.file import File
+    from sqlalchemy import select
+    from app.services.upload_service import UploadService
+
+    with patch.object(
+        UploadService,
+        "_generate_signed_upload_url",
+        new=AsyncMock(return_value="https://storage.googleapis.com/fake-signed-url"),
+    ):
+        initiate_resp = await client.post(
+            "/api/files/upload/initiate",
+            json={"filename": "nolink.fastq.gz", "expected_size_bytes": 5000},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert initiate_resp.status_code == 200
+    upload_id = initiate_resp.json()["upload_id"]
+
+    complete_resp = await client.post(
+        "/api/files/upload/complete",
+        json={"upload_id": upload_id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert complete_resp.status_code == 200
+    assert complete_resp.json()["experiment_id"] is None
+
+    file_row = (await session.execute(select(File).where(File.filename == "nolink.fastq.gz"))).scalar_one_or_none()
+    assert file_row is not None
+    assert file_row.experiment_id is None
+
+
+@pytest.mark.asyncio
 async def test_complete_upload_omitting_actual_md5_returns_200(client, admin_token, configured_ingest_bucket):
     """complete_upload must accept a request body that omits actual_md5.
 

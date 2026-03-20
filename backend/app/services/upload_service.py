@@ -166,6 +166,7 @@ class UploadService:
             md5_checksum=actual_md5,
             file_type=file_type,
             tags=tags,
+            experiment_id=pending["experiment_id"],
         )
 
         # Link to samples
