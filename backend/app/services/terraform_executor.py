@@ -972,9 +972,7 @@ class TerraformExecutor:
                 for _run_id, module_name in stale_runs:
                     if module_name:
                         lock_path = f"{module_name}/default.tflock"
-                        await TerraformExecutor._delete_gcs_lock_file(
-                            state_bucket, lock_path
-                        )
+                        await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
 
             await session.execute(
                 text("""

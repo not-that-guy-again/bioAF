@@ -43,9 +43,7 @@ async def cleanup_orphaned_resource(
     """Trigger cleanup of an orphaned resource (deletes from GCP)."""
     user_id = int(current_user["sub"])
     try:
-        resource = await OrphanedResourceService.cleanup_resource(
-            session, resource_id, user_id
-        )
+        resource = await OrphanedResourceService.cleanup_resource(session, resource_id, user_id)
         await session.commit()
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
@@ -64,9 +62,7 @@ async def dismiss_orphaned_resource(
     """Mark an orphaned resource as manually resolved."""
     user_id = int(current_user["sub"])
     try:
-        resource = await OrphanedResourceService.dismiss_resource(
-            session, resource_id, user_id
-        )
+        resource = await OrphanedResourceService.dismiss_resource(session, resource_id, user_id)
         await session.commit()
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

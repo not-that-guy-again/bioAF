@@ -99,9 +99,7 @@ async def test_list_orphaned_resources_filter_by_status(session):
     await session.flush()
 
     # Manually set status to cleaned
-    await session.execute(
-        text("UPDATE orphaned_resources SET status = 'cleaned' WHERE id = :id").bindparams(id=r.id)
-    )
+    await session.execute(text("UPDATE orphaned_resources SET status = 'cleaned' WHERE id = :id").bindparams(id=r.id))
     await session.flush()
 
     detected = await OrphanedResourceService.list_resources(session, status="detected")
@@ -144,9 +142,7 @@ async def test_has_orphaned_for_uid_ignores_resolved(session):
     await session.flush()
 
     # Resolve it
-    await session.execute(
-        text("UPDATE orphaned_resources SET status = 'cleaned' WHERE id = :id").bindparams(id=r.id)
-    )
+    await session.execute(text("UPDATE orphaned_resources SET status = 'cleaned' WHERE id = :id").bindparams(id=r.id))
     await session.flush()
 
     assert await OrphanedResourceService.has_orphaned_for_uid(session, "abc123") is False
@@ -175,17 +171,18 @@ async def test_cleanup_gke_cluster(session, admin_user):
     mock_client = MagicMock()
     mock_client.delete_cluster = MagicMock(return_value=MagicMock())
 
-    with patch(
-        "app.services.stack_deployment._get_gke_client",
-        return_value=mock_client,
-    ), patch(
-        "app.services.stack_deployment._get_gke_credentials",
-        new_callable=AsyncMock,
-        return_value=MagicMock(),
+    with (
+        patch(
+            "app.services.stack_deployment._get_gke_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "app.services.stack_deployment._get_gke_credentials",
+            new_callable=AsyncMock,
+            return_value=MagicMock(),
+        ),
     ):
-        result = await OrphanedResourceService.cleanup_resource(
-            session, resource.id, admin_user.id
-        )
+        result = await OrphanedResourceService.cleanup_resource(session, resource.id, admin_user.id)
 
     assert result.status == "cleaned"
     assert result.resolved_at is not None
@@ -213,17 +210,18 @@ async def test_cleanup_gcs_bucket(session, admin_user):
     mock_storage_client = MagicMock()
     mock_storage_client.bucket.return_value = mock_bucket
 
-    with patch(
-        "app.services.stack_deployment._get_gke_credentials",
-        new_callable=AsyncMock,
-        return_value=MagicMock(),
-    ), patch(
-        "app.services.orphaned_resource_service.storage.Client",
-        return_value=mock_storage_client,
+    with (
+        patch(
+            "app.services.stack_deployment._get_gke_credentials",
+            new_callable=AsyncMock,
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.services.orphaned_resource_service.storage.Client",
+            return_value=mock_storage_client,
+        ),
     ):
-        result = await OrphanedResourceService.cleanup_resource(
-            session, resource.id, admin_user.id
-        )
+        result = await OrphanedResourceService.cleanup_resource(session, resource.id, admin_user.id)
 
     assert result.status == "cleaned"
     mock_storage_client.bucket.assert_called_once_with("bioaf-ingest-demo-abc123")
@@ -248,17 +246,18 @@ async def test_cleanup_failure_sets_status_failed(session, admin_user):
     mock_client = MagicMock()
     mock_client.delete_cluster.side_effect = Exception("GKE API error: cluster not found")
 
-    with patch(
-        "app.services.stack_deployment._get_gke_client",
-        return_value=mock_client,
-    ), patch(
-        "app.services.stack_deployment._get_gke_credentials",
-        new_callable=AsyncMock,
-        return_value=MagicMock(),
+    with (
+        patch(
+            "app.services.stack_deployment._get_gke_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "app.services.stack_deployment._get_gke_credentials",
+            new_callable=AsyncMock,
+            return_value=MagicMock(),
+        ),
     ):
-        result = await OrphanedResourceService.cleanup_resource(
-            session, resource.id, admin_user.id
-        )
+        result = await OrphanedResourceService.cleanup_resource(session, resource.id, admin_user.id)
 
     assert result.status == "failed"
     assert "GKE API error" in (result.error_message or "")
@@ -277,9 +276,7 @@ async def test_dismiss_resource(session, admin_user):
     )
     await session.flush()
 
-    result = await OrphanedResourceService.dismiss_resource(
-        session, resource.id, admin_user.id
-    )
+    result = await OrphanedResourceService.dismiss_resource(session, resource.id, admin_user.id)
 
     assert result.status == "dismissed"
     assert result.resolved_at is not None
@@ -334,13 +331,16 @@ async def test_cleanup_orphaned_resource_endpoint(client: AsyncClient, admin_tok
     mock_client = MagicMock()
     mock_client.delete_cluster = MagicMock(return_value=MagicMock())
 
-    with patch(
-        "app.services.stack_deployment._get_gke_client",
-        return_value=mock_client,
-    ), patch(
-        "app.services.stack_deployment._get_gke_credentials",
-        new_callable=AsyncMock,
-        return_value=MagicMock(),
+    with (
+        patch(
+            "app.services.stack_deployment._get_gke_client",
+            return_value=mock_client,
+        ),
+        patch(
+            "app.services.stack_deployment._get_gke_credentials",
+            new_callable=AsyncMock,
+            return_value=MagicMock(),
+        ),
     ):
         response = await client.post(
             f"/api/v1/infrastructure/orphaned-resources/{resource.id}/cleanup",

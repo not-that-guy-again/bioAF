@@ -964,9 +964,7 @@ async def test_deploy_stack_logs_orphan_on_compute_failure(session):
 
     # Verify orphaned resource was logged
     row = (
-        await session.execute(
-            text("SELECT resource_type, resource_name, stack_uid FROM orphaned_resources LIMIT 1")
-        )
+        await session.execute(text("SELECT resource_type, resource_name, stack_uid FROM orphaned_resources LIMIT 1"))
     ).fetchone()
     assert row is not None
     assert row[0] == "gke_cluster"
@@ -1044,9 +1042,7 @@ async def test_teardown_stack_logs_orphan_on_failure(session):
     assert any(e.event_type == "stack_error" for e in events)
 
     row = (
-        await session.execute(
-            text("SELECT resource_type, resource_name FROM orphaned_resources LIMIT 1")
-        )
+        await session.execute(text("SELECT resource_type, resource_name FROM orphaned_resources LIMIT 1"))
     ).fetchone()
     assert row is not None
     assert row[0] == "gke_cluster"
