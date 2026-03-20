@@ -240,22 +240,11 @@ class PlotArchiveService:
 
     @staticmethod
     async def backfill_metadata(session: AsyncSession) -> int:
-        """Re-parse GCS URIs to fill in missing experiment_id and pipeline_run_id."""
-        from sqlalchemy import or_
-
+        """Re-parse GCS URIs to correct experiment_id and pipeline_run_id on all entries."""
         from app.models.experiment import Experiment
         from app.models.pipeline_run import PipelineRun
 
-        result = await session.execute(
-            select(PlotArchiveEntry)
-            .options(selectinload(PlotArchiveEntry.file))
-            .where(
-                or_(
-                    PlotArchiveEntry.experiment_id.is_(None),
-                    PlotArchiveEntry.pipeline_run_id.is_(None),
-                )
-            )
-        )
+        result = await session.execute(select(PlotArchiveEntry).options(selectinload(PlotArchiveEntry.file)))
         entries = list(result.scalars().all())
         updated = 0
         for entry in entries:
@@ -263,13 +252,12 @@ class PlotArchiveService:
                 continue
             exp_id, run_id = PlotArchiveService._parse_ids_from_path(entry.file.gcs_uri)
             changed = False
-            if entry.experiment_id is None and exp_id is not None:
-                # Validate FK exists
+            if exp_id is not None and entry.experiment_id != exp_id:
                 exists = await session.execute(select(Experiment.id).where(Experiment.id == exp_id))
                 if exists.scalar_one_or_none() is not None:
                     entry.experiment_id = exp_id
                     changed = True
-            if entry.pipeline_run_id is None and run_id is not None:
+            if run_id is not None and entry.pipeline_run_id != run_id:
                 exists = await session.execute(select(PipelineRun.id).where(PipelineRun.id == run_id))
                 if exists.scalar_one_or_none() is not None:
                     entry.pipeline_run_id = run_id
