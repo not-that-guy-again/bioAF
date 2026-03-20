@@ -176,10 +176,10 @@ async def test_cleanup_gke_cluster(session, admin_user):
     mock_client.delete_cluster = MagicMock(return_value=MagicMock())
 
     with patch(
-        "app.services.orphaned_resource_service._get_gke_client",
+        "app.services.stack_deployment._get_gke_client",
         return_value=mock_client,
     ), patch(
-        "app.services.orphaned_resource_service._get_gke_credentials",
+        "app.services.stack_deployment._get_gke_credentials",
         new_callable=AsyncMock,
         return_value=MagicMock(),
     ):
@@ -214,7 +214,7 @@ async def test_cleanup_gcs_bucket(session, admin_user):
     mock_storage_client.bucket.return_value = mock_bucket
 
     with patch(
-        "app.services.orphaned_resource_service._get_gke_credentials",
+        "app.services.stack_deployment._get_gke_credentials",
         new_callable=AsyncMock,
         return_value=MagicMock(),
     ), patch(
@@ -249,10 +249,10 @@ async def test_cleanup_failure_sets_status_failed(session, admin_user):
     mock_client.delete_cluster.side_effect = Exception("GKE API error: cluster not found")
 
     with patch(
-        "app.services.orphaned_resource_service._get_gke_client",
+        "app.services.stack_deployment._get_gke_client",
         return_value=mock_client,
     ), patch(
-        "app.services.orphaned_resource_service._get_gke_credentials",
+        "app.services.stack_deployment._get_gke_credentials",
         new_callable=AsyncMock,
         return_value=MagicMock(),
     ):
@@ -335,10 +335,10 @@ async def test_cleanup_orphaned_resource_endpoint(client: AsyncClient, admin_tok
     mock_client.delete_cluster = MagicMock(return_value=MagicMock())
 
     with patch(
-        "app.services.orphaned_resource_service._get_gke_client",
+        "app.services.stack_deployment._get_gke_client",
         return_value=mock_client,
     ), patch(
-        "app.services.orphaned_resource_service._get_gke_credentials",
+        "app.services.stack_deployment._get_gke_credentials",
         new_callable=AsyncMock,
         return_value=MagicMock(),
     ):
