@@ -177,44 +177,60 @@ class QCDashboardService:
                 logger.info("Using cached qc_metrics.json for run %d", run.id)
                 return cached
 
-            # 2. Try h5ad (single-cell pipelines)
-            h5ad_blob = None
-            for blob in bucket.list_blobs(prefix=prefix):
-                if blob.name.endswith(".h5ad"):
-                    h5ad_blob = blob
+            # Layer metrics from multiple sources. Each source fills in
+            # what it can; later sources don't overwrite earlier values.
+            metrics = dict(empty_metrics)
+
+            # 2. Try STARsolo Summary.csv (best source for single-cell QC)
+            starsolo_blob = None
+            for blob in bucket.list_blobs(prefix=f"{prefix}star/"):
+                if blob.name.endswith("Solo.out/Gene/Summary.csv"):
+                    starsolo_blob = blob
                     break
 
-            if h5ad_blob:
-                with tempfile.NamedTemporaryFile(suffix=".h5ad") as tmp:
-                    h5ad_blob.download_to_filename(tmp.name)
-                    metrics = QCDashboardService._read_h5ad_metrics(tmp.name)
-            else:
-                # 3. Try MultiQC data (bulk/FastQC pipelines)
-                multiqc_blob = None
-                for blob in bucket.list_blobs(prefix=f"{prefix}multiqc/multiqc_data/"):
-                    if blob.name.endswith("multiqc_data.json"):
-                        multiqc_blob = blob
+            if starsolo_blob:
+                logger.info("Found STARsolo Summary.csv for run %d", run.id)
+                summary_text = starsolo_blob.download_as_text()
+                starsolo_metrics = QCDashboardService._read_starsolo_summary(summary_text)
+                for k, v in starsolo_metrics.items():
+                    if v is not None:
+                        metrics[k] = v
+
+            # 3. Try h5ad for cell count (if STARsolo didn't provide one)
+            if metrics["cell_count"] is None:
+                h5ad_blob = None
+                for blob in bucket.list_blobs(prefix=prefix):
+                    if blob.name.endswith(".h5ad"):
+                        h5ad_blob = blob
                         break
 
-                if multiqc_blob:
-                    logger.info("Found multiqc_data.json for run %d", run.id)
-                    multiqc_text = multiqc_blob.download_as_text()
-                    metrics = QCDashboardService._read_multiqc_metrics(multiqc_text)
-                else:
-                    # 4. Try parsing FastQC general stats from TSV
-                    general_stats_blob = None
-                    for blob in bucket.list_blobs(prefix=f"{prefix}multiqc/multiqc_data/"):
-                        if "general_stats" in blob.name and blob.name.endswith(".txt"):
-                            general_stats_blob = blob
-                            break
+                if h5ad_blob:
+                    with tempfile.NamedTemporaryFile(suffix=".h5ad") as tmp:
+                        h5ad_blob.download_to_filename(tmp.name)
+                        h5ad_metrics = QCDashboardService._read_h5ad_metrics(tmp.name)
+                        for k, v in h5ad_metrics.items():
+                            if v is not None and metrics.get(k) is None:
+                                metrics[k] = v
 
-                    if general_stats_blob:
-                        logger.info("Found multiqc general stats for run %d", run.id)
-                        stats_text = general_stats_blob.download_as_text()
-                        metrics = QCDashboardService._read_multiqc_general_stats(stats_text)
-                    else:
-                        logger.info("No h5ad or multiqc data for run %d", run.id)
-                        return empty_metrics
+            # 4. Try MultiQC data (FastQC aggregate stats, STAR alignment)
+            multiqc_blob = None
+            for blob in bucket.list_blobs(prefix=f"{prefix}multiqc/multiqc_data/"):
+                if blob.name.endswith("multiqc_data.json"):
+                    multiqc_blob = blob
+                    break
+
+            if multiqc_blob:
+                logger.info("Found multiqc_data.json for run %d", run.id)
+                multiqc_text = multiqc_blob.download_as_text()
+                multiqc_metrics = QCDashboardService._read_multiqc_metrics(multiqc_text)
+                for k, v in multiqc_metrics.items():
+                    if v is not None and metrics.get(k) is None:
+                        metrics[k] = v
+
+            has_any = any(v is not None for v in metrics.values())
+            if not has_any:
+                logger.info("No metrics found for run %d from any source", run.id)
+                return empty_metrics
 
             # 5. Upload metrics cache to GCS
             cache_upload_blob = bucket.blob(f"{prefix}qc_metrics.json")
@@ -285,6 +301,40 @@ class QCDashboardService:
         return metrics
 
     @staticmethod
+    def _read_starsolo_summary(summary_csv_text: str) -> dict:
+        """Parse STARsolo Gene/Summary.csv for single-cell QC metrics."""
+        metrics: dict = {
+            "cell_count": None,
+            "median_reads_per_cell": None,
+            "median_genes_per_cell": None,
+            "median_umi_per_cell": None,
+            "saturation": None,
+        }
+        try:
+            kv = {}
+            for line in summary_csv_text.strip().splitlines():
+                if "," in line:
+                    key, val = line.split(",", 1)
+                    kv[key.strip()] = val.strip()
+
+            if "Estimated Number of Cells" in kv:
+                metrics["cell_count"] = int(kv["Estimated Number of Cells"])
+            if "Median Reads per Cell" in kv:
+                metrics["median_reads_per_cell"] = float(kv["Median Reads per Cell"])
+            if "Median Gene per Cell" in kv:
+                metrics["median_genes_per_cell"] = float(kv["Median Gene per Cell"])
+            if "Median UMI per Cell" in kv:
+                metrics["median_umi_per_cell"] = float(kv["Median UMI per Cell"])
+            if "Sequencing Saturation" in kv:
+                metrics["saturation"] = float(kv["Sequencing Saturation"])
+
+            logger.info("STARsolo metrics: %s", metrics)
+        except Exception as e:
+            logger.warning("STARsolo Summary.csv parsing failed: %s", e)
+
+        return metrics
+
+    @staticmethod
     def _read_multiqc_metrics(multiqc_json_text: str) -> dict:
         """Parse multiqc_data.json and extract aggregate FastQC metrics."""
         metrics: dict = {
@@ -305,12 +355,21 @@ class QCDashboardService:
 
             for stats_section in general_stats:
                 for _sample_name, sample_stats in stats_section.items():
-                    if "Total Sequences" in sample_stats:
-                        total_seqs.append(sample_stats["Total Sequences"])
-                    if "total_deduplicated_percentage" in sample_stats:
-                        dup_pcts.append(100 - sample_stats["total_deduplicated_percentage"])
-                    if "%GC" in sample_stats:
-                        gc_pcts.append(sample_stats["%GC"])
+                    # MultiQC JSON uses lowercase keys with underscores
+                    for key in ("total_sequences", "Total Sequences"):
+                        if key in sample_stats:
+                            total_seqs.append(sample_stats[key])
+                            break
+                    for key in ("percent_duplicates", "total_deduplicated_percentage"):
+                        if key in sample_stats:
+                            val = sample_stats[key]
+                            # total_deduplicated_percentage needs inversion
+                            dup_pcts.append(100 - val if "deduplicated" in key else val)
+                            break
+                    for key in ("percent_gc", "%GC"):
+                        if key in sample_stats:
+                            gc_pcts.append(sample_stats[key])
+                            break
                     if "avg_sequence_length" in sample_stats:
                         seq_lengths.append(sample_stats["avg_sequence_length"])
 
@@ -387,18 +446,34 @@ class QCDashboardService:
         mito = metrics.get("mito_pct_median")
         genes = metrics.get("median_genes_per_cell")
         reads = metrics.get("median_reads_per_cell")
+        sat = metrics.get("saturation")
 
-        # Single-cell metrics (need at least mito or genes to rate)
-        has_sc_metrics = mito is not None or genes is not None
+        # Single-cell metrics -- rate based on what's available
+        has_sc_metrics = genes is not None or mito is not None
         if has_sc_metrics:
-            if mito is not None and mito < 5 and genes is not None and genes > 1000:
-                if reads is None or reads > 2000:
-                    return "good"
-            if mito is not None and mito < 10 and genes is not None and genes > 500:
+            # Full metrics available (after scanpy QC)
+            if mito is not None and genes is not None:
+                if mito < 5 and genes > 1000 and (reads is None or reads > 2000):
+                    return "excellent" if sat is not None and sat > 0.7 else "good"
+                if mito < 10 and genes > 500:
+                    return "acceptable"
+                if mito > 20:
+                    return "concerning"
                 return "acceptable"
+
+            # STARsolo-level metrics (genes but no mito)
+            if genes is not None and genes > 1000:
+                if reads is not None and reads > 10000 and sat is not None and sat > 0.5:
+                    return "good"
+                return "acceptable"
+            if genes is not None and genes > 500:
+                return "acceptable"
+            if genes is not None:
+                return "concerning"
+
+            # Only mito available
             if mito is not None and mito > 20:
                 return "concerning"
-            # Have some metrics but not enough for a clear rating
             return "acceptable"
 
         # Bulk/FastQC metrics
@@ -412,7 +487,7 @@ class QCDashboardService:
                 return "acceptable"
             return "acceptable" if dup is None else "concerning"
 
-        # Only cell_count or no metrics at all -- can't make a judgment
+        # Only cell_count or no metrics at all
         cell_count = metrics.get("cell_count")
         if cell_count is not None and cell_count > 0:
             return "pending_review"
@@ -448,12 +523,15 @@ class QCDashboardService:
 
         summary = " ".join(parts) + "." if parts else "No metrics available."
 
-        # Note when cell count exists but no detailed QC metrics
-        cell_count = metrics.get("cell_count")
+        reads = metrics.get("median_reads_per_cell")
+        if reads is not None:
+            summary += f" Median **{reads:,.0f} reads per cell**."
+
+        # Note when mito % is missing (common before scanpy QC)
+        mito_available = metrics.get("mito_pct_median") is not None
         genes = metrics.get("median_genes_per_cell")
-        total_seqs = metrics.get("total_sequences")
-        if cell_count is not None and genes is None and total_seqs is None:
-            summary += " Detailed QC metrics (genes/cell, mito %, UMI counts) were not found in the output. Run scanpy/scran QC preprocessing to populate these fields."
+        if genes is not None and not mito_available:
+            summary += " Mitochondrial % and doublet scores require scanpy/scran QC preprocessing."
 
         mito = metrics.get("mito_pct_median")
         if mito is not None:
