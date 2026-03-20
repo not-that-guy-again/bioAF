@@ -1,4 +1,3 @@
-import io
 import json
 import logging
 import tempfile
@@ -54,15 +53,13 @@ class QCDashboardService:
             # Generate summary text
             summary = QCDashboardService._generate_summary(metrics)
 
-            # Only generate plots when we have real metric values to plot
-            plots_meta: list[dict] = []
-            if QCDashboardService._has_plottable_metrics(metrics):
-                plots_meta = await QCDashboardService._generate_plots(session, org_id, dashboard.id, metrics)
+            # Collect real pipeline-generated plots from GCS
+            plots_meta = await QCDashboardService._collect_plots(session, org_id, run)
 
             dashboard.metrics_json = metrics
             dashboard.summary_text = summary
             dashboard.plots_json = plots_meta
-            dashboard.status = "ready" if QCDashboardService._has_plottable_metrics(metrics) else "awaiting_metrics"
+            dashboard.status = "ready"
             dashboard.generated_at = datetime.now(timezone.utc)
 
         except Exception as e:
@@ -112,18 +109,15 @@ class QCDashboardService:
         result = await session.execute(query)
         return list(result.scalars().all())
 
-    @staticmethod
-    def _has_plottable_metrics(metrics: dict) -> bool:
-        """Check whether any metric needed for plot generation is present."""
-        plottable_keys = (
-            "median_genes_per_cell",
-            "median_umi_per_cell",
-            "mito_pct_median",
-            "total_sequences",
-            "percent_duplicates",
-            "percent_gc",
-        )
-        return any(metrics.get(k) is not None for k in plottable_keys)
+    # MultiQC plot PNGs we look for in GCS, mapped to display titles
+    _MULTIQC_PLOTS: list[tuple[str, str, str]] = [
+        ("star_alignment_plot-pct.png", "STAR Alignment", "star_alignment"),
+        ("fastqc_per_base_sequence_quality_plot.png", "Per-Base Sequence Quality", "base_quality"),
+        ("fastqc_per_sequence_gc_content_plot_Percentages.png", "GC Content Distribution", "gc_content"),
+        ("fastqc_sequence_duplication_levels_plot.png", "Sequence Duplication Levels", "duplication"),
+        ("fastqc_sequence_counts_plot-cnt.png", "Sequence Counts", "seq_counts"),
+        ("general_stats_table.png", "General Statistics", "general_stats"),
+    ]
 
     @staticmethod
     async def _extract_metrics(session: AsyncSession, run: PipelineRun, *, skip_cache: bool = False) -> dict:
@@ -585,114 +579,54 @@ class QCDashboardService:
         return None
 
     @staticmethod
-    async def _upload_plot_to_gcs(
-        bucket_name: str, blob_path: str, buf: io.BytesIO, credentials: object = None
-    ) -> None:
-        """Upload a plot image buffer to GCS."""
-        from google.cloud import storage
-
-        client = storage.Client(credentials=credentials)
-        bucket = client.bucket(bucket_name)
-        blob = bucket.blob(blob_path)
-        buf.seek(0)
-        blob.upload_from_file(buf, content_type="image/png")
-
-    @staticmethod
-    async def _generate_plots(session: AsyncSession, org_id: int, dashboard_id: int, metrics: dict) -> list[dict]:
-        """Generate QC plot images and upload to GCS."""
-        plots_meta = []
+    async def _collect_plots(session: AsyncSession, org_id: int, run: PipelineRun) -> list[dict]:
+        """Find pipeline-generated plot PNGs in GCS and register as file records."""
+        plots_meta: list[dict] = []
         results_bucket = await QCDashboardService._get_results_bucket(session)
-        credentials = await GcsStorageService.get_credentials(session)
+        if not results_bucket:
+            return plots_meta
 
         try:
-            # Lazy import matplotlib
-            import matplotlib
+            from google.cloud import storage
 
-            matplotlib.use("Agg")
-            import matplotlib.pyplot as plt
-            import numpy as np
+            credentials = await GcsStorageService.get_credentials(session)
+            client = storage.Client(credentials=credentials)
+            bucket = client.bucket(results_bucket)
+            prefix = f"experiments/{run.experiment_id}/pipeline-runs/{run.id}/"
 
-            plot_configs = [
-                ("genes_histogram", "Genes per Cell", "genes_per_cell_hist"),
-                ("umi_histogram", "UMIs per Cell", "umi_per_cell_hist"),
-                ("mito_violin", "Mitochondrial %", "mito_pct_violin"),
-            ]
+            # Build an index of available PNG filenames in multiqc/multiqc_plots/png/
+            plot_prefix = f"{prefix}multiqc/multiqc_plots/png/"
+            available: dict[str, str] = {}  # filename -> full blob name
+            for blob in bucket.list_blobs(prefix=plot_prefix):
+                if blob.name.endswith(".png"):
+                    filename = blob.name.rsplit("/", 1)[-1]
+                    available[filename] = blob.name
 
-            for plot_type, title, prefix in plot_configs:
-                try:
-                    fig, ax = plt.subplots(figsize=(8, 5))
+            for png_name, title, plot_type in QCDashboardService._MULTIQC_PLOTS:
+                blob_name = available.get(png_name)
+                if not blob_name:
+                    continue
 
-                    # Generate placeholder plot data based on metrics
-                    if plot_type == "genes_histogram" and metrics.get("median_genes_per_cell"):
-                        median = metrics["median_genes_per_cell"]
-                        data = np.random.normal(median, median * 0.3, max(metrics.get("cell_count", 1000), 100))
-                        ax.hist(data, bins=50, color="#4a90d9", edgecolor="white")
-                        ax.set_xlabel("Genes per Cell")
-                        ax.set_ylabel("Count")
-                    elif plot_type == "umi_histogram" and metrics.get("median_umi_per_cell"):
-                        median = metrics["median_umi_per_cell"]
-                        data = np.random.normal(median, median * 0.3, max(metrics.get("cell_count", 1000), 100))
-                        ax.hist(data, bins=50, color="#5cb85c", edgecolor="white")
-                        ax.set_xlabel("UMIs per Cell")
-                        ax.set_ylabel("Count")
-                    elif plot_type == "mito_violin" and metrics.get("mito_pct_median"):
-                        median = metrics["mito_pct_median"]
-                        data = np.random.normal(median, 1.5, max(metrics.get("cell_count", 1000), 100))
-                        data = np.clip(data, 0, 100)
-                        ax.violinplot(data, showmedians=True)
-                        ax.set_ylabel("Mitochondrial %")
-                        ax.axhline(y=5, color="r", linestyle="--", alpha=0.5, label="5% threshold")
-                        ax.legend()
-                    else:
-                        ax.text(0.5, 0.5, "No data available", ha="center", va="center", transform=ax.transAxes)
+                gcs_uri = f"gs://{results_bucket}/{blob_name}"
+                blob_obj = bucket.blob(blob_name)
+                size = blob_obj.size
 
-                    ax.set_title(title)
-                    plt.tight_layout()
+                file = await FileService.create_file_record(
+                    session,
+                    org_id=org_id,
+                    user_id=None,
+                    filename=png_name,
+                    gcs_uri=gcs_uri,
+                    size_bytes=size,
+                    md5_checksum=None,
+                    file_type="png",
+                    tags=["qc_plot", plot_type],
+                )
+                plots_meta.append({"plot_type": plot_type, "title": title, "file_id": file.id})
 
-                    # Save to bytes
-                    buf = io.BytesIO()
-                    fig.savefig(buf, format="png", dpi=150)
-                    plt.close(fig)
-                    buf.seek(0)
+            logger.info("Collected %d plots from GCS for run %d", len(plots_meta), run.id)
 
-                    # Build GCS path and create file record
-                    plot_filename = f"qc_dashboard_{dashboard_id}_{prefix}.png"
-                    blob_path = f"qc_plots/{plot_filename}"
-                    gcs_uri = f"gs://{results_bucket}/{blob_path}" if results_bucket else f"gs://unset/{plot_filename}"
-
-                    # Upload PNG to GCS so the file actually exists
-                    if results_bucket:
-                        try:
-                            await QCDashboardService._upload_plot_to_gcs(
-                                results_bucket, blob_path, buf, credentials=credentials
-                            )
-                        except Exception as e:
-                            logger.warning("Failed to upload plot %s to GCS: %s", plot_filename, e)
-
-                    file = await FileService.create_file_record(
-                        session,
-                        org_id=org_id,
-                        user_id=None,
-                        filename=plot_filename,
-                        gcs_uri=gcs_uri,
-                        size_bytes=buf.getbuffer().nbytes,
-                        md5_checksum=None,
-                        file_type="png",
-                        tags=["qc_plot", plot_type],
-                    )
-
-                    plots_meta.append(
-                        {
-                            "plot_type": plot_type,
-                            "title": title,
-                            "file_id": file.id,
-                        }
-                    )
-
-                except Exception as e:
-                    logger.warning("Failed to generate plot %s: %s", plot_type, e)
-
-        except ImportError:
-            logger.warning("matplotlib not installed, skipping plot generation")
+        except Exception as e:
+            logger.warning("Plot collection from GCS failed for run %d: %s", run.id, e)
 
         return plots_meta

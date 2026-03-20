@@ -15,6 +15,37 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function PlotImage({ fileId, title }: { fileId: number; title: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api.get<{ download_url: string }>(`/api/files/${fileId}/download`);
+        setUrl(data.download_url);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [fileId]);
+
+  if (!url) {
+    return (
+      <div className="bg-gray-100 rounded h-48 flex items-center justify-center text-gray-400 text-sm">
+        Loading plot...
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={title}
+      className="w-full rounded border border-gray-200"
+    />
+  );
+}
+
 export default function QCDashboardsPage() {
   const [dashboards, setDashboards] = useState<QCDashboardSummary[]>([]);
   const [selected, setSelected] = useState<QCDashboardResponse | null>(null);
@@ -148,9 +179,7 @@ export default function QCDashboardsPage() {
                       {selected.plots.map((plot, i) => (
                         <div key={i} className="border rounded-lg p-3">
                           <p className="text-sm font-medium mb-2">{plot.title}</p>
-                          <div className="bg-gray-100 rounded h-48 flex items-center justify-center text-gray-400 text-sm">
-                            Plot: {plot.plot_type}
-                          </div>
+                          <PlotImage fileId={plot.file_id} title={plot.title} />
                         </div>
                       ))}
                     </div>
