@@ -150,7 +150,7 @@ async def regenerate_dashboard(
         await session.flush()
 
     try:
-        d = await QCDashboardService.generate_qc_dashboard(session, org_id, pipeline_run_id)
+        d = await QCDashboardService.generate_qc_dashboard(session, org_id, pipeline_run_id, skip_cache=True)
         await session.commit()
         return _dashboard_response(d)
     except ValueError as e:

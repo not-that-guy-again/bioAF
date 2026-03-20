@@ -18,7 +18,9 @@ logger = logging.getLogger("bioaf.qc_dashboard_service")
 
 class QCDashboardService:
     @staticmethod
-    async def generate_qc_dashboard(session: AsyncSession, org_id: int, pipeline_run_id: int) -> QCDashboard:
+    async def generate_qc_dashboard(
+        session: AsyncSession, org_id: int, pipeline_run_id: int, *, skip_cache: bool = False
+    ) -> QCDashboard:
         """Generate a QC dashboard from pipeline run output files."""
         # Get pipeline run
         result = await session.execute(
@@ -43,7 +45,7 @@ class QCDashboardService:
 
         try:
             # Extract metrics from pipeline outputs (reads from GCS)
-            metrics = await QCDashboardService._extract_metrics(session, run)
+            metrics = await QCDashboardService._extract_metrics(session, run, skip_cache=skip_cache)
 
             # Compute quality rating
             quality = QCDashboardService._compute_quality_rating(metrics)
@@ -124,7 +126,7 @@ class QCDashboardService:
         return any(metrics.get(k) is not None for k in plottable_keys)
 
     @staticmethod
-    async def _extract_metrics(session: AsyncSession, run: PipelineRun) -> dict:
+    async def _extract_metrics(session: AsyncSession, run: PipelineRun, *, skip_cache: bool = False) -> dict:
         """Extract QC metrics from GCS.
 
         Checks for a cached qc_metrics.json first. If not found, downloads
@@ -168,9 +170,9 @@ class QCDashboardService:
             blobs_at_prefix = [b.name for b in bucket.list_blobs(prefix=prefix, max_results=20)]
             logger.info("Files at prefix for run %d: %s", run.id, blobs_at_prefix)
 
-            # 1. Check for cached metrics JSON
+            # 1. Check for cached metrics JSON (skip on regenerate)
             cache_blob = bucket.blob(f"{prefix}qc_metrics.json")
-            if cache_blob.exists():
+            if not skip_cache and cache_blob.exists():
                 cached = json.loads(cache_blob.download_as_text())
                 logger.info("Using cached qc_metrics.json for run %d", run.id)
                 return cached
@@ -215,12 +217,12 @@ class QCDashboardService:
                         return empty_metrics
 
             # 5. Upload metrics cache to GCS
-            cache_upload_blob = bucket.blob(f"{prefix}qc_metrics_cache.json")
+            cache_upload_blob = bucket.blob(f"{prefix}qc_metrics.json")
             cache_upload_blob.upload_from_string(
                 json.dumps(metrics, indent=2),
                 content_type="application/json",
             )
-            logger.info("Wrote qc_metrics_cache.json for run %d", run.id)
+            logger.info("Wrote qc_metrics.json cache for run %d", run.id)
 
             return metrics
 
@@ -248,21 +250,32 @@ class QCDashboardService:
             adata = anndata.read_h5ad(path)
             metrics["cell_count"] = int(adata.n_obs)
 
-            if "n_genes" in adata.obs.columns:
-                metrics["median_genes_per_cell"] = float(np.median(adata.obs["n_genes"]))
-            elif "n_genes_by_counts" in adata.obs.columns:
-                metrics["median_genes_per_cell"] = float(np.median(adata.obs["n_genes_by_counts"]))
+            obs_cols = list(adata.obs.columns)
+            logger.info("h5ad obs columns (%d cells, %d genes): %s", adata.n_obs, adata.n_vars, obs_cols)
 
-            if "total_counts" in adata.obs.columns:
-                metrics["median_umi_per_cell"] = float(np.median(adata.obs["total_counts"]))
+            # Genes per cell -- try common column name variants
+            for col in ("n_genes", "n_genes_by_counts", "genes_detected", "nFeature_RNA", "n_features"):
+                if col in obs_cols:
+                    metrics["median_genes_per_cell"] = float(np.median(adata.obs[col]))
+                    break
 
-            if "pct_counts_mt" in adata.obs.columns:
-                metrics["mito_pct_median"] = float(np.median(adata.obs["pct_counts_mt"]))
-            elif "pct_counts_mito" in adata.obs.columns:
-                metrics["mito_pct_median"] = float(np.median(adata.obs["pct_counts_mito"]))
+            # UMI / total counts per cell
+            for col in ("total_counts", "nCount_RNA", "n_counts", "total_umi"):
+                if col in obs_cols:
+                    metrics["median_umi_per_cell"] = float(np.median(adata.obs[col]))
+                    break
 
-            if "doublet_score" in adata.obs.columns:
-                metrics["doublet_score_median"] = float(np.median(adata.obs["doublet_score"]))
+            # Mitochondrial percentage
+            for col in ("pct_counts_mt", "pct_counts_mito", "percent.mt", "percent_mito", "mito_pct"):
+                if col in obs_cols:
+                    metrics["mito_pct_median"] = float(np.median(adata.obs[col]))
+                    break
+
+            # Doublet score
+            for col in ("doublet_score", "scrublet_score", "doublet_scores"):
+                if col in obs_cols:
+                    metrics["doublet_score_median"] = float(np.median(adata.obs[col]))
+                    break
 
         except ImportError:
             logger.warning("anndata not installed, cannot extract h5ad metrics")
@@ -375,11 +388,17 @@ class QCDashboardService:
         genes = metrics.get("median_genes_per_cell")
         reads = metrics.get("median_reads_per_cell")
 
-        # Single-cell metrics
-        if mito is not None and mito < 5 and genes is not None and genes > 1000:
-            if reads is None or reads > 2000:
-                return "good"
-        if mito is not None and mito < 10 and genes is not None and genes > 500:
+        # Single-cell metrics (need at least mito or genes to rate)
+        has_sc_metrics = mito is not None or genes is not None
+        if has_sc_metrics:
+            if mito is not None and mito < 5 and genes is not None and genes > 1000:
+                if reads is None or reads > 2000:
+                    return "good"
+            if mito is not None and mito < 10 and genes is not None and genes > 500:
+                return "acceptable"
+            if mito is not None and mito > 20:
+                return "concerning"
+            # Have some metrics but not enough for a clear rating
             return "acceptable"
 
         # Bulk/FastQC metrics
@@ -392,6 +411,11 @@ class QCDashboardService:
             if dup is not None and dup < 50:
                 return "acceptable"
             return "acceptable" if dup is None else "concerning"
+
+        # Only cell_count or no metrics at all -- can't make a judgment
+        cell_count = metrics.get("cell_count")
+        if cell_count is not None and cell_count > 0:
+            return "pending_review"
 
         return "concerning"
 
@@ -423,6 +447,13 @@ class QCDashboardService:
             parts.append(f"with average read length **{avg_len:.0f} bp**")
 
         summary = " ".join(parts) + "." if parts else "No metrics available."
+
+        # Note when cell count exists but no detailed QC metrics
+        cell_count = metrics.get("cell_count")
+        genes = metrics.get("median_genes_per_cell")
+        total_seqs = metrics.get("total_sequences")
+        if cell_count is not None and genes is None and total_seqs is None:
+            summary += " Detailed QC metrics (genes/cell, mito %, UMI counts) were not found in the output. Run scanpy/scran QC preprocessing to populate these fields."
 
         mito = metrics.get("mito_pct_median")
         if mito is not None:

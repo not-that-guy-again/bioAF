@@ -62,6 +62,7 @@ export default function QCDashboardsPage() {
       case "excellent": return "bg-green-100 text-green-700";
       case "good": return "bg-blue-100 text-blue-700";
       case "acceptable": return "bg-yellow-100 text-yellow-700";
+      case "pending_review": return "bg-gray-100 text-gray-700";
       default: return "bg-red-100 text-red-700";
     }
   };
@@ -98,7 +99,7 @@ export default function QCDashboardsPage() {
                 </div>
 
                 {selected.summary_text && (
-                  <p className="text-sm text-gray-600 mb-6">{selected.summary_text}</p>
+                  <p className="text-sm text-gray-600 mb-6" dangerouslySetInnerHTML={{ __html: selected.summary_text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />
                 )}
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

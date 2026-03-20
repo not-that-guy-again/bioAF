@@ -143,8 +143,6 @@ async def test_extract_metrics_downloads_h5ad_when_no_cache():
     mock_cache_blob = MagicMock()
     mock_cache_blob.exists.return_value = False
 
-    mock_upload_blob = MagicMock()
-
     mock_h5ad_blob = MagicMock()
     mock_h5ad_blob.name = "experiments/10/pipeline-runs/5/filtered.h5ad"
 
@@ -153,8 +151,6 @@ async def test_extract_metrics_downloads_h5ad_when_no_cache():
     def blob_side_effect(path):
         if path.endswith("qc_metrics.json"):
             return mock_cache_blob
-        if path.endswith("qc_metrics_cache.json"):
-            return mock_upload_blob
         return mock_h5ad_blob
 
     mock_bucket.blob.side_effect = blob_side_effect
@@ -205,8 +201,8 @@ async def test_extract_metrics_downloads_h5ad_when_no_cache():
     assert metrics["cell_count"] == 3000
     # Should have downloaded the h5ad
     mock_h5ad_blob.download_to_filename.assert_called_once()
-    # Should have uploaded the cache
-    mock_upload_blob.upload_from_string.assert_called_once()
+    # Should have uploaded the cache (same blob object, qc_metrics.json)
+    mock_cache_blob.upload_from_string.assert_called_once()
 
 
 @pytest.mark.asyncio

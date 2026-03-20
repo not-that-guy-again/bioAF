@@ -1151,6 +1151,7 @@ function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
       case "excellent": return "bg-green-100 text-green-700";
       case "good": return "bg-blue-100 text-blue-700";
       case "acceptable": return "bg-yellow-100 text-yellow-700";
+      case "pending_review": return "bg-gray-100 text-gray-700";
       default: return "bg-red-100 text-red-700";
     }
   };
@@ -1182,7 +1183,7 @@ function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
                 </span>
               </div>
             </div>
-            {selectedQc.summary_text && <p className="text-sm text-gray-600 mb-4">{selectedQc.summary_text}</p>}
+            {selectedQc.summary_text && <p className="text-sm text-gray-600 mb-4" dangerouslySetInnerHTML={{ __html: selectedQc.summary_text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") }} />}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {selectedQc.metrics.cell_count != null && (
                 <div className="bg-gray-50 rounded p-3"><p className="text-xs text-gray-500">Cell Count</p><p className="font-semibold">{selectedQc.metrics.cell_count.toLocaleString()}</p></div>
