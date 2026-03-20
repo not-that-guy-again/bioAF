@@ -173,8 +173,14 @@ class UploadService:
         for sample_id in pending["sample_ids"]:
             await FileService.link_file_to_sample(session, file.id, sample_id)
 
-        # Auto-update experiment status if FASTQs uploaded
+        # Move file from ingest to raw bucket under experiment prefix
         experiment_id = pending["experiment_id"]
+        if experiment_id:
+            from app.services.file_organization import FileOrganizationService
+
+            await FileOrganizationService.assign_file_to_experiment(session, file.id, experiment_id, pending["user_id"])
+
+        # Auto-update experiment status if FASTQs uploaded
         if experiment_id and file_type == "fastq":
             await UploadService._auto_update_experiment_status(session, experiment_id, org_id, pending["user_id"])
 
@@ -236,6 +242,12 @@ class UploadService:
         if sample_ids:
             for sample_id in sample_ids:
                 await FileService.link_file_to_sample(session, file.id, sample_id)
+
+        # Move file from ingest to raw bucket under experiment prefix
+        if experiment_id:
+            from app.services.file_organization import FileOrganizationService
+
+            await FileOrganizationService.assign_file_to_experiment(session, file.id, experiment_id, user_id)
 
         if experiment_id and file_type == "fastq":
             await UploadService._auto_update_experiment_status(session, experiment_id, org_id, user_id)
