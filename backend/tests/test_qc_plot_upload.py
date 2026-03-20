@@ -35,6 +35,38 @@ def test_read_starsolo_summary():
     assert metrics["median_umi_per_cell"] == 7011.0
     assert metrics["saturation"] == pytest.approx(0.696901)
 
+    # New fields from STARsolo Summary.csv
+    assert metrics["number_of_reads"] == 66601887
+    assert metrics["valid_barcodes"] == pytest.approx(0.975795)
+    assert metrics["q30_bases_barcode"] == pytest.approx(0.93492)
+    assert metrics["q30_bases_rna_read"] == pytest.approx(0.902251)
+    assert metrics["reads_mapped_genome"] == pytest.approx(0.956178)
+    assert metrics["reads_mapped_genome_unique"] == pytest.approx(0.875518)
+    assert metrics["mean_reads_per_cell"] == 27933.0
+    assert metrics["mean_umi_per_cell"] == 8096.0
+    assert metrics["mean_genes_per_cell"] == 2281.0
+    assert metrics["total_genes_detected"] == 24657
+    assert metrics["umis_in_cells"] == 9376295
+
+
+def test_read_starsolo_summary_new_fields_default_none():
+    """New fields default to None when not present in partial input."""
+    partial = "Estimated Number of Cells,500\nMedian Gene per Cell,1200"
+    metrics = QCDashboardService._read_starsolo_summary(partial)
+    assert metrics["cell_count"] == 500
+    assert metrics["median_genes_per_cell"] == 1200.0
+    assert metrics["number_of_reads"] is None
+    assert metrics["valid_barcodes"] is None
+    assert metrics["q30_bases_barcode"] is None
+    assert metrics["q30_bases_rna_read"] is None
+    assert metrics["reads_mapped_genome"] is None
+    assert metrics["reads_mapped_genome_unique"] is None
+    assert metrics["mean_reads_per_cell"] is None
+    assert metrics["mean_umi_per_cell"] is None
+    assert metrics["mean_genes_per_cell"] is None
+    assert metrics["total_genes_detected"] is None
+    assert metrics["umis_in_cells"] is None
+
 
 def test_read_starsolo_summary_partial():
     """Handles a Summary.csv with only some fields."""
@@ -162,3 +194,29 @@ def test_compute_quality_rating_pending_review_cell_only():
     """Only cell_count available rates as pending_review."""
     metrics = {"cell_count": 1000, "median_genes_per_cell": None, "mito_pct_median": None}
     assert QCDashboardService._compute_quality_rating(metrics) == "pending_review"
+
+
+def test_compute_quality_rating_excellent_with_new_metrics():
+    """High genes + reads + saturation + mapping + Q30 + valid barcodes rates excellent."""
+    metrics = {
+        "median_genes_per_cell": 2085,
+        "median_reads_per_cell": 24457,
+        "saturation": 0.8,
+        "mito_pct_median": None,
+        "reads_mapped_genome": 0.956,
+        "q30_bases_rna_read": 0.902,
+        "valid_barcodes": 0.976,
+    }
+    assert QCDashboardService._compute_quality_rating(metrics) == "excellent"
+
+
+def test_compute_quality_rating_concerning_low_mapping():
+    """Very low mapping rate is concerning regardless of other metrics."""
+    metrics = {
+        "median_genes_per_cell": 2085,
+        "median_reads_per_cell": 24457,
+        "saturation": 0.8,
+        "mito_pct_median": None,
+        "reads_mapped_genome": 0.3,
+    }
+    assert QCDashboardService._compute_quality_rating(metrics) == "concerning"

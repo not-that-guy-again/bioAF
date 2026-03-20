@@ -796,6 +796,21 @@ export interface QCMetrics {
   mito_pct_median: number | null;
   doublet_score_median: number | null;
   saturation: number | null;
+  // Sequencing metrics
+  number_of_reads: number | null;
+  valid_barcodes: number | null;
+  q30_bases_barcode: number | null;
+  q30_bases_rna_read: number | null;
+  // Mapping metrics
+  reads_mapped_genome: number | null;
+  reads_mapped_genome_unique: number | null;
+  // Mean values and totals
+  mean_reads_per_cell: number | null;
+  mean_umi_per_cell: number | null;
+  mean_genes_per_cell: number | null;
+  total_genes_detected: number | null;
+  umis_in_cells: number | null;
+  // Bulk/FastQC metrics
   total_sequences: number | null;
   percent_duplicates: number | null;
   percent_gc: number | null;

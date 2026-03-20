@@ -140,6 +140,17 @@ class QCDashboardService:
             "percent_gc": None,
             "avg_sequence_length": None,
             "total_samples": None,
+            "number_of_reads": None,
+            "valid_barcodes": None,
+            "q30_bases_barcode": None,
+            "q30_bases_rna_read": None,
+            "reads_mapped_genome": None,
+            "reads_mapped_genome_unique": None,
+            "mean_reads_per_cell": None,
+            "mean_umi_per_cell": None,
+            "mean_genes_per_cell": None,
+            "total_genes_detected": None,
+            "umis_in_cells": None,
         }
 
         results_bucket = await QCDashboardService._get_results_bucket(session)
@@ -303,6 +314,17 @@ class QCDashboardService:
             "median_genes_per_cell": None,
             "median_umi_per_cell": None,
             "saturation": None,
+            "number_of_reads": None,
+            "valid_barcodes": None,
+            "q30_bases_barcode": None,
+            "q30_bases_rna_read": None,
+            "reads_mapped_genome": None,
+            "reads_mapped_genome_unique": None,
+            "mean_reads_per_cell": None,
+            "mean_umi_per_cell": None,
+            "mean_genes_per_cell": None,
+            "total_genes_detected": None,
+            "umis_in_cells": None,
         }
         try:
             kv = {}
@@ -311,6 +333,7 @@ class QCDashboardService:
                     key, val = line.split(",", 1)
                     kv[key.strip()] = val.strip()
 
+            # Original fields
             if "Estimated Number of Cells" in kv:
                 metrics["cell_count"] = int(kv["Estimated Number of Cells"])
             if "Median Reads per Cell" in kv:
@@ -321,6 +344,34 @@ class QCDashboardService:
                 metrics["median_umi_per_cell"] = float(kv["Median UMI per Cell"])
             if "Sequencing Saturation" in kv:
                 metrics["saturation"] = float(kv["Sequencing Saturation"])
+
+            # Sequencing metrics
+            if "Number of Reads" in kv:
+                metrics["number_of_reads"] = int(kv["Number of Reads"])
+            if "Reads With Valid Barcodes" in kv:
+                metrics["valid_barcodes"] = float(kv["Reads With Valid Barcodes"])
+            if "Q30 Bases in CB+UMI" in kv:
+                metrics["q30_bases_barcode"] = float(kv["Q30 Bases in CB+UMI"])
+            if "Q30 Bases in RNA read" in kv:
+                metrics["q30_bases_rna_read"] = float(kv["Q30 Bases in RNA read"])
+
+            # Mapping metrics
+            if "Reads Mapped to Genome: Unique+Multiple" in kv:
+                metrics["reads_mapped_genome"] = float(kv["Reads Mapped to Genome: Unique+Multiple"])
+            if "Reads Mapped to Genome: Unique" in kv:
+                metrics["reads_mapped_genome_unique"] = float(kv["Reads Mapped to Genome: Unique"])
+
+            # Mean values and totals
+            if "Mean Reads per Cell" in kv:
+                metrics["mean_reads_per_cell"] = float(kv["Mean Reads per Cell"])
+            if "Mean UMI per Cell" in kv:
+                metrics["mean_umi_per_cell"] = float(kv["Mean UMI per Cell"])
+            if "Mean Gene per Cell" in kv:
+                metrics["mean_genes_per_cell"] = float(kv["Mean Gene per Cell"])
+            if "Total Gene Detected" in kv:
+                metrics["total_genes_detected"] = int(kv["Total Gene Detected"])
+            if "UMIs in Cells" in kv:
+                metrics["umis_in_cells"] = int(kv["UMIs in Cells"])
 
             logger.info("STARsolo metrics: %s", metrics)
         except Exception as e:
@@ -441,22 +492,41 @@ class QCDashboardService:
         genes = metrics.get("median_genes_per_cell")
         reads = metrics.get("median_reads_per_cell")
         sat = metrics.get("saturation")
+        mapping = metrics.get("reads_mapped_genome")
+        q30_rna = metrics.get("q30_bases_rna_read")
+        valid_bc = metrics.get("valid_barcodes")
 
         # Single-cell metrics -- rate based on what's available
         has_sc_metrics = genes is not None or mito is not None
         if has_sc_metrics:
+            # Check for hard failures first
+            if mito is not None and mito > 20:
+                return "concerning"
+            if mapping is not None and mapping < 0.5:
+                return "concerning"
+
             # Full metrics available (after scanpy QC)
             if mito is not None and genes is not None:
                 if mito < 5 and genes > 1000 and (reads is None or reads > 2000):
-                    return "excellent" if sat is not None and sat > 0.7 else "good"
+                    if sat is not None and sat > 0.7:
+                        return "excellent"
+                    return "good"
                 if mito < 10 and genes > 500:
                     return "acceptable"
-                if mito > 20:
-                    return "concerning"
                 return "acceptable"
 
             # STARsolo-level metrics (genes but no mito)
             if genes is not None and genes > 1000:
+                excellent_signals = [
+                    reads is not None and reads > 10000,
+                    sat is not None and sat > 0.7,
+                    mapping is not None and mapping > 0.9,
+                    q30_rna is not None and q30_rna > 0.9,
+                    valid_bc is not None and valid_bc > 0.95,
+                ]
+                good_count = sum(1 for s in excellent_signals if s)
+                if good_count >= 4:
+                    return "excellent"
                 if reads is not None and reads > 10000 and sat is not None and sat > 0.5:
                     return "good"
                 return "acceptable"
@@ -517,9 +587,24 @@ class QCDashboardService:
 
         summary = " ".join(parts) + "." if parts else "No metrics available."
 
+        num_reads = metrics.get("number_of_reads")
+        if num_reads is not None:
+            summary += f" **{num_reads:,} total reads**."
+
         reads = metrics.get("median_reads_per_cell")
         if reads is not None:
             summary += f" Median **{reads:,.0f} reads per cell**."
+
+        # Mapping quality
+        mapping = metrics.get("reads_mapped_genome")
+        if mapping is not None:
+            summary += f" **{mapping * 100:.1f}%** of reads mapped to genome."
+
+        # Q30 quality
+        q30_rna = metrics.get("q30_bases_rna_read")
+        if q30_rna is not None:
+            health = "good" if q30_rna >= 0.9 else "below 90% threshold"
+            summary += f" Q30 bases in RNA read: **{q30_rna * 100:.1f}%** ({health})."
 
         # Note when mito % is missing (common before scanpy QC)
         mito_available = metrics.get("mito_pct_median") is not None
@@ -543,8 +628,9 @@ class QCDashboardService:
 
         sat = metrics.get("saturation")
         if sat is not None:
-            summary += f" Sequencing saturation is **{sat:.0f}%**"
-            if sat < 80:
+            sat_pct = sat * 100
+            summary += f" Sequencing saturation is **{sat_pct:.0f}%**"
+            if sat < 0.8:
                 summary += ", suggesting additional sequencing depth may improve gene detection."
             else:
                 summary += "."
