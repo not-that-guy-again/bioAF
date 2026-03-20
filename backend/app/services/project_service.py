@@ -253,6 +253,21 @@ class ProjectService:
                 }
             )
 
+        # Build experiment summaries
+        exp_map: dict[int, dict] = {}
+        for experiment, sample in exp_rows:
+            if experiment.id not in exp_map:
+                exp_map[experiment.id] = {
+                    "id": experiment.id,
+                    "name": experiment.name,
+                    "status": experiment.status,
+                    "sample_count": 0,
+                    "created_at": experiment.created_at,
+                }
+            if sample is not None:
+                exp_map[experiment.id]["sample_count"] += 1
+        experiment_summaries = sorted(exp_map.values(), key=lambda e: e["name"])
+
         # Get pipeline runs
         run_result = await session.execute(
             select(PipelineRun).where(PipelineRun.project_id == project_id).order_by(PipelineRun.created_at.desc())
@@ -281,6 +296,7 @@ class ProjectService:
             "snapshot_count": snapshot_count,
             "created_at": project.created_at,
             "samples": list(groups.values()),
+            "experiments": experiment_summaries,
             "pipeline_runs": [
                 {
                     "id": r.id,

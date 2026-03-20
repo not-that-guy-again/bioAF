@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import SnapshotTimeline from "@/components/SnapshotTimeline";
 import type { ProjectDetailResponse, ProvenanceDAG, QCStatus } from "@/lib/types";
 
-type Tab = "samples" | "runs" | "analysis" | "provenance" | "data";
+type Tab = "experiments" | "samples" | "runs" | "analysis" | "provenance" | "data";
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -22,7 +22,7 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<ProjectDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("samples");
+  const [activeTab, setActiveTab] = useState<Tab>("experiments");
   const [provenance, setProvenance] = useState<ProvenanceDAG | null>(null);
   const [provenanceLoading, setProvenanceLoading] = useState(false);
 
@@ -164,6 +164,7 @@ export default function ProjectDetailPage() {
   );
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: "experiments", label: "Experiments" },
     { key: "samples", label: "Samples" },
     { key: "runs", label: "Pipeline Runs" },
     { key: "analysis", label: "Analysis" },
@@ -228,6 +229,48 @@ export default function ProjectDetailPage() {
               ))}
             </nav>
           </div>
+
+          {/* Experiments Tab */}
+          {activeTab === "experiments" && (
+            <div>
+              {project.experiments.length === 0 ? (
+                <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400">
+                  No experiments linked to this project.
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Samples</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {project.experiments.map((exp) => (
+                        <tr
+                          key={exp.id}
+                          onClick={() => router.push(`/experiments/${exp.id}`)}
+                          className="hover:bg-gray-50 cursor-pointer"
+                        >
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{exp.name}</td>
+                          <td className="px-6 py-4">
+                            <StatusBadge status={exp.status} />
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">{exp.sample_count}</td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            {exp.created_at ? new Date(exp.created_at).toLocaleDateString() : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Samples Tab */}
           {activeTab === "samples" && (
