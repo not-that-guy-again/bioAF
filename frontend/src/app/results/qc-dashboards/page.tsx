@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { PlotModal } from "@/components/shared/PlotModal";
+import { ExportPdfButton } from "@/components/shared/ExportPdfButton";
 import { api } from "@/lib/api";
 import type { QCDashboardSummary, QCDashboardResponse } from "@/lib/types";
 
@@ -15,7 +17,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PlotImage({ fileId, title }: { fileId: number; title: string }) {
+function PlotImage({ fileId, title, onExpand }: { fileId: number; title: string; onExpand: (url: string) => void }) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
@@ -33,16 +35,27 @@ function PlotImage({ fileId, title }: { fileId: number; title: string }) {
   }, [fileId]);
 
   return (
-    <div className="bg-gray-100 rounded min-h-[12rem] flex items-center justify-center">
+    <div className="relative bg-gray-100 rounded min-h-[12rem] flex items-center justify-center group">
       {error ? (
         <span className="text-gray-400 text-sm">Failed to load plot</span>
       ) : url ? (
-        <img
-          src={url}
-          alt={title}
-          className="w-full rounded"
-          onError={() => setError(true)}
-        />
+        <>
+          <img
+            src={url}
+            alt={title}
+            className="w-full rounded"
+            onError={() => setError(true)}
+          />
+          <button
+            onClick={() => onExpand(url)}
+            className="absolute top-2 right-2 p-1.5 bg-white/80 rounded shadow opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+            title="Expand plot"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+            </svg>
+          </button>
+        </>
       ) : (
         <span className="text-gray-400 text-sm">Loading plot...</span>
       )}
@@ -55,6 +68,7 @@ export default function QCDashboardsPage() {
   const [selected, setSelected] = useState<QCDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [regenerating, setRegenerating] = useState(false);
+  const [expandedPlot, setExpandedPlot] = useState<{ url: string; title: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -92,6 +106,10 @@ export default function QCDashboardsPage() {
     }
   };
 
+  const handleExpandPlot = useCallback((url: string, title: string) => {
+    setExpandedPlot({ url, title });
+  }, []);
+
   const qualityColor = (rating: string) => {
     switch (rating) {
       case "excellent": return "bg-green-100 text-green-700";
@@ -112,11 +130,17 @@ export default function QCDashboardsPage() {
 
           {selected ? (
             <div className="space-y-6">
-              <button onClick={() => setSelected(null)} className="text-blue-600 text-sm hover:underline">
-                Back to list
-              </button>
+              <div className="flex items-center justify-between">
+                <button onClick={() => setSelected(null)} className="text-blue-600 text-sm hover:underline">
+                  Back to list
+                </button>
+                <ExportPdfButton
+                  targetId="qc-dashboard-content"
+                  filename={`qc-dashboard-run-${selected.pipeline_run_id}.pdf`}
+                />
+              </div>
 
-              <div className="bg-white rounded-lg shadow p-6">
+              <div id="qc-dashboard-content" className="bg-white rounded-lg shadow p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold">QC Dashboard - Run #{selected.pipeline_run_id}</h2>
                   <div className="flex items-center gap-2">
@@ -183,7 +207,11 @@ export default function QCDashboardsPage() {
                       {selected.plots.map((plot, i) => (
                         <div key={i} className="border rounded-lg p-3">
                           <p className="text-sm font-medium mb-2">{plot.title}</p>
-                          <PlotImage fileId={plot.file_id} title={plot.title} />
+                          <PlotImage
+                            fileId={plot.file_id}
+                            title={plot.title}
+                            onExpand={(url) => handleExpandPlot(url, plot.title)}
+                          />
                         </div>
                       ))}
                     </div>
@@ -221,6 +249,14 @@ export default function QCDashboardsPage() {
           )}
         </main>
       </div>
+
+      {expandedPlot && (
+        <PlotModal
+          url={expandedPlot.url}
+          title={expandedPlot.title}
+          onClose={() => setExpandedPlot(null)}
+        />
+      )}
     </div>
   );
 }
