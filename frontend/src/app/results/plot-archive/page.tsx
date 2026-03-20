@@ -103,9 +103,7 @@ export default function PlotArchivePage() {
         setPipelineRuns(
           data.runs.map((r) => ({
             id: r.id,
-            label: r.pipeline_key
-              ? `${r.pipeline_key} #${r.id}`
-              : `Run #${r.id}`,
+            label: `${r.pipeline_name || r.pipeline_key || "Run"} #${r.id}`,
           }))
         );
       } catch {
