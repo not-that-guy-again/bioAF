@@ -157,7 +157,7 @@ export function Sidebar() {
         <Link href="/dashboard" className="text-xl font-bold text-bioaf-400">
           bioAF
         </Link>
-        <p className="text-xs text-gray-400 mt-1">Computational Biology Platform</p>
+        <p className="text-xs text-gray-400 mt-1">Comp Bio Application Framework</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto" data-testid="sidebar-nav">
