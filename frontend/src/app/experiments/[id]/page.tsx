@@ -1138,6 +1138,46 @@ function ResultsPlotImage({ fileId, title, onExpand }: { fileId: number; title: 
   );
 }
 
+function ExperimentPlotThumbnail({
+  fileId,
+  title,
+  onExpand,
+}: {
+  fileId: number;
+  title: string;
+  onExpand: (url: string) => void;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.get<{ download_url: string }>(
+          `/api/files/${fileId}/download`
+        );
+        if (!cancelled) setUrl(data.download_url);
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fileId]);
+
+  if (error) return <span className="text-gray-400 text-xs">Failed to load</span>;
+  if (!url) return <span className="text-gray-400 text-xs">Loading...</span>;
+  return (
+    <img
+      src={url}
+      alt={title}
+      className="w-full h-full object-cover cursor-pointer"
+      onClick={() => onExpand(url)}
+      onError={() => setError(true)}
+    />
+  );
+}
+
 function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
   const [qcDashboards, setQcDashboards] = useState<QCDashboardSummary[]>([]);
   const [selectedQc, setSelectedQc] = useState<QCDashboardResponse | null>(null);
@@ -1338,8 +1378,12 @@ function ExperimentResultsTab({ experimentId }: { experimentId: number }) {
             {plots.map((plot) => (
               <div key={plot.id} className="bg-white rounded-lg shadow overflow-hidden">
                 <div className="aspect-square bg-gray-100 flex items-center justify-center">
-                  {plot.thumbnail_url ? (
-                    <img src={plot.thumbnail_url ?? undefined} alt={plot.title ?? undefined} className="w-full h-full object-cover" />
+                  {plot.file ? (
+                    <ExperimentPlotThumbnail
+                      fileId={plot.file.id}
+                      title={plot.title ?? "Plot"}
+                      onExpand={(url) => setExpandedPlot({ url, title: plot.title ?? "Plot" })}
+                    />
                   ) : (
                     <span className="text-gray-400 text-xs">No preview</span>
                   )}
