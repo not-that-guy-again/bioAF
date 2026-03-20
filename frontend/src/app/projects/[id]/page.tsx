@@ -7,11 +7,12 @@ import { Header } from "@/components/layout/Header";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { SampleQCBadge } from "@/components/experiments/SampleQCBadge";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { DetailModal } from "@/components/shared/DetailModal";
 import { ProvenanceDAGComponent } from "@/components/provenance/ProvenanceDAG";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
 import SnapshotTimeline from "@/components/SnapshotTimeline";
-import type { ProjectDetailResponse, ProvenanceDAG, QCStatus } from "@/lib/types";
+import type { ProjectDetailResponse, ProjectSampleResponse, ProvenanceDAG, QCStatus } from "@/lib/types";
 
 type Tab = "experiments" | "samples" | "runs" | "analysis" | "provenance" | "data";
 
@@ -26,7 +27,8 @@ export default function ProjectDetailPage() {
   const [provenance, setProvenance] = useState<ProvenanceDAG | null>(null);
   const [provenanceLoading, setProvenanceLoading] = useState(false);
 
-  // Sample picker state
+  // Sample viewing/picker state
+  const [viewingSample, setViewingSample] = useState<(ProjectSampleResponse & { experiment_name: string }) | null>(null);
   const [showSamplePicker, setShowSamplePicker] = useState(false);
   const [availableSamples, setAvailableSamples] = useState<Array<{
     id: number;
@@ -312,7 +314,7 @@ export default function ProjectDetailPage() {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {group.samples.map((s) => (
-                            <tr key={s.sample_id}>
+                            <tr key={s.sample_id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingSample({ ...s, experiment_name: group.experiment_name })}>
                               <td className="px-6 py-4 text-sm font-medium text-gray-900">
                                 {s.sample_id_external || `#${s.sample_id}`}
                               </td>
@@ -326,10 +328,10 @@ export default function ProjectDetailPage() {
                                 {s.added_at ? new Date(s.added_at).toLocaleDateString() : "—"}
                               </td>
                               {canModify && (
-                                <td className="px-6 py-4 text-right">
+                                <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                   <button
                                     onClick={() => handleRemoveSample(s.sample_id)}
-                                    className="text-red-600 hover:text-red-800 text-sm"
+                                    className="text-xs px-2 py-1 border border-red-600 text-red-600 rounded hover:bg-red-50"
                                   >
                                     Remove
                                   </button>
@@ -344,6 +346,33 @@ export default function ProjectDetailPage() {
                 ))
               )}
             </div>
+          )}
+
+          {viewingSample && (
+            <DetailModal
+              title={viewingSample.sample_id_external || `Sample #${viewingSample.sample_id}`}
+              onClose={() => setViewingSample(null)}
+              fields={[
+                { label: "Sample ID", value: viewingSample.sample_id_external || `#${viewingSample.sample_id}` },
+                { label: "Experiment", value: viewingSample.experiment_name },
+                { label: "Organism", value: viewingSample.organism },
+                { label: "Tissue Type", value: viewingSample.tissue_type },
+                { label: "QC Status", value: viewingSample.qc_status },
+                { label: "Added By", value: viewingSample.added_by },
+                { label: "Added", value: viewingSample.added_at ? new Date(viewingSample.added_at).toLocaleDateString() : null },
+                { label: "Notes", value: viewingSample.notes },
+              ]}
+              actions={
+                canModify ? (
+                  <button
+                    onClick={() => { handleRemoveSample(viewingSample.sample_id); setViewingSample(null); }}
+                    className="px-3 py-1.5 border border-red-600 text-red-600 rounded text-sm hover:bg-red-50"
+                  >
+                    Remove from Project
+                  </button>
+                ) : undefined
+              }
+            />
           )}
 
           {/* Pipeline Runs Tab */}
