@@ -17,32 +17,36 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 
 function PlotImage({ fileId, title }: { fileId: number; title: string }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const data = await api.get<{ download_url: string }>(`/api/files/${fileId}/download`);
-        setUrl(data.download_url);
+        if (!cancelled) setUrl(data.download_url);
       } catch {
-        // ignore
+        if (!cancelled) setError(true);
       }
     })();
+    return () => { cancelled = true; };
   }, [fileId]);
 
-  if (!url) {
-    return (
-      <div className="bg-gray-100 rounded h-48 flex items-center justify-center text-gray-400 text-sm">
-        Loading plot...
-      </div>
-    );
-  }
-
   return (
-    <img
-      src={url}
-      alt={title}
-      className="w-full rounded border border-gray-200"
-    />
+    <div className="bg-gray-100 rounded min-h-[12rem] flex items-center justify-center">
+      {error ? (
+        <span className="text-gray-400 text-sm">Failed to load plot</span>
+      ) : url ? (
+        <img
+          src={url}
+          alt={title}
+          className="w-full rounded"
+          onError={() => setError(true)}
+        />
+      ) : (
+        <span className="text-gray-400 text-sm">Loading plot...</span>
+      )}
+    </div>
   );
 }
 
