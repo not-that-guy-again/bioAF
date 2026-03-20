@@ -76,9 +76,7 @@ class OrphanedResourceService:
         user_id: int,
     ) -> OrphanedResource:
         """Dispatch cleanup based on resource_type, update status."""
-        result = await session.execute(
-            select(OrphanedResource).where(OrphanedResource.id == resource_id)
-        )
+        result = await session.execute(select(OrphanedResource).where(OrphanedResource.id == resource_id))
         resource = result.scalar_one_or_none()
         if not resource:
             raise ValueError(f"Orphaned resource {resource_id} not found")
@@ -122,9 +120,7 @@ class OrphanedResourceService:
         credentials = await _get_gke_credentials(session)
         client = _get_gke_client(credentials)
         cluster_path = (
-            f"projects/{resource.gcp_project_id}"
-            f"/locations/{resource.gcp_zone}"
-            f"/clusters/{resource.resource_name}"
+            f"projects/{resource.gcp_project_id}/locations/{resource.gcp_zone}/clusters/{resource.resource_name}"
         )
         client.delete_cluster(name=cluster_path)
 
@@ -138,9 +134,7 @@ class OrphanedResourceService:
 
         credentials = await _get_gke_credentials(session)
         if credentials:
-            client = storage.Client(
-                credentials=credentials, project=resource.gcp_project_id
-            )
+            client = storage.Client(credentials=credentials, project=resource.gcp_project_id)
         else:
             client = storage.Client(project=resource.gcp_project_id)
         bucket = client.bucket(resource.resource_name)
@@ -153,9 +147,7 @@ class OrphanedResourceService:
         user_id: int,
     ) -> OrphanedResource:
         """Mark an orphaned resource as manually resolved."""
-        result = await session.execute(
-            select(OrphanedResource).where(OrphanedResource.id == resource_id)
-        )
+        result = await session.execute(select(OrphanedResource).where(OrphanedResource.id == resource_id))
         resource = result.scalar_one_or_none()
         if not resource:
             raise ValueError(f"Orphaned resource {resource_id} not found")
