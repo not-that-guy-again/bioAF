@@ -237,23 +237,40 @@ class QCDashboardService:
                 if chart_data:
                     metrics["chart_data"] = chart_data
 
-            # 5. Try STARsolo raw barcode data for knee plot
-            raw_matrix_blob = None
+            # 5. Try STARsolo UMIperCellSorted.txt for barcode rank (knee) plot
+            umi_sorted_blob = None
             for blob in bucket.list_blobs(prefix=f"{prefix}star/"):
-                if blob.name.endswith("Solo.out/Gene/raw/UniqueAndMult-EM.mtx") or blob.name.endswith(
-                    "Solo.out/Gene/raw/matrix.mtx"
-                ):
-                    raw_matrix_blob = blob
+                if blob.name.endswith("Solo.out/Gene/UMIperCellSorted.txt"):
+                    umi_sorted_blob = blob
                     break
 
-            if raw_matrix_blob:
-                logger.info("Found STARsolo raw matrix for barcode rank plot, run %d", run.id)
+            if umi_sorted_blob:
+                logger.info("Found UMIperCellSorted.txt for barcode rank plot, run %d", run.id)
                 try:
-                    barcode_rank = QCDashboardService._extract_barcode_rank_from_mtx(raw_matrix_blob.download_as_text())
+                    barcode_rank = QCDashboardService._read_umi_per_cell_sorted(umi_sorted_blob.download_as_text())
                     if barcode_rank:
                         metrics["barcode_rank_data"] = barcode_rank
                 except Exception as e:
                     logger.warning("Barcode rank extraction failed for run %d: %s", run.id, e)
+            else:
+                # Fallback: try raw matrix.mtx
+                raw_matrix_blob = None
+                for blob in bucket.list_blobs(prefix=f"{prefix}star/"):
+                    if blob.name.endswith("Solo.out/Gene/raw/UniqueAndMult-EM.mtx") or blob.name.endswith(
+                        "Solo.out/Gene/raw/matrix.mtx"
+                    ):
+                        raw_matrix_blob = blob
+                        break
+                if raw_matrix_blob:
+                    logger.info("Found raw matrix for barcode rank plot, run %d", run.id)
+                    try:
+                        barcode_rank = QCDashboardService._extract_barcode_rank_from_mtx(
+                            raw_matrix_blob.download_as_text()
+                        )
+                        if barcode_rank:
+                            metrics["barcode_rank_data"] = barcode_rank
+                    except Exception as e:
+                        logger.warning("Barcode rank extraction failed for run %d: %s", run.id, e)
 
             has_any = any(v is not None for k, v in metrics.items() if k not in ("chart_data", "barcode_rank_data"))
             if not has_any:
@@ -562,79 +579,107 @@ class QCDashboardService:
         return QCDashboardService._build_barcode_rank_data(sorted_counts)
 
     @staticmethod
+    def _read_umi_per_cell_sorted(text: str) -> list[list[int]]:
+        """Parse UMIperCellSorted.txt (one UMI count per line, descending) into barcode rank data."""
+        counts = []
+        for line in text.strip().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    counts.append(int(line))
+                except ValueError:
+                    continue
+        return QCDashboardService._build_barcode_rank_data(counts)
+
+    @staticmethod
     def _read_multiqc_chart_data(multiqc_json_text: str) -> dict:
         """Extract structured chart data from multiqc_data.json for interactive rendering.
 
-        Looks for report_plot_data sections and extracts data for:
-        - star_alignment: STAR alignment categories
-        - base_quality: per-base sequence quality
-        - gc_content: GC content distribution (sample + theoretical)
-        - duplication: sequence duplication levels
+        Supports MultiQC v2 format where:
+        - Bar charts use datasets[].cats[] with name/data_pct arrays
+        - Line charts use datasets[].lines[] with name/pairs arrays
+
+        Extracts:
+        - star_alignment: STAR alignment categories (bar chart)
+        - base_quality: per-base sequence quality (line chart, averaged across samples)
+        - gc_content: GC content distribution (line chart, averaged across samples)
+        - duplication: sequence duplication levels (line chart, averaged across samples)
         """
         chart_data: dict = {}
         try:
             data = json.loads(multiqc_json_text)
             plot_data = data.get("report_plot_data", {})
 
-            # STAR alignment (stacked bar)
+            # STAR alignment (bar chart with cats)
             star_plot = plot_data.get("star_alignment_plot")
             if star_plot:
                 datasets = star_plot.get("datasets", [])
                 if datasets:
-                    entries = datasets[0].get("data", [])
-                    star_items = []
-                    for entry in entries:
-                        name = entry.get("name", "")
-                        points = entry.get("data", [])
-                        if points:
-                            val = points[0].get("y", 0) if isinstance(points[0], dict) else points[0][1]
-                            star_items.append({"name": name, "value": val})
-                    if star_items:
-                        chart_data["star_alignment"] = star_items
+                    ds = datasets[0]
+                    # v2 format: cats[] with name and data_pct
+                    cats = ds.get("cats", [])
+                    if cats:
+                        star_items = []
+                        for cat in cats:
+                            name = cat.get("name", "")
+                            pct = cat.get("data_pct", [])
+                            if pct:
+                                star_items.append({"name": name, "value": round(pct[0], 2)})
+                        if star_items:
+                            chart_data["star_alignment"] = star_items
+                    else:
+                        # Fallback: older format with data[].name/data
+                        entries = ds.get("data", [])
+                        star_items = []
+                        for entry in entries:
+                            name = entry.get("name", "")
+                            points = entry.get("data", [])
+                            if points:
+                                val = points[0].get("y", 0) if isinstance(points[0], dict) else points[0][1]
+                                star_items.append({"name": name, "value": val})
+                        if star_items:
+                            chart_data["star_alignment"] = star_items
 
-            # Per-base sequence quality (line chart)
-            bq_plot = plot_data.get("fastqc_per_base_sequence_quality_plot")
-            if bq_plot:
-                datasets = bq_plot.get("datasets", [])
-                if datasets:
-                    entries = datasets[0].get("data", [])
-                    if entries:
-                        # Use first sample
-                        points = entries[0].get("data", [])
-                        if points:
-                            chart_data["base_quality"] = points
+            # Helper: extract averaged line data from v2 lines[] format
+            def _avg_lines(plot_key: str) -> list[list[float]] | None:
+                plot = plot_data.get(plot_key)
+                if not plot:
+                    return None
+                datasets_list = plot.get("datasets", [])
+                if not datasets_list:
+                    return None
+                ds = datasets_list[0]
+                lines = ds.get("lines", [])
+                if lines:
+                    # Average across all sample lines
+                    all_x: dict[float, list[float]] = {}
+                    for line in lines:
+                        for x, y in line.get("pairs", []):
+                            all_x.setdefault(x, []).append(y)
+                    if all_x:
+                        return [[x, round(sum(ys) / len(ys), 4)] for x, ys in sorted(all_x.items())]
+                # Fallback: older format
+                entries = ds.get("data", [])
+                if entries:
+                    points = entries[0].get("data", [])
+                    if points:
+                        return points
+                return None
 
-            # GC content (line chart with sample + theoretical)
-            gc_plot = plot_data.get("fastqc_per_sequence_gc_content_plot")
-            if gc_plot:
-                datasets = gc_plot.get("datasets", [])
-                if datasets:
-                    entries = datasets[0].get("data", [])
-                    sample_data = None
-                    theoretical_data = None
-                    for entry in entries:
-                        name = entry.get("name", "")
-                        points = entry.get("data", [])
-                        if "theoretical" in name.lower():
-                            theoretical_data = points
-                        elif sample_data is None:
-                            sample_data = points
-                    if sample_data:
-                        gc = {"sample": sample_data}
-                        if theoretical_data:
-                            gc["theoretical"] = theoretical_data
-                        chart_data["gc_content"] = gc
+            # Per-base sequence quality
+            bq_data = _avg_lines("fastqc_per_base_sequence_quality_plot")
+            if bq_data:
+                chart_data["base_quality"] = bq_data
 
-            # Duplication levels (line chart)
-            dup_plot = plot_data.get("fastqc_sequence_duplication_levels_plot")
-            if dup_plot:
-                datasets = dup_plot.get("datasets", [])
-                if datasets:
-                    entries = datasets[0].get("data", [])
-                    if entries:
-                        points = entries[0].get("data", [])
-                        if points:
-                            chart_data["duplication"] = points
+            # GC content distribution (average samples, no theoretical in v2)
+            gc_data = _avg_lines("fastqc_per_sequence_gc_content_plot")
+            if gc_data:
+                chart_data["gc_content"] = {"sample": gc_data}
+
+            # Duplication levels
+            dup_data = _avg_lines("fastqc_sequence_duplication_levels_plot")
+            if dup_data:
+                chart_data["duplication"] = dup_data
 
         except Exception as e:
             logger.warning("MultiQC chart data extraction failed: %s", e)

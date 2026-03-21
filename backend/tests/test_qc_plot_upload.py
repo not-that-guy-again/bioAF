@@ -272,50 +272,83 @@ def test_build_barcode_rank_data_small_input():
 
 
 # ---------------------------------------------------------------------------
-# MultiQC chart data extraction
+# UMIperCellSorted.txt parsing
 # ---------------------------------------------------------------------------
 
-MULTIQC_DATA_JSON = json.dumps(
+
+def test_read_umi_per_cell_sorted():
+    """Parses UMIperCellSorted.txt into barcode rank data."""
+    text = "57954\n53768\n44811\n36976\n31918\n29945\n25556\n"
+    result = QCDashboardService._read_umi_per_cell_sorted(text)
+    assert len(result) == 7
+    assert result[0] == [1, 57954]
+    assert result[-1] == [7, 25556]
+
+
+def test_read_umi_per_cell_sorted_empty():
+    """Returns empty list for empty input."""
+    result = QCDashboardService._read_umi_per_cell_sorted("")
+    assert result == []
+
+
+# ---------------------------------------------------------------------------
+# MultiQC chart data extraction (v2 format)
+# ---------------------------------------------------------------------------
+
+# MultiQC v2 uses cats[] for bar charts and lines[]/pairs for line charts
+MULTIQC_V2_JSON = json.dumps(
     {
         "report_plot_data": {
             "star_alignment_plot": {
                 "datasets": [
                     {
-                        "data": [
-                            {"name": "Uniquely mapped", "data": [{"x": "sample1", "y": 85.5}]},
-                            {"name": "Mapped to multiple loci", "data": [{"x": "sample1", "y": 5.2}]},
-                            {"name": "Unmapped: too short", "data": [{"x": "sample1", "y": 9.3}]},
-                        ]
+                        "cats": [
+                            {"name": "Uniquely mapped", "data": [58311120], "data_pct": [87.55]},
+                            {"name": "Mapped to multiple loci", "data": [5372117], "data_pct": [8.07]},
+                            {"name": "Unmapped: too short", "data": [2712345], "data_pct": [4.07]},
+                        ],
+                        "samples": ["01"],
                     }
                 ]
             },
             "fastqc_per_base_sequence_quality_plot": {
-                "datasets": [{"data": [{"name": "sample1", "data": [[1, 35.0], [2, 34.5], [3, 33.0], [4, 32.0]]}]}]
+                "datasets": [
+                    {
+                        "lines": [
+                            {"name": "01_1", "pairs": [[1, 36.0], [2, 36.1], [3, 36.2], [4, 36.0]]},
+                            {"name": "01_2", "pairs": [[1, 35.7], [2, 35.4], [3, 35.5], [4, 35.5]]},
+                        ]
+                    }
+                ]
             },
             "fastqc_per_sequence_gc_content_plot": {
                 "datasets": [
                     {
-                        "data": [
-                            {"name": "sample1", "data": [[20, 0.5], [30, 2.1], [40, 5.3], [50, 3.2], [60, 1.0]]},
-                            {
-                                "name": "Theoretical Distribution",
-                                "data": [[20, 0.4], [30, 2.0], [40, 5.0], [50, 3.5], [60, 1.1]],
-                            },
+                        "lines": [
+                            {"name": "01_1", "pairs": [[0, 0.1], [20, 0.5], [40, 5.3], [60, 1.0], [100, 0.01]]},
+                            {"name": "01_2", "pairs": [[0, 0.2], [20, 0.7], [40, 5.1], [60, 1.2], [100, 0.03]]},
                         ]
                     }
                 ]
             },
             "fastqc_sequence_duplication_levels_plot": {
-                "datasets": [{"data": [{"name": "sample1", "data": [[1, 60.0], [2, 15.0], [3, 8.0], [4, 5.0]]}]}]
+                "datasets": [
+                    {
+                        "lines": [
+                            {"name": "01_1", "pairs": [[1, 24.8], [2, 23.0], [3, 20.5]]},
+                            {"name": "01_2", "pairs": [[1, 25.2], [2, 22.6], [3, 19.5]]},
+                        ]
+                    }
+                ]
             },
         }
     }
 )
 
 
-def test_read_multiqc_chart_data_extracts_all_plots():
-    """Extracts structured chart data from multiqc_data.json report_plot_data."""
-    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+def test_read_multiqc_chart_data_v2_extracts_all_plots():
+    """Extracts structured chart data from MultiQC v2 report_plot_data."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_V2_JSON)
 
     assert "star_alignment" in chart_data
     assert "base_quality" in chart_data
@@ -323,48 +356,51 @@ def test_read_multiqc_chart_data_extracts_all_plots():
     assert "duplication" in chart_data
 
 
-def test_read_multiqc_chart_data_star_alignment():
-    """STAR alignment chart data has category labels and values."""
-    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+def test_read_multiqc_chart_data_v2_star_alignment():
+    """STAR alignment uses cats with data_pct."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_V2_JSON)
     star = chart_data["star_alignment"]
 
     assert isinstance(star, list)
     assert len(star) == 3
-    # Each entry has name and value
     assert star[0]["name"] == "Uniquely mapped"
-    assert star[0]["value"] == 85.5
+    assert star[0]["value"] == 87.55
 
 
-def test_read_multiqc_chart_data_base_quality():
-    """Base quality chart data is a list of [position, score] points."""
-    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+def test_read_multiqc_chart_data_v2_base_quality_averaged():
+    """Base quality averages across samples from lines/pairs."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_V2_JSON)
     bq = chart_data["base_quality"]
 
     assert isinstance(bq, list)
     assert len(bq) == 4
-    assert bq[0] == [1, 35.0]
+    # Average of 36.0 and 35.7
+    assert bq[0][0] == 1
+    assert bq[0][1] == pytest.approx(35.85, abs=0.01)
 
 
-def test_read_multiqc_chart_data_gc_content():
-    """GC content chart has sample and theoretical distribution data."""
-    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+def test_read_multiqc_chart_data_v2_gc_content():
+    """GC content averages across samples."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_V2_JSON)
     gc = chart_data["gc_content"]
 
     assert "sample" in gc
-    assert "theoretical" in gc
     assert len(gc["sample"]) == 5
-    assert gc["sample"][0] == [20, 0.5]
-    assert gc["theoretical"][0] == [20, 0.4]
+    # Average of 0.5 and 0.7 at GC%=20
+    assert gc["sample"][1][0] == 20
+    assert gc["sample"][1][1] == pytest.approx(0.6, abs=0.01)
 
 
-def test_read_multiqc_chart_data_duplication():
-    """Duplication chart data is a list of [level, percentage] points."""
-    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+def test_read_multiqc_chart_data_v2_duplication():
+    """Duplication averages across samples."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_V2_JSON)
     dup = chart_data["duplication"]
 
     assert isinstance(dup, list)
-    assert len(dup) == 4
-    assert dup[0] == [1, 60.0]
+    assert len(dup) == 3
+    # Average of 24.8 and 25.2
+    assert dup[0][0] == 1
+    assert dup[0][1] == pytest.approx(25.0, abs=0.01)
 
 
 def test_read_multiqc_chart_data_empty_json():
@@ -373,13 +409,15 @@ def test_read_multiqc_chart_data_empty_json():
     assert chart_data == {}
 
 
-def test_read_multiqc_chart_data_partial():
+def test_read_multiqc_chart_data_v2_partial():
     """Handles JSON with only some plots present."""
     partial = json.dumps(
         {
             "report_plot_data": {
                 "star_alignment_plot": {
-                    "datasets": [{"data": [{"name": "Uniquely mapped", "data": [{"x": "s1", "y": 90.0}]}]}]
+                    "datasets": [
+                        {"cats": [{"name": "Uniquely mapped", "data": [100], "data_pct": [90.0]}], "samples": ["s1"]}
+                    ]
                 }
             }
         }
@@ -387,3 +425,26 @@ def test_read_multiqc_chart_data_partial():
     chart_data = QCDashboardService._read_multiqc_chart_data(partial)
     assert "star_alignment" in chart_data
     assert "base_quality" not in chart_data
+
+
+def test_read_multiqc_chart_data_fallback_old_format():
+    """Falls back to older data[].name/data format for STAR alignment."""
+    old_format = json.dumps(
+        {
+            "report_plot_data": {
+                "star_alignment_plot": {
+                    "datasets": [
+                        {
+                            "data": [
+                                {"name": "Uniquely mapped", "data": [{"x": "s1", "y": 85.5}]},
+                                {"name": "Unmapped", "data": [{"x": "s1", "y": 14.5}]},
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    chart_data = QCDashboardService._read_multiqc_chart_data(old_format)
+    assert chart_data["star_alignment"][0]["name"] == "Uniquely mapped"
+    assert chart_data["star_alignment"][0]["value"] == 85.5
