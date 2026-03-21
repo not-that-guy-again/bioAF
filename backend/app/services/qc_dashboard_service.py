@@ -655,7 +655,15 @@ class QCDashboardService:
                     all_x: dict[float, list[float]] = {}
                     for line in lines:
                         for x, y in line.get("pairs", []):
-                            all_x.setdefault(x, []).append(y)
+                            try:
+                                xf = float(x)
+                            except (ValueError, TypeError):
+                                continue
+                            try:
+                                yf = float(y)
+                            except (ValueError, TypeError):
+                                continue
+                            all_x.setdefault(xf, []).append(yf)
                     if all_x:
                         return [[x, round(sum(ys) / len(ys), 4)] for x, ys in sorted(all_x.items())]
                 # Fallback: older format

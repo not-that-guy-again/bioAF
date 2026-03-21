@@ -448,3 +448,27 @@ def test_read_multiqc_chart_data_fallback_old_format():
     chart_data = QCDashboardService._read_multiqc_chart_data(old_format)
     assert chart_data["star_alignment"][0]["name"] == "Uniquely mapped"
     assert chart_data["star_alignment"][0]["value"] == 85.5
+
+
+def test_read_multiqc_chart_data_v2_string_x_values():
+    """Handles string x-values in pairs by coercing to float."""
+    mixed = json.dumps(
+        {
+            "report_plot_data": {
+                "fastqc_per_base_sequence_quality_plot": {
+                    "datasets": [
+                        {
+                            "lines": [
+                                {"name": "s1", "pairs": [["1", 36.0], ["2", 35.5], ["3", 34.8]]},
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    )
+    chart_data = QCDashboardService._read_multiqc_chart_data(mixed)
+    bq = chart_data["base_quality"]
+    assert len(bq) == 3
+    assert bq[0][0] == 1.0
+    assert bq[0][1] == 36.0
