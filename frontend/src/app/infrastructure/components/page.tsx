@@ -646,10 +646,16 @@ export default function InfraComponentsPage() {
                                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                     comp.status === "enabled"
                                       ? "bg-green-100 text-green-700"
-                                      : "bg-gray-100 text-gray-500"
+                                      : comp.status === "provisioning"
+                                        ? "bg-amber-100 text-amber-700"
+                                        : "bg-gray-100 text-gray-500"
                                   }`}
                                 >
-                                  {comp.status === "enabled" ? "Enabled" : "Disabled"}
+                                  {comp.status === "enabled"
+                                    ? "Enabled"
+                                    : comp.status === "provisioning"
+                                      ? "Building Image..."
+                                      : "Disabled"}
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
@@ -662,13 +668,20 @@ export default function InfraComponentsPage() {
                                 <span className="text-xs text-gray-500">{comp.cost_estimate}</span>
                                 <button
                                   onClick={() => handleComponentToggle(comp.key)}
+                                  disabled={comp.status === "provisioning"}
                                   className={`px-3 py-1 text-xs rounded font-medium ${
                                     comp.status === "enabled"
                                       ? "bg-red-50 text-red-700 hover:bg-red-100"
-                                      : "bg-blue-600 text-white hover:bg-blue-700"
+                                      : comp.status === "provisioning"
+                                        ? "bg-amber-100 text-amber-700 cursor-not-allowed"
+                                        : "bg-blue-600 text-white hover:bg-blue-700"
                                   }`}
                                 >
-                                  {comp.status === "enabled" ? "Disable" : "Enable"}
+                                  {comp.status === "enabled"
+                                    ? "Disable"
+                                    : comp.status === "provisioning"
+                                      ? "Building..."
+                                      : "Enable"}
                                 </button>
                               </div>
                               {componentErrors[comp.key] && (

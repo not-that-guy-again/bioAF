@@ -126,9 +126,16 @@ async def launch_session(
 
     scrna_image = await _get_config_value(session, "bioaf_scrna_image")
     if not scrna_image or scrna_image == "null":
+        build_status = await _get_config_value(session, "notebook_image_build_status")
+        if build_status in ("QUEUED", "WORKING"):
+            raise HTTPException(
+                400,
+                "The notebook environment image is currently being built. This typically takes 15-20 minutes.",
+            )
         raise HTTPException(
             400,
-            "The notebook environment image has not been built yet. Contact your administrator.",
+            "The notebook environment image has not been built yet. "
+            "Enable RStudio or JupyterHub in Infrastructure > Components to start the build.",
         )
 
     try:

@@ -141,6 +141,32 @@ async def test_launch_rejects_when_image_not_set(client, session, comp_bio_token
     assert "image has not been built" in response.json()["detail"]
 
 
+@pytest.mark.asyncio
+async def test_launch_rejects_with_building_message(client, session, comp_bio_token, comp_bio_user):
+    """Launch shows building message when image build is in progress."""
+    for key, value in [
+        ("compute_deployed", "true"),
+        ("bioaf_scrna_image", "null"),
+        ("notebook_image_build_status", "WORKING"),
+    ]:
+        await session.execute(
+            text(
+                "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+            ),
+            {"k": key, "v": value},
+        )
+    await session.commit()
+
+    response = await client.post(
+        "/api/v1/notebooks/sessions",
+        json={"session_type": "jupyter", "resource_profile": "small"},
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 400
+    assert "currently being built" in response.json()["detail"]
+
+
 # -- Launch plumbs image URI and stores K8s results --
 
 

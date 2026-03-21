@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_role
 from app.database import async_session_factory, get_session
+from app.services.notebook_image_service import build_notebook_image
 from app.services.stack_deployment import (
     StackStatus,
     deploy_stack,
@@ -34,6 +35,9 @@ from app.services.stack_deployment import (
     teardown_stack,
 )
 from app.services.terraform_executor import TerraformExecutor
+
+# Components that require the bioaf-scrna notebook image
+_NOTEBOOK_COMPONENTS = {"rstudio", "jupyterhub"}
 
 logger = logging.getLogger("bioaf.stack_deploy_api")
 
@@ -523,14 +527,30 @@ async def stack_component_toggle(
                 )
 
         # Enable
-        await session.execute(
-            text("""
-            UPDATE component_states SET enabled = true, status = 'enabled'
-            WHERE component_key = :key
-            """).bindparams(key=component_key)
-        )
         new_enabled = True
         new_status = "enabled"
+
+        # Notebook components need the bioaf-scrna image
+        if component_key in _NOTEBOOK_COMPONENTS:
+            scrna_image = (
+                await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))
+            ).scalar_one_or_none()
+            if not scrna_image or scrna_image == "null":
+                # No image yet -- trigger a build
+                try:
+                    await build_notebook_image(session)
+                    new_status = "provisioning"
+                except Exception as exc:
+                    logger.warning("Failed to start notebook image build: %s", exc)
+                    # Still enable the component; admin can retry or set image manually
+                    new_status = "enabled"
+
+        await session.execute(
+            text("""
+            UPDATE component_states SET enabled = true, status = :status
+            WHERE component_key = :key
+            """).bindparams(key=component_key, status=new_status)
+        )
     else:
         # Disable
         await session.execute(
