@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_role
 from app.database import async_session_factory, get_session
+from app.services.audit_service import log_action
 from app.services.notebook_image_service import build_notebook_image
 from app.services.stack_deployment import (
     StackStatus,
@@ -576,6 +577,20 @@ async def stack_component_toggle(
         )
         new_enabled = False
         new_status = "disabled"
+
+    user_id = int(current_user["sub"])
+    await log_action(
+        session,
+        user_id=user_id,
+        entity_type="component",
+        entity_id=0,
+        action="enable" if new_enabled else "disable",
+        details={
+            "component_key": component_key,
+            "component_name": comp_def["name"],
+            "status": new_status,
+        },
+    )
 
     await session.commit()
 

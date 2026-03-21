@@ -39,6 +39,7 @@ export default function NotebooksPage() {
   const [selectedProfile, setSelectedProfile] = useState<ResourceProfile>("small");
   const [selectedExperiment, setSelectedExperiment] = useState<number | null>(null);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const [imageBuildStatus, setImageBuildStatus] = useState<{
     build_id: string | null;
     build_status: string | null;
@@ -91,6 +92,7 @@ export default function NotebooksPage() {
 
   async function handleLaunch(sessionType: SessionType) {
     setLaunching(true);
+    setLaunchError(null);
     try {
       const req: SessionLaunchRequest = {
         session_type: sessionType,
@@ -100,7 +102,7 @@ export default function NotebooksPage() {
       await api.post("/api/v1/notebooks/sessions", req);
       loadSessions();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to launch session");
+      setLaunchError(err instanceof Error ? err.message : "Failed to launch session");
     } finally {
       setLaunching(false);
     }
@@ -226,6 +228,20 @@ export default function NotebooksPage() {
                   {launching ? "Launching..." : "Launch RStudio"}
                 </button>
               </div>
+
+              {launchError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-3">
+                  <div className="flex items-start justify-between">
+                    <p className="text-sm text-red-800">{launchError}</p>
+                    <button
+                      onClick={() => setLaunchError(null)}
+                      className="text-red-400 hover:text-red-600 ml-2 text-xs"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

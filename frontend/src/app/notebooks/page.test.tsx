@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import NotebooksPage from "./page";
 
 jest.mock("next/navigation", () => ({
@@ -35,9 +35,11 @@ jest.mock("@/lib/auth", () => ({
 import { api } from "@/lib/api";
 
 const mockGet = api.get as jest.Mock;
+const mockPost = api.post as jest.Mock;
 
 beforeEach(() => {
   mockGet.mockReset();
+  mockPost.mockReset();
 });
 
 function setupMocks(buildStatus: {
@@ -113,5 +115,47 @@ describe("NotebooksPage build status", () => {
     });
     expect(screen.queryByText("Notebook image is building")).not.toBeInTheDocument();
     expect(screen.queryByText("Notebook image build failed")).not.toBeInTheDocument();
+  });
+});
+
+describe("NotebooksPage launch error", () => {
+  test("shows inline error banner instead of alert on launch failure", async () => {
+    setupMocks({ build_id: null, build_status: null, image_uri: null });
+    mockPost.mockRejectedValue(new Error("The notebook image is currently building."));
+
+    render(<NotebooksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Launch Jupyter")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Launch Jupyter"));
+
+    await waitFor(() => {
+      expect(screen.getByText("The notebook image is currently building.")).toBeInTheDocument();
+    });
+  });
+
+  test("launch error can be dismissed", async () => {
+    setupMocks({ build_id: null, build_status: null, image_uri: null });
+    mockPost.mockRejectedValue(new Error("Image not built yet"));
+
+    render(<NotebooksPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Launch Jupyter")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Launch Jupyter"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Image not built yet")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Dismiss"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Image not built yet")).not.toBeInTheDocument();
+    });
   });
 });

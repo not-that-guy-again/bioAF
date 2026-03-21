@@ -130,11 +130,12 @@ async def launch_session(
         if build_status in ("QUEUED", "WORKING"):
             raise HTTPException(
                 400,
-                "The notebook environment image is currently being built. This typically takes 15-20 minutes.",
+                "The notebook image is currently building. "
+                "This typically takes 20-30 minutes. Check progress in Infrastructure > Components.",
             )
         raise HTTPException(
             400,
-            "The notebook environment image has not been built yet. "
+            "The notebook image has not been built yet. "
             "Enable RStudio or JupyterHub in Infrastructure > Components to start the build.",
         )
 
