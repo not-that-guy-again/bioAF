@@ -162,9 +162,7 @@ async def test_launch_session_succeeds_with_config(
 
 
 @pytest.mark.asyncio
-async def test_launch_stores_k8s_fields(
-    client, session, comp_bio_token, comp_bio_user, seed_platform_config
-):
+async def test_launch_stores_k8s_fields(client, session, comp_bio_token, comp_bio_user, seed_platform_config):
     """Launch populates k8s_pod_name, k8s_namespace, access_url, gcs_home_prefix on the model."""
     response = await client.post(
         "/api/v1/notebooks/sessions",
@@ -173,8 +171,6 @@ async def test_launch_stores_k8s_fields(
     )
     assert response.status_code == 200
     session_id = response.json()["id"]
-
-    from app.models.notebook_session import NotebookSession
 
     result = await session.execute(
         text("SELECT k8s_pod_name, k8s_namespace, access_url, gcs_home_prefix FROM notebook_sessions WHERE id = :id"),
