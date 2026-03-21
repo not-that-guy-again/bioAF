@@ -724,25 +724,31 @@ export default function InfraComponentsPage() {
                             >
                               <div className="flex items-start justify-between mb-2">
                                 <h3 className="font-semibold text-sm">{comp.name}</h3>
-                                <span
-                                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                    comp.status === "enabled"
-                                      ? "bg-green-100 text-green-700"
-                                      : comp.status === "provisioning"
-                                        ? "bg-amber-100 text-amber-700"
-                                        : comp.status === "build_failed"
-                                          ? "bg-red-100 text-red-700"
-                                          : "bg-gray-100 text-gray-500"
-                                  }`}
-                                >
-                                  {comp.status === "enabled"
-                                    ? "Enabled"
-                                    : comp.status === "provisioning"
-                                      ? "Building Image..."
-                                      : comp.status === "build_failed"
-                                        ? "Build Failed"
-                                        : "Disabled"}
-                                </span>
+                                {(() => {
+                                  const buildFailed = comp.status === "build_failed" ||
+                                    (comp.status === "provisioning" && buildStatus && ["FAILURE", "CANCELLED", "TIMEOUT"].includes(buildStatus.build_status ?? ""));
+                                  return (
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                        comp.status === "enabled"
+                                          ? "bg-green-100 text-green-700"
+                                          : buildFailed
+                                            ? "bg-red-100 text-red-700"
+                                            : comp.status === "provisioning"
+                                              ? "bg-amber-100 text-amber-700"
+                                              : "bg-gray-100 text-gray-500"
+                                      }`}
+                                    >
+                                      {comp.status === "enabled"
+                                        ? "Enabled"
+                                        : buildFailed
+                                          ? "Build Failed"
+                                          : comp.status === "provisioning"
+                                            ? "Building Image..."
+                                            : "Disabled"}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
                               {comp.dependencies.length > 0 && (
@@ -750,7 +756,8 @@ export default function InfraComponentsPage() {
                                   Requires: {comp.dependencies.join(", ")}
                                 </p>
                               )}
-                              {comp.status === "provisioning" && buildStatus && (
+                              {/* Show building panel only when actually building (not when build already failed) */}
+                              {comp.status === "provisioning" && buildStatus && !["FAILURE", "CANCELLED", "TIMEOUT"].includes(buildStatus.build_status ?? "") && (
                                 <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-2">
                                   <p className="text-xs font-medium text-amber-800">
                                     Building notebook image...
@@ -775,7 +782,8 @@ export default function InfraComponentsPage() {
                                   </button>
                                 </div>
                               )}
-                              {comp.status === "build_failed" && (
+                              {/* Show failure panel for build_failed OR provisioning-but-actually-failed */}
+                              {(comp.status === "build_failed" || (comp.status === "provisioning" && buildStatus && ["FAILURE", "CANCELLED", "TIMEOUT"].includes(buildStatus.build_status ?? ""))) && (
                                 <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
                                   <p className="text-xs font-medium text-red-800">
                                     Notebook image build failed
