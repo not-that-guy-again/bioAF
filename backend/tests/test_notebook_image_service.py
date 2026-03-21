@@ -6,6 +6,7 @@ from sqlalchemy import text
 from unittest.mock import patch
 
 from app.services.notebook_image_service import (
+    build_notebook_image,
     get_image_uri,
     poll_image_build,
     DOCKERFILE_CONTENT,
@@ -104,3 +105,87 @@ async def test_poll_image_build_clears_image_on_failure(session, seed_build_conf
     row = (await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))).fetchone()
     assert row is not None
     assert row[0] == "null"
+
+
+@pytest.mark.asyncio
+async def test_build_notebook_image_clears_stale_uri(session, seed_build_config):
+    """build_notebook_image clears any stale image URI before submitting a build."""
+    # Seed a stale image URI from a previous failed attempt
+    await session.execute(
+        text(
+            "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+        ),
+        {"k": "bioaf_scrna_image", "v": "us-central1-docker.pkg.dev/old/repo/bioaf-scrna:latest"},
+    )
+    await session.commit()
+
+    with (
+        patch(
+            "app.services.notebook_image_service.ensure_artifact_registry",
+            return_value="projects/test-project/locations/us-central1/repositories/bioaf-images",
+        ),
+        patch(
+            "app.services.notebook_image_service.submit_image_build",
+            return_value="new-build-id",
+        ),
+    ):
+        build_id = await build_notebook_image(session)
+
+    assert build_id == "new-build-id"
+
+    # The stale image URI must be cleared (set to "null")
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))).fetchone()
+    assert row is not None
+    assert row[0] == "null"
+
+
+@pytest.mark.asyncio
+async def test_build_notebook_image_does_not_write_image_uri(session, seed_build_config):
+    """build_notebook_image must NOT write the final image URI; only poll does that."""
+    with (
+        patch(
+            "app.services.notebook_image_service.ensure_artifact_registry",
+            return_value="projects/test-project/locations/us-central1/repositories/bioaf-images",
+        ),
+        patch(
+            "app.services.notebook_image_service.submit_image_build",
+            return_value="build-789",
+        ),
+    ):
+        await build_notebook_image(session)
+
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))).fetchone()
+    # Should be "null", not a real image URI
+    assert row is not None
+    assert row[0] == "null"
+
+
+@pytest.mark.asyncio
+async def test_poll_image_build_writes_uri_on_success(session, seed_build_config):
+    """poll_image_build writes the image URI only when the build succeeds."""
+    for key, value in [
+        ("notebook_image_build_id", "build-success-1"),
+        ("notebook_image_build_status", "WORKING"),
+    ]:
+        await session.execute(
+            text(
+                "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+            ),
+            {"k": key, "v": value},
+        )
+    await session.commit()
+
+    with patch(
+        "app.services.notebook_image_service.check_build_status",
+        return_value="SUCCESS",
+    ):
+        result = await poll_image_build(session)
+
+    assert result == "SUCCESS"
+
+    # Image URI should now be set
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))).fetchone()
+    assert row is not None
+    assert row[0] == "us-central1-docker.pkg.dev/test-project/bioaf-images/bioaf-scrna:latest"

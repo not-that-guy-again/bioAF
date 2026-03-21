@@ -260,9 +260,10 @@ async def check_build_status(session: AsyncSession, project_id: str, build_id: s
 
 
 async def build_notebook_image(session: AsyncSession) -> str:
-    """Full flow: ensure AR repo, submit build, store image URI.
+    """Full flow: ensure AR repo, submit build, store image URI on success.
 
     Called when a notebook component (rstudio/jupyterhub) is enabled.
+    The image URI is NOT written until the build succeeds (via poll_image_build).
     Returns the build ID.
     """
     project_id = await _read_config(session, "gcp_project_id")
@@ -273,9 +274,13 @@ async def build_notebook_image(session: AsyncSession) -> str:
     if not region or region == "null":
         raise ValueError("GCP region not configured")
 
-    # Set the expected image URI immediately so the UI can show it
-    image_uri = get_image_uri(project_id, region)
-    await _set_config(session, "bioaf_scrna_image", image_uri)
+    # Clear any stale image URI from a previous failed build attempt
+    await _set_config(session, "bioaf_scrna_image", "null")
+    # Reset build tracking so poll_image_build picks up the new build
+    await _set_config(session, "notebook_image_build_status", "null")
+    await _set_config(session, "notebook_image_build_id", "null")
+    # Store the AR repo path (but NOT the image URI -- that is set by
+    # poll_image_build only after the build succeeds)
     await _set_config(session, "artifact_registry_repo", f"{region}-docker.pkg.dev/{project_id}/{AR_REPO_ID}")
 
     # Create AR repo (idempotent)
@@ -310,6 +315,10 @@ async def poll_image_build(session: AsyncSession) -> str | None:
 
     if status == "SUCCESS":
         logger.info("Notebook image build %s completed successfully", build_id)
+        # Now that the build succeeded, write the image URI
+        region = await _read_config(session, "gcp_region")
+        image_uri = get_image_uri(project_id, region)
+        await _set_config(session, "bioaf_scrna_image", image_uri)
         # Update component states for notebook components
         await session.execute(
             text("""

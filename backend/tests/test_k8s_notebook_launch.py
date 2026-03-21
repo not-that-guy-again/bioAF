@@ -5,16 +5,21 @@ DB updates, GCS sync init, terminate, status, namespace setup.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
 
 
 @pytest.fixture
 def adapter():
+    import time
+
     provider = KubernetesNotebookProvider()
     provider._mode = "k8s"
     provider._namespace_ready = False
+    # Pre-set a mock API client so _get_api_client_async() is a no-op
+    provider._api_client = MagicMock()
+    provider._client_created_at = time.monotonic()
     return provider
 
 
@@ -239,3 +244,135 @@ class TestNamespaceSetup:
 
         mock_core.create_namespace.assert_called_once()
         mock_core.create_namespaced_service_account.assert_called_once()
+
+
+class TestOutOfClusterFallback:
+    """Tests for out-of-cluster K8s client initialization."""
+
+    @pytest.mark.asyncio
+    async def test_incluster_config_used_when_available(self):
+        """When running inside a K8s pod, incluster config is used."""
+        provider = KubernetesNotebookProvider()
+        provider._mode = "k8s"
+
+        with (
+            patch("app.adapters.notebooks.kubernetes.config") as mock_config,
+            patch("app.adapters.notebooks.kubernetes.client") as mock_client,
+        ):
+            mock_config.load_incluster_config.return_value = None
+            mock_api_client = MagicMock()
+            mock_client.ApiClient.return_value = mock_api_client
+
+            result = await provider._get_api_client_async()
+
+            mock_config.load_incluster_config.assert_called_once()
+            assert result == mock_api_client
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_platform_config_when_not_in_cluster(self):
+        """When not in a K8s pod, falls back to platform_config credentials."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [
+            ("gke_cluster_endpoint", "https://1.2.3.4"),
+            ("gke_cluster_ca_cert", "dGVzdA=="),  # base64("test")
+            ("gcp_service_account_key", '{"type":"service_account","project_id":"test"}'),
+        ]
+        mock_session.execute.return_value = mock_result
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        provider = KubernetesNotebookProvider(session_factory=mock_session_factory)
+        provider._mode = "k8s"
+
+        with (
+            patch("app.adapters.notebooks.kubernetes.config") as mock_config,
+            patch("app.adapters.notebooks.kubernetes._get_gcp_token", return_value="fake-token"),
+            patch("app.adapters.notebooks.kubernetes.tempfile") as mock_tempfile,
+            patch("app.adapters.notebooks.kubernetes.client") as mock_client,
+        ):
+            mock_config.load_incluster_config.side_effect = Exception("not in cluster")
+            mock_tmpfile = MagicMock()
+            mock_tmpfile.name = "/tmp/fake-ca.crt"
+            mock_tempfile.NamedTemporaryFile.return_value = mock_tmpfile
+            mock_api_client = MagicMock()
+            mock_client.ApiClient.return_value = mock_api_client
+            mock_client.Configuration.return_value = MagicMock()
+
+            result = await provider._get_api_client_async()
+
+            mock_config.load_incluster_config.assert_called_once()
+            assert result == mock_api_client
+
+    @pytest.mark.asyncio
+    async def test_raises_when_no_cluster_endpoint(self):
+        """Raises RuntimeError when no GKE endpoint is configured."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_session.execute.return_value = mock_result
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        provider = KubernetesNotebookProvider(session_factory=mock_session_factory)
+        provider._mode = "k8s"
+
+        with patch("app.adapters.notebooks.kubernetes.config") as mock_config:
+            mock_config.load_incluster_config.side_effect = Exception("not in cluster")
+
+            with pytest.raises(RuntimeError, match="No GKE cluster endpoint"):
+                await provider._get_api_client_async()
+
+    @pytest.mark.asyncio
+    async def test_cached_client_reused(self):
+        """Cached API client is reused on subsequent calls."""
+        provider = KubernetesNotebookProvider()
+        provider._mode = "k8s"
+        mock_client = MagicMock()
+        provider._api_client = mock_client
+        provider._client_created_at = 1.0  # recent enough
+
+        with patch("app.adapters.notebooks.kubernetes.time") as mock_time:
+            mock_time.monotonic.return_value = 100.0  # well within TTL
+
+            result = await provider._get_api_client_async()
+
+        assert result == mock_client
+
+    def test_core_client_uses_api_client(self):
+        """_get_k8s_core_client passes the shared ApiClient."""
+        provider = KubernetesNotebookProvider()
+        provider._mode = "k8s"
+        mock_api_client = MagicMock()
+        provider._api_client = mock_api_client
+        provider._client_created_at = 1.0
+
+        with (
+            patch("app.adapters.notebooks.kubernetes.time") as mock_time,
+            patch("app.adapters.notebooks.kubernetes.client") as mock_k8s,
+        ):
+            mock_time.monotonic.return_value = 100.0
+            provider._get_k8s_core_client()
+
+            mock_k8s.CoreV1Api.assert_called_once_with(api_client=mock_api_client)
+
+    def test_rbac_client_uses_api_client(self):
+        """_get_k8s_rbac_client passes the shared ApiClient."""
+        provider = KubernetesNotebookProvider()
+        provider._mode = "k8s"
+        mock_api_client = MagicMock()
+        provider._api_client = mock_api_client
+        provider._client_created_at = 1.0
+
+        with (
+            patch("app.adapters.notebooks.kubernetes.time") as mock_time,
+            patch("app.adapters.notebooks.kubernetes.client") as mock_k8s,
+        ):
+            mock_time.monotonic.return_value = 100.0
+            provider._get_k8s_rbac_client()
+
+            mock_k8s.RbacAuthorizationV1Api.assert_called_once_with(api_client=mock_api_client)
