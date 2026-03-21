@@ -122,11 +122,26 @@ function PlotImage({ fileId, title, onExpand }: { fileId: number; title: string;
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    // Build a same-origin proxy URL that serves file bytes directly,
+    // avoiding cross-origin issues with GCS signed URLs.
     let cancelled = false;
     (async () => {
       try {
-        const data = await api.get<{ download_url: string }>(`/api/files/${fileId}/download`);
-        if (!cancelled) setUrl(data.download_url);
+        const { getToken } = await import("@/lib/auth");
+        const token = getToken();
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+        const contentUrl = `${apiUrl}/api/files/${fileId}/content`;
+        // Verify the file is accessible before setting the URL
+        const resp = await fetch(contentUrl, {
+          method: "HEAD",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!cancelled && resp.ok) {
+          // Use the content URL with token as query param for <img> src
+          setUrl(`${contentUrl}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
+        } else if (!cancelled) {
+          setError(true);
+        }
       } catch {
         if (!cancelled) setError(true);
       }
@@ -143,7 +158,6 @@ function PlotImage({ fileId, title, onExpand }: { fileId: number; title: string;
           <img
             src={url}
             alt={title}
-            crossOrigin="anonymous"
             className="w-full rounded"
             onError={() => setError(true)}
           />
@@ -192,7 +206,8 @@ function DashboardDetail({ dashboard, onBack, onRegenerate, regenerating, onExpa
             <button
               onClick={() => onRegenerate(dashboard.pipeline_run_id)}
               disabled={regenerating}
-              className="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50"
+              className="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50 print:hidden"
+              data-html2canvas-ignore="true"
             >
               {regenerating ? "Regenerating..." : "Regenerate"}
             </button>
