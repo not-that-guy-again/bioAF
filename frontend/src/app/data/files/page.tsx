@@ -12,7 +12,8 @@ import type {
 } from "@/lib/types";
 
 function formatBytes(bytes: number | null): string {
-  if (bytes == null || bytes === 0) return "0 B";
+  if (bytes == null) return "-";
+  if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
@@ -41,6 +42,9 @@ export default function DataFilesPage() {
     reconciled: number;
     failed: number;
   } | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalFiles, setTotalFiles] = useState(0);
+  const pageSize = 25;
 
   const user = getCurrentUser();
   const isAdmin = user?.role === "admin";
@@ -49,16 +53,21 @@ export default function DataFilesPage() {
   const fetchFiles = useCallback(async () => {
     setLoading(true);
     try {
-      const params = filterType ? `?file_type=${filterType}` : "";
-      const data = await api.get<FileListResponse>(`/api/files${params}`);
+      const params = new URLSearchParams();
+      if (filterType) params.set("file_type", filterType);
+      params.set("page", String(page));
+      params.set("page_size", String(pageSize));
+      const qs = params.toString();
+      const data = await api.get<FileListResponse>(`/api/files?${qs}`);
       setFiles(data.files);
+      setTotalFiles(data.total);
       setSelectedIds(new Set());
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  }, [filterType]);
+  }, [filterType, page]);
 
   const fetchExperiments = useCallback(async () => {
     try {
@@ -173,7 +182,7 @@ export default function DataFilesPage() {
             <div className="flex gap-4 items-center">
               <select
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
+                onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm"
               >
                 <option value="">All types</option>
@@ -251,7 +260,7 @@ export default function DataFilesPage() {
             ) : files.length === 0 ? (
               <p className="text-gray-400 text-sm">No files found.</p>
             ) : (
-              <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -305,9 +314,13 @@ export default function DataFilesPage() {
                           {formatBytes(file.size_bytes)}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">
-                          {new Date(
-                            file.upload_timestamp
-                          ).toLocaleDateString()}
+                          {new Date(file.upload_timestamp).toLocaleString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">
                           {file.uploader?.name ?? file.uploader?.email ?? "-"}
@@ -335,6 +348,34 @@ export default function DataFilesPage() {
                     ))}
                   </tbody>
                 </table>
+
+                {/* Pagination */}
+                {totalFiles > pageSize && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+                    <p className="text-sm text-gray-600">
+                      Showing {(page - 1) * pageSize + 1}--{Math.min(page * pageSize, totalFiles)} of {totalFiles}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page <= 1}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <span className="px-3 py-1 text-sm text-gray-600">
+                        Page {page} of {Math.ceil(totalFiles / pageSize)}
+                      </span>
+                      <button
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={page * pageSize >= totalFiles}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

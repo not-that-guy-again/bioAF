@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_role
 from app.database import get_session
+from app.models.file import File
 from app.schemas.qc_dashboard import (
     QCDashboardResponse,
     QCDashboardSummary,
@@ -156,9 +158,15 @@ async def regenerate_dashboard(
     if not await ComponentService.is_enabled(session, "qc_dashboard"):
         raise HTTPException(400, "QC Dashboard component is not enabled")
 
-    # Delete existing dashboard if present
+    # Delete existing dashboard and its plot file records
     existing = await QCDashboardService.get_dashboard_by_run(session, org_id, pipeline_run_id)
     if existing:
+        # Clean up file records created by _collect_plots
+        old_plots = existing.plots_json if isinstance(existing.plots_json, list) else []
+        for plot in old_plots:
+            file_id = plot.get("file_id")
+            if file_id:
+                await session.execute(sa_delete(File).where(File.id == file_id, File.organization_id == org_id))
         await session.delete(existing)
         await session.flush()
 

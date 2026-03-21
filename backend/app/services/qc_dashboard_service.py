@@ -889,22 +889,21 @@ class QCDashboardService:
             bucket = client.bucket(results_bucket)
             prefix = f"experiments/{run.experiment_id}/pipeline-runs/{run.id}/"
 
-            # Build an index of available PNG filenames in multiqc/multiqc_plots/png/
+            # Build an index of available PNG blobs in multiqc/multiqc_plots/png/
+            # list_blobs returns blobs with metadata (including size) already populated
             plot_prefix = f"{prefix}multiqc/multiqc_plots/png/"
-            available: dict[str, str] = {}  # filename -> full blob name
+            available: dict[str, "storage.Blob"] = {}  # filename -> blob with metadata
             for blob in bucket.list_blobs(prefix=plot_prefix):
                 if blob.name.endswith(".png"):
                     filename = blob.name.rsplit("/", 1)[-1]
-                    available[filename] = blob.name
+                    available[filename] = blob
 
             for png_name, title, plot_type in QCDashboardService._MULTIQC_PLOTS:
-                blob_name = available.get(png_name)
-                if not blob_name:
+                blob_obj = available.get(png_name)
+                if not blob_obj:
                     continue
 
-                gcs_uri = f"gs://{results_bucket}/{blob_name}"
-                blob_obj = bucket.blob(blob_name)
-                size = blob_obj.size
+                gcs_uri = f"gs://{results_bucket}/{blob_obj.name}"
 
                 file = await FileService.create_file_record(
                     session,
@@ -912,7 +911,7 @@ class QCDashboardService:
                     user_id=None,
                     filename=png_name,
                     gcs_uri=gcs_uri,
-                    size_bytes=size,
+                    size_bytes=blob_obj.size,
                     md5_checksum=None,
                     file_type="png",
                     tags=["qc_plot", plot_type],
