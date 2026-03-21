@@ -212,9 +212,12 @@ async def submit_image_build(session: AsyncSession, project_id: str, region: str
     image_uri = get_image_uri(project_id, region)
     credentials = await _get_credentials(session)
 
+    # Use the platform's service account so Cloud Build has AR push permissions
+    sa_email = await _read_config(session, "backend_service_account_email")
+
     # Submit Cloud Build
     build_url = f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/builds"
-    build_body = {
+    build_body: dict = {
         "source": {
             "storageSource": {
                 "bucket": working_bucket,
@@ -233,6 +236,8 @@ async def submit_image_build(session: AsyncSession, project_id: str, region: str
         },
         "timeout": "3600s",
     }
+    if sa_email and sa_email != "null":
+        build_body["serviceAccount"] = f"projects/{project_id}/serviceAccounts/{sa_email}"
 
     result = _authorized_request(credentials, "POST", build_url, build_body)
     build_id = result.get("metadata", {}).get("build", {}).get("id", "")
@@ -259,6 +264,45 @@ async def check_build_status(session: AsyncSession, project_id: str, build_id: s
     except Exception as e:
         logger.error("Failed to check build %s: %s", build_id, e)
         return "UNKNOWN"
+
+
+async def cancel_build(session: AsyncSession) -> str:
+    """Cancel the active Cloud Build job.
+
+    Returns the build ID that was cancelled.
+    Raises ValueError if there is no active build to cancel.
+    """
+    build_id = await _read_config(session, "notebook_image_build_id")
+    if not build_id or build_id == "null":
+        raise ValueError("No active build to cancel.")
+
+    current_status = await _read_config(session, "notebook_image_build_status")
+    if current_status in ("SUCCESS", "FAILURE", "CANCELLED", "TIMEOUT"):
+        raise ValueError(f"Build already finished with status {current_status}.")
+
+    project_id = await _read_config(session, "gcp_project_id")
+    if not project_id or project_id == "null":
+        raise ValueError("GCP project not configured.")
+
+    credentials = await _get_credentials(session)
+    url = f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/builds/{build_id}:cancel"
+    try:
+        _authorized_request(credentials, "POST", url, {})
+    except Exception as e:
+        logger.warning("Cloud Build cancel API returned error (may already be done): %s", e)
+
+    await _set_config(session, "notebook_image_build_status", "CANCELLED")
+    # Mark notebook components back to build_failed so user can retry
+    await session.execute(
+        text("""
+        UPDATE component_states SET status = 'build_failed'
+        WHERE component_key IN ('rstudio', 'jupyterhub')
+        AND enabled = true AND status = 'provisioning'
+        """)
+    )
+    await session.flush()
+
+    return build_id
 
 
 async def build_notebook_image(session: AsyncSession) -> str:
@@ -333,6 +377,14 @@ async def poll_image_build(session: AsyncSession) -> str | None:
         logger.error("Notebook image build %s failed with status %s", build_id, status)
         # Clear the image URI since the build failed
         await _set_config(session, "bioaf_scrna_image", "null")
+        # Mark notebook components as build_failed so the UI shows retry
+        await session.execute(
+            text("""
+            UPDATE component_states SET status = 'build_failed'
+            WHERE component_key IN ('rstudio', 'jupyterhub')
+            AND enabled = true AND status = 'provisioning'
+            """)
+        )
 
     await session.flush()
     return status

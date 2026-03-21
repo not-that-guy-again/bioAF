@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_role
 from app.database import async_session_factory, get_session
 from app.services.audit_service import log_action
-from app.services.notebook_image_service import build_notebook_image
+from app.services.notebook_image_service import build_notebook_image, cancel_build
 from app.services.stack_deployment import (
     StackStatus,
     deploy_stack,
@@ -455,8 +455,11 @@ async def stack_components_list(
     for comp_def in KUBERNETES_COMPONENTS:
         state = state_map.get(comp_def["key"], {"enabled": False, "status": "disabled"})
         if state["enabled"]:
-            # Preserve provisioning status from component_states
-            status = state["status"] if state["status"] == "provisioning" else "enabled"
+            # Preserve provisioning/build_failed status from component_states
+            if state["status"] in ("provisioning", "build_failed"):
+                status = state["status"]
+            else:
+                status = "enabled"
         else:
             status = "disabled"
 
@@ -630,6 +633,20 @@ async def notebook_image_build_status(
         build_status=_non_null(config.get("notebook_image_build_status")),
         image_uri=_non_null(config.get("bioaf_scrna_image")),
     )
+
+
+@router.post("/api/v1/infrastructure/notebook-image/cancel")
+async def notebook_image_cancel(
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Cancel the active notebook image build."""
+    try:
+        build_id = await cancel_build(session)
+        await session.commit()
+        return {"cancelled": True, "build_id": build_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # -----------------------------------------------------------------------

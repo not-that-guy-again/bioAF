@@ -135,3 +135,66 @@ async def test_components_list_shows_provisioning(client, session, admin_token, 
     data = response.json()
     rstudio = next(c for c in data["components"] if c["key"] == "rstudio")
     assert rstudio["status"] == "provisioning"
+
+
+@pytest.mark.asyncio
+async def test_components_list_shows_build_failed(client, session, admin_token, admin_user, seed_platform):
+    """Components list returns 'build_failed' status after a failed image build."""
+    await session.execute(
+        text("UPDATE component_states SET enabled = true, status = 'build_failed' WHERE component_key = 'rstudio'"),
+    )
+    await session.commit()
+
+    response = await client.get(
+        "/api/v1/infrastructure/stack/components",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    rstudio = next(c for c in data["components"] if c["key"] == "rstudio")
+    assert rstudio["status"] == "build_failed"
+
+
+# -----------------------------------------------------------------------
+# POST /api/v1/infrastructure/notebook-image/cancel
+# -----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cancel_build_no_active_build(client, session, admin_token, admin_user, seed_platform):
+    """Cancel returns 400 when there is no active build."""
+    response = await client.post(
+        "/api/v1/infrastructure/notebook-image/cancel",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_cancel_build_already_finished(client, session, admin_token, admin_user, seed_platform):
+    """Cancel returns 400 when build already finished."""
+    for key, value in [
+        ("notebook_image_build_id", "build-done-1"),
+        ("notebook_image_build_status", "FAILURE"),
+    ]:
+        await session.execute(
+            text(
+                "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+            ),
+            {"k": key, "v": value},
+        )
+    await session.commit()
+
+    response = await client.post(
+        "/api/v1/infrastructure/notebook-image/cancel",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_cancel_build_requires_admin(client, session, admin_user, seed_platform):
+    """Cancel endpoint requires authentication."""
+    response = await client.post("/api/v1/infrastructure/notebook-image/cancel")
+    assert response.status_code in (401, 403)

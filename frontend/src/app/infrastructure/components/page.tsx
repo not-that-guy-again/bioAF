@@ -183,10 +183,12 @@ export default function InfraComponentsPage() {
     }
   }
 
-  // Poll build status when any component is provisioning
-  const hasProvisioning = componentsData?.components.some((c) => c.status === "provisioning");
+  // Fetch build status when any component is provisioning or build_failed
+  const hasBuildRelated = componentsData?.components.some(
+    (c) => c.status === "provisioning" || c.status === "build_failed",
+  );
   useEffect(() => {
-    if (!hasProvisioning) {
+    if (!hasBuildRelated) {
       setBuildStatus(null);
       return;
     }
@@ -210,12 +212,19 @@ export default function InfraComponentsPage() {
       }
     }
     pollBuild();
-    const interval = setInterval(pollBuild, 15000);
+    // Only poll repeatedly if actively building
+    const isActive = componentsData?.components.some((c) => c.status === "provisioning");
+    if (isActive) {
+      const interval = setInterval(pollBuild, 15000);
+      return () => {
+        cancelled = true;
+        clearInterval(interval);
+      };
+    }
     return () => {
       cancelled = true;
-      clearInterval(interval);
     };
-  }, [hasProvisioning]);
+  }, [hasBuildRelated, componentsData]);
 
   function handleDeployComplete() {
     setShowDeployModal(false);
@@ -260,6 +269,36 @@ export default function InfraComponentsPage() {
       setRefreshKey((k) => k + 1);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Toggle failed";
+      setComponentErrors((prev) => ({ ...prev, [componentKey]: message }));
+    } finally {
+      setTogglingComponent(null);
+    }
+  }
+
+  const [cancellingBuild, setCancellingBuild] = useState(false);
+
+  async function handleCancelBuild() {
+    setCancellingBuild(true);
+    try {
+      await api.post("/api/v1/infrastructure/notebook-image/cancel");
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Cancel failed";
+      alert(message);
+    } finally {
+      setCancellingBuild(false);
+    }
+  }
+
+  async function handleRetryBuild(componentKey: string) {
+    setTogglingComponent(componentKey);
+    try {
+      // Disable then re-enable to trigger a fresh build
+      await api.post(`/api/v1/infrastructure/stack/components/${componentKey}/toggle`);
+      await api.post(`/api/v1/infrastructure/stack/components/${componentKey}/toggle`);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Retry failed";
       setComponentErrors((prev) => ({ ...prev, [componentKey]: message }));
     } finally {
       setTogglingComponent(null);
@@ -691,14 +730,18 @@ export default function InfraComponentsPage() {
                                       ? "bg-green-100 text-green-700"
                                       : comp.status === "provisioning"
                                         ? "bg-amber-100 text-amber-700"
-                                        : "bg-gray-100 text-gray-500"
+                                        : comp.status === "build_failed"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-gray-100 text-gray-500"
                                   }`}
                                 >
                                   {comp.status === "enabled"
                                     ? "Enabled"
                                     : comp.status === "provisioning"
                                       ? "Building Image..."
-                                      : "Disabled"}
+                                      : comp.status === "build_failed"
+                                        ? "Build Failed"
+                                        : "Disabled"}
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600 mb-3">{comp.description}</p>
@@ -723,13 +766,39 @@ export default function InfraComponentsPage() {
                                   <p className="text-xs text-amber-500 mt-0.5">
                                     This can take 20-30 minutes. You can leave this page.
                                   </p>
+                                  <button
+                                    onClick={handleCancelBuild}
+                                    disabled={cancellingBuild}
+                                    className="mt-1 text-xs text-red-600 hover:text-red-800 font-medium"
+                                  >
+                                    {cancellingBuild ? "Cancelling..." : "Cancel Build"}
+                                  </button>
+                                </div>
+                              )}
+                              {comp.status === "build_failed" && (
+                                <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
+                                  <p className="text-xs font-medium text-red-800">
+                                    Notebook image build failed
+                                  </p>
+                                  {buildStatus?.build_id && (
+                                    <p className="text-xs text-red-600 mt-0.5">
+                                      Build: {buildStatus.build_id.slice(0, 8)} -- {buildStatus.build_status}
+                                    </p>
+                                  )}
+                                  <button
+                                    onClick={() => handleRetryBuild(comp.key)}
+                                    disabled={togglingComponent === comp.key}
+                                    className="mt-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                  >
+                                    {togglingComponent === comp.key ? "Retrying..." : "Retry Build"}
+                                  </button>
                                 </div>
                               )}
                               <div className="flex items-center justify-between mt-3">
                                 <span className="text-xs text-gray-500">{comp.cost_estimate}</span>
                                 <button
                                   onClick={() => handleComponentToggle(comp.key)}
-                                  disabled={comp.status === "provisioning" || togglingComponent === comp.key}
+                                  disabled={comp.status === "provisioning" || comp.status === "build_failed" || togglingComponent === comp.key}
                                   className={`px-3 py-1 text-xs rounded font-medium ${
                                     togglingComponent === comp.key
                                       ? "bg-gray-200 text-gray-500 cursor-not-allowed"
@@ -737,7 +806,9 @@ export default function InfraComponentsPage() {
                                         ? "bg-red-50 text-red-700 hover:bg-red-100"
                                         : comp.status === "provisioning"
                                           ? "bg-amber-100 text-amber-700 cursor-not-allowed"
-                                          : "bg-blue-600 text-white hover:bg-blue-700"
+                                          : comp.status === "build_failed"
+                                            ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                                            : "bg-blue-600 text-white hover:bg-blue-700"
                                   }`}
                                 >
                                   {togglingComponent === comp.key
@@ -746,7 +817,9 @@ export default function InfraComponentsPage() {
                                       ? "Disable"
                                       : comp.status === "provisioning"
                                         ? "Building..."
-                                        : "Enable"}
+                                        : comp.status === "build_failed"
+                                          ? "Failed"
+                                          : "Enable"}
                                 </button>
                               </div>
                               {componentErrors[comp.key] && (
