@@ -107,6 +107,12 @@ class ComponentToggleResponse(BaseModel):
     status: str
 
 
+class NotebookImageBuildStatus(BaseModel):
+    build_id: str | None
+    build_status: str | None
+    image_uri: str | None
+
+
 # -----------------------------------------------------------------------
 # Component catalog for the stack-based view
 # -----------------------------------------------------------------------
@@ -448,7 +454,8 @@ async def stack_components_list(
     for comp_def in KUBERNETES_COMPONENTS:
         state = state_map.get(comp_def["key"], {"enabled": False, "status": "disabled"})
         if state["enabled"]:
-            status = "enabled"
+            # Preserve provisioning status from component_states
+            status = state["status"] if state["status"] == "provisioning" else "enabled"
         else:
             status = "disabled"
 
@@ -576,6 +583,37 @@ async def stack_component_toggle(
         component_key=component_key,
         enabled=new_enabled,
         status=new_status,
+    )
+
+
+# -----------------------------------------------------------------------
+# Notebook image build status
+# -----------------------------------------------------------------------
+
+
+@router.get("/api/v1/infrastructure/notebook-image/build-status")
+async def notebook_image_build_status(
+    current_user: dict = require_role("admin", "comp_bio"),
+    session: AsyncSession = Depends(get_session),
+) -> NotebookImageBuildStatus:
+    """Return current notebook image build status."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT key, value FROM platform_config "
+                "WHERE key IN ('notebook_image_build_id', 'notebook_image_build_status', 'bioaf_scrna_image')"
+            )
+        )
+    ).fetchall()
+    config = {r[0]: r[1] for r in rows}
+
+    def _non_null(val: str | None) -> str | None:
+        return val if val and val != "null" else None
+
+    return NotebookImageBuildStatus(
+        build_id=_non_null(config.get("notebook_image_build_id")),
+        build_status=_non_null(config.get("notebook_image_build_status")),
+        image_uri=_non_null(config.get("bioaf_scrna_image")),
     )
 
 
