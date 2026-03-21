@@ -764,7 +764,7 @@ export default function InfraComponentsPage() {
                                     )}
                                   </p>
                                   <p className="text-xs text-amber-500 mt-0.5">
-                                    This can take 20-30 minutes. You can leave this page.
+                                    This one-time setup can take up to an hour. You can leave this page.
                                   </p>
                                   <button
                                     onClick={handleCancelBuild}

@@ -131,7 +131,7 @@ async def launch_session(
             raise HTTPException(
                 400,
                 "The notebook image is currently building. "
-                "This typically takes 20-30 minutes. Check progress in Infrastructure > Components.",
+                "This one-time setup can take up to an hour. Check progress in Infrastructure > Components.",
             )
         raise HTTPException(
             400,

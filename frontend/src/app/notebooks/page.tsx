@@ -149,7 +149,7 @@ export default function NotebooksPage() {
                         (build {imageBuildStatus.build_id.slice(0, 8)})
                       </span>
                     )}
-                    {" -- "}this can take 20-30 minutes. Sessions launched now may fail until the build completes.
+                    {" -- "}this one-time setup can take up to an hour. Sessions launched now may fail until it completes.
                   </p>
                 </div>
               </div>
