@@ -279,9 +279,7 @@ async def billing_export_teardown(
                     "billing_export_dataset",
                     "billing_export_table",
                 ):
-                    await session.execute(
-                        text("DELETE FROM platform_config WHERE key = :k").bindparams(k=key)
-                    )
+                    await session.execute(text("DELETE FROM platform_config WHERE key = :k").bindparams(k=key))
             await session.commit()
 
     return StreamingResponse(
