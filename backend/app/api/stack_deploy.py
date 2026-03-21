@@ -535,8 +535,16 @@ async def stack_component_toggle(
             scrna_image = (
                 await session.execute(text("SELECT value FROM platform_config WHERE key = 'bioaf_scrna_image'"))
             ).scalar_one_or_none()
-            if not scrna_image or scrna_image == "null":
-                # No image yet -- trigger a build
+            build_status = (
+                await session.execute(
+                    text("SELECT value FROM platform_config WHERE key = 'notebook_image_build_status'")
+                )
+            ).scalar_one_or_none()
+
+            # Trigger a build if: no image URI, or image URI is set but the
+            # build never succeeded (stale URI from a pre-fix attempt).
+            needs_build = not scrna_image or scrna_image == "null" or build_status not in ("SUCCESS",)
+            if needs_build:
                 try:
                     await build_notebook_image(session)
                     new_status = "provisioning"
