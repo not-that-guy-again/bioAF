@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { PlotModal } from "@/components/shared/PlotModal";
 import { ExportPdfButton } from "@/components/shared/ExportPdfButton";
 import { api } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import type { QCDashboardSummary, QCDashboardResponse, QCMetrics } from "@/lib/types";
 import {
   BarcodeRankChart,
@@ -124,29 +125,11 @@ function PlotImage({ fileId, title, onExpand }: { fileId: number; title: string;
   useEffect(() => {
     // Build a same-origin proxy URL that serves file bytes directly,
     // avoiding cross-origin issues with GCS signed URLs.
-    let cancelled = false;
-    (async () => {
-      try {
-        const { getToken } = await import("@/lib/auth");
-        const token = getToken();
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-        const contentUrl = `${apiUrl}/api/files/${fileId}/content`;
-        // Verify the file is accessible before setting the URL
-        const resp = await fetch(contentUrl, {
-          method: "HEAD",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!cancelled && resp.ok) {
-          // Use the content URL with token as query param for <img> src
-          setUrl(`${contentUrl}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
-        } else if (!cancelled) {
-          setError(true);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      }
-    })();
-    return () => { cancelled = true; };
+    // URL is built client-side only (useEffect) to avoid hydration mismatch.
+    const token = getToken();
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const contentUrl = `${apiUrl}/api/files/${fileId}/content`;
+    setUrl(`${contentUrl}${token ? `?token=${encodeURIComponent(token)}` : ""}`);
   }, [fileId]);
 
   return (
