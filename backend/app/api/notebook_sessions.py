@@ -139,6 +139,7 @@ async def launch_session(
             session_type=body.session_type,
             resource_profile=body.resource_profile,
             experiment_id=body.experiment_id,
+            image=scrna_image,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -217,6 +218,37 @@ async def sync_session(
 
 
 # -- Settings endpoints --
+
+
+@settings_router.get("/notebooks")
+async def get_notebook_settings(
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+):
+    defaults = {
+        "idle_timeout_hours": 4,
+        "idle_warning_minutes": 15,
+        "max_sessions_per_user": 2,
+        "bioaf_scrna_image": "",
+    }
+    db_keys = [
+        "notebook_idle_timeout_hours",
+        "notebook_idle_warning_minutes",
+        "notebook_max_sessions_per_user",
+        "bioaf_scrna_image",
+    ]
+    result = await session.execute(
+        text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)"),
+        {"keys": db_keys},
+    )
+    rows = {r[0]: r[1] for r in result.fetchall()}
+
+    return {
+        "idle_timeout_hours": int(rows.get("notebook_idle_timeout_hours", defaults["idle_timeout_hours"])),
+        "idle_warning_minutes": int(rows.get("notebook_idle_warning_minutes", defaults["idle_warning_minutes"])),
+        "max_sessions_per_user": int(rows.get("notebook_max_sessions_per_user", defaults["max_sessions_per_user"])),
+        "bioaf_scrna_image": rows.get("bioaf_scrna_image", "") if rows.get("bioaf_scrna_image") != "null" else "",
+    }
 
 
 @settings_router.put("/notebooks")
