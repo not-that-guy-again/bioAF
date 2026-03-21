@@ -39,6 +39,11 @@ export default function NotebooksPage() {
   const [selectedProfile, setSelectedProfile] = useState<ResourceProfile>("small");
   const [selectedExperiment, setSelectedExperiment] = useState<number | null>(null);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [imageBuildStatus, setImageBuildStatus] = useState<{
+    build_id: string | null;
+    build_status: string | null;
+    image_uri: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -47,7 +52,25 @@ export default function NotebooksPage() {
     }
     loadSessions();
     loadExperiments();
+    loadBuildStatus();
   }, [router]);
+
+  async function loadBuildStatus() {
+    try {
+      const status = await api.get<{
+        build_id: string | null;
+        build_status: string | null;
+        image_uri: string | null;
+      }>("/api/v1/infrastructure/notebook-image/build-status");
+      setImageBuildStatus(status);
+      // Poll while build is active
+      if (status.build_status && ["WORKING", "QUEUED"].includes(status.build_status)) {
+        setTimeout(loadBuildStatus, 15000);
+      }
+    } catch {
+      // ignore -- user may not have access
+    }
+  }
 
   async function loadSessions() {
     try {
@@ -107,6 +130,40 @@ export default function NotebooksPage() {
           <div className="flex items-center gap-4 mb-6">
             <h1 className="text-2xl font-bold">Notebook Sessions</h1>
           </div>
+
+          {/* Build Status Banner */}
+          {imageBuildStatus?.build_status && ["WORKING", "QUEUED"].includes(imageBuildStatus.build_status) && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin h-5 w-5 border-2 border-amber-500 border-t-transparent rounded-full" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">
+                    Notebook image is building
+                  </p>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Status: {imageBuildStatus.build_status}
+                    {imageBuildStatus.build_id && (
+                      <span className="ml-1 text-amber-400">
+                        (build {imageBuildStatus.build_id.slice(0, 8)})
+                      </span>
+                    )}
+                    {" -- "}this can take 20-30 minutes. Sessions launched now may fail until the build completes.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {imageBuildStatus?.build_status === "FAILURE" && (
+            <div className="bg-red-50 border border-red-300 rounded-lg p-4 mb-6">
+              <p className="text-sm font-medium text-red-800">
+                Notebook image build failed
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                The last image build did not succeed. Re-enable the component in Infrastructure &gt; Components to retry.
+              </p>
+            </div>
+          )}
 
           {/* Launch Section */}
           <div className="bg-white rounded-lg shadow p-6 mb-6">
