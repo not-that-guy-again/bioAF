@@ -7,6 +7,13 @@ import { PlotModal } from "@/components/shared/PlotModal";
 import { ExportPdfButton } from "@/components/shared/ExportPdfButton";
 import { api } from "@/lib/api";
 import type { QCDashboardSummary, QCDashboardResponse, QCMetrics } from "@/lib/types";
+import {
+  BarcodeRankChart,
+  StarAlignmentChart,
+  BaseQualityChart,
+  GCContentChart,
+  DuplicationChart,
+} from "@/components/shared/QCCharts";
 
 type MetricStatus = "good" | "warn" | "bad" | "neutral";
 
@@ -316,7 +323,33 @@ function DashboardDetail({ dashboard, onBack, onRegenerate, regenerating, onExpa
           </>
         )}
 
-        {/* Plots */}
+        {/* Interactive Charts */}
+        {(m.barcode_rank_data || m.chart_data) && (
+          <>
+            <SectionHeader title="Interactive Charts" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {m.barcode_rank_data && m.barcode_rank_data.length > 0 && (
+                <div className="lg:col-span-2">
+                  <BarcodeRankChart data={m.barcode_rank_data} />
+                </div>
+              )}
+              {m.chart_data?.star_alignment && (
+                <StarAlignmentChart data={m.chart_data.star_alignment} />
+              )}
+              {m.chart_data?.base_quality && (
+                <BaseQualityChart data={m.chart_data.base_quality} />
+              )}
+              {m.chart_data?.gc_content && (
+                <GCContentChart data={m.chart_data.gc_content} />
+              )}
+              {m.chart_data?.duplication && (
+                <DuplicationChart data={m.chart_data.duplication} />
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Static Plots (PNG fallback) */}
         {dashboard.plots.length > 0 && (
           <>
             <SectionHeader title="Plots" />

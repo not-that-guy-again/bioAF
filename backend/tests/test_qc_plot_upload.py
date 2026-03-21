@@ -220,3 +220,170 @@ def test_compute_quality_rating_concerning_low_mapping():
         "reads_mapped_genome": 0.3,
     }
     assert QCDashboardService._compute_quality_rating(metrics) == "concerning"
+
+
+# ---------------------------------------------------------------------------
+# Barcode rank (knee) plot data extraction
+# ---------------------------------------------------------------------------
+
+
+def test_build_barcode_rank_data_basic():
+    """Builds downsampled barcode rank curve from sorted UMI counts."""
+    # Simulate 100 barcodes with descending UMI counts
+    umi_counts = list(range(1000, 0, -10))  # [1000, 990, 980, ..., 10]
+    result = QCDashboardService._build_barcode_rank_data(umi_counts)
+
+    assert isinstance(result, list)
+    assert len(result) > 0
+    # Each point is [rank, umi_count]
+    assert len(result[0]) == 2
+    # First point should be rank 1 with highest UMI count
+    assert result[0][0] == 1
+    assert result[0][1] == 1000
+    # Last point rank should equal total barcodes
+    assert result[-1][0] == len(umi_counts)
+
+
+def test_build_barcode_rank_data_downsamples_large_input():
+    """Downsamples to max_points when input exceeds threshold."""
+    umi_counts = list(range(50000, 0, -1))
+    result = QCDashboardService._build_barcode_rank_data(umi_counts, max_points=500)
+
+    # Should be at most 500 points
+    assert len(result) <= 500
+    # First and last points preserved
+    assert result[0][0] == 1
+    assert result[0][1] == 50000
+    assert result[-1][0] == 50000
+
+
+def test_build_barcode_rank_data_empty():
+    """Returns empty list for empty input."""
+    result = QCDashboardService._build_barcode_rank_data([])
+    assert result == []
+
+
+def test_build_barcode_rank_data_small_input():
+    """Returns all points when input is small."""
+    umi_counts = [500, 300, 100]
+    result = QCDashboardService._build_barcode_rank_data(umi_counts)
+    assert len(result) == 3
+    assert result == [[1, 500], [2, 300], [3, 100]]
+
+
+# ---------------------------------------------------------------------------
+# MultiQC chart data extraction
+# ---------------------------------------------------------------------------
+
+MULTIQC_DATA_JSON = json.dumps(
+    {
+        "report_plot_data": {
+            "star_alignment_plot": {
+                "datasets": [
+                    {
+                        "data": [
+                            {"name": "Uniquely mapped", "data": [{"x": "sample1", "y": 85.5}]},
+                            {"name": "Mapped to multiple loci", "data": [{"x": "sample1", "y": 5.2}]},
+                            {"name": "Unmapped: too short", "data": [{"x": "sample1", "y": 9.3}]},
+                        ]
+                    }
+                ]
+            },
+            "fastqc_per_base_sequence_quality_plot": {
+                "datasets": [{"data": [{"name": "sample1", "data": [[1, 35.0], [2, 34.5], [3, 33.0], [4, 32.0]]}]}]
+            },
+            "fastqc_per_sequence_gc_content_plot": {
+                "datasets": [
+                    {
+                        "data": [
+                            {"name": "sample1", "data": [[20, 0.5], [30, 2.1], [40, 5.3], [50, 3.2], [60, 1.0]]},
+                            {
+                                "name": "Theoretical Distribution",
+                                "data": [[20, 0.4], [30, 2.0], [40, 5.0], [50, 3.5], [60, 1.1]],
+                            },
+                        ]
+                    }
+                ]
+            },
+            "fastqc_sequence_duplication_levels_plot": {
+                "datasets": [{"data": [{"name": "sample1", "data": [[1, 60.0], [2, 15.0], [3, 8.0], [4, 5.0]]}]}]
+            },
+        }
+    }
+)
+
+
+def test_read_multiqc_chart_data_extracts_all_plots():
+    """Extracts structured chart data from multiqc_data.json report_plot_data."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+
+    assert "star_alignment" in chart_data
+    assert "base_quality" in chart_data
+    assert "gc_content" in chart_data
+    assert "duplication" in chart_data
+
+
+def test_read_multiqc_chart_data_star_alignment():
+    """STAR alignment chart data has category labels and values."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+    star = chart_data["star_alignment"]
+
+    assert isinstance(star, list)
+    assert len(star) == 3
+    # Each entry has name and value
+    assert star[0]["name"] == "Uniquely mapped"
+    assert star[0]["value"] == 85.5
+
+
+def test_read_multiqc_chart_data_base_quality():
+    """Base quality chart data is a list of [position, score] points."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+    bq = chart_data["base_quality"]
+
+    assert isinstance(bq, list)
+    assert len(bq) == 4
+    assert bq[0] == [1, 35.0]
+
+
+def test_read_multiqc_chart_data_gc_content():
+    """GC content chart has sample and theoretical distribution data."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+    gc = chart_data["gc_content"]
+
+    assert "sample" in gc
+    assert "theoretical" in gc
+    assert len(gc["sample"]) == 5
+    assert gc["sample"][0] == [20, 0.5]
+    assert gc["theoretical"][0] == [20, 0.4]
+
+
+def test_read_multiqc_chart_data_duplication():
+    """Duplication chart data is a list of [level, percentage] points."""
+    chart_data = QCDashboardService._read_multiqc_chart_data(MULTIQC_DATA_JSON)
+    dup = chart_data["duplication"]
+
+    assert isinstance(dup, list)
+    assert len(dup) == 4
+    assert dup[0] == [1, 60.0]
+
+
+def test_read_multiqc_chart_data_empty_json():
+    """Returns empty dict for JSON with no plot data."""
+    chart_data = QCDashboardService._read_multiqc_chart_data("{}")
+    assert chart_data == {}
+
+
+def test_read_multiqc_chart_data_partial():
+    """Handles JSON with only some plots present."""
+    partial = json.dumps(
+        {
+            "report_plot_data": {
+                "star_alignment_plot": {
+                    "datasets": [{"data": [{"name": "Uniquely mapped", "data": [{"x": "s1", "y": 90.0}]}]}]
+                }
+            }
+        }
+    )
+    chart_data = QCDashboardService._read_multiqc_chart_data(partial)
+    assert "star_alignment" in chart_data
+    assert "base_quality" not in chart_data

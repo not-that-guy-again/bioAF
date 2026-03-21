@@ -817,6 +817,14 @@ export interface QCMetrics {
   avg_sequence_length: number | null;
   total_samples: number | null;
   quality_rating: string;
+  // Chart data for interactive rendering
+  barcode_rank_data: [number, number][] | null;
+  chart_data: {
+    star_alignment?: { name: string; value: number }[];
+    base_quality?: [number, number][];
+    gc_content?: { sample: [number, number][]; theoretical?: [number, number][] };
+    duplication?: [number, number][];
+  } | null;
 }
 
 export interface QCPlot {

@@ -232,12 +232,35 @@ class QCDashboardService:
                     if v is not None and metrics.get(k) is None:
                         metrics[k] = v
 
-            has_any = any(v is not None for v in metrics.values())
+                # Extract structured chart data for interactive rendering
+                chart_data = QCDashboardService._read_multiqc_chart_data(multiqc_text)
+                if chart_data:
+                    metrics["chart_data"] = chart_data
+
+            # 5. Try STARsolo raw barcode data for knee plot
+            raw_matrix_blob = None
+            for blob in bucket.list_blobs(prefix=f"{prefix}star/"):
+                if blob.name.endswith("Solo.out/Gene/raw/UniqueAndMult-EM.mtx") or blob.name.endswith(
+                    "Solo.out/Gene/raw/matrix.mtx"
+                ):
+                    raw_matrix_blob = blob
+                    break
+
+            if raw_matrix_blob:
+                logger.info("Found STARsolo raw matrix for barcode rank plot, run %d", run.id)
+                try:
+                    barcode_rank = QCDashboardService._extract_barcode_rank_from_mtx(raw_matrix_blob.download_as_text())
+                    if barcode_rank:
+                        metrics["barcode_rank_data"] = barcode_rank
+                except Exception as e:
+                    logger.warning("Barcode rank extraction failed for run %d: %s", run.id, e)
+
+            has_any = any(v is not None for k, v in metrics.items() if k not in ("chart_data", "barcode_rank_data"))
             if not has_any:
                 logger.info("No metrics found for run %d from any source", run.id)
                 return empty_metrics
 
-            # 5. Upload metrics cache to GCS
+            # 6. Upload metrics cache to GCS
             cache_upload_blob = bucket.blob(f"{prefix}qc_metrics.json")
             cache_upload_blob.upload_from_string(
                 json.dumps(metrics, indent=2),
@@ -484,6 +507,139 @@ class QCDashboardService:
             logger.warning("MultiQC general stats parsing failed: %s", e)
 
         return metrics
+
+    @staticmethod
+    def _build_barcode_rank_data(umi_counts: list[int], max_points: int = 500) -> list[list[int]]:
+        """Build a barcode rank plot curve from sorted UMI counts.
+
+        Returns a list of [rank, umi_count] pairs, downsampled via log-spaced
+        indices when the input exceeds max_points.
+        """
+        if not umi_counts:
+            return []
+
+        n = len(umi_counts)
+        if n <= max_points:
+            return [[i + 1, c] for i, c in enumerate(umi_counts)]
+
+        # Log-spaced indices to preserve detail in the knee region
+        import math
+
+        indices = sorted(
+            set(
+                [0]
+                + [int(round(math.exp(i * math.log(n - 1) / (max_points - 2)))) for i in range(1, max_points - 1)]
+                + [n - 1]
+            )
+        )
+        return [[idx + 1, umi_counts[idx]] for idx in indices]
+
+    @staticmethod
+    def _extract_barcode_rank_from_mtx(mtx_text: str) -> list[list[int]]:
+        """Parse a Market Exchange format sparse matrix and build barcode rank data.
+
+        Sums values per column (barcode), sorts descending, then downsamples.
+        """
+        from collections import defaultdict
+
+        col_sums: dict[int, int] = defaultdict(int)
+        for line in mtx_text.strip().splitlines():
+            if line.startswith("%"):
+                continue
+            parts = line.split()
+            if len(parts) == 3:
+                try:
+                    col = int(parts[1])
+                    val = int(float(parts[2]))
+                    col_sums[col] += val
+                except (ValueError, IndexError):
+                    continue
+
+        if not col_sums:
+            return []
+
+        sorted_counts = sorted(col_sums.values(), reverse=True)
+        return QCDashboardService._build_barcode_rank_data(sorted_counts)
+
+    @staticmethod
+    def _read_multiqc_chart_data(multiqc_json_text: str) -> dict:
+        """Extract structured chart data from multiqc_data.json for interactive rendering.
+
+        Looks for report_plot_data sections and extracts data for:
+        - star_alignment: STAR alignment categories
+        - base_quality: per-base sequence quality
+        - gc_content: GC content distribution (sample + theoretical)
+        - duplication: sequence duplication levels
+        """
+        chart_data: dict = {}
+        try:
+            data = json.loads(multiqc_json_text)
+            plot_data = data.get("report_plot_data", {})
+
+            # STAR alignment (stacked bar)
+            star_plot = plot_data.get("star_alignment_plot")
+            if star_plot:
+                datasets = star_plot.get("datasets", [])
+                if datasets:
+                    entries = datasets[0].get("data", [])
+                    star_items = []
+                    for entry in entries:
+                        name = entry.get("name", "")
+                        points = entry.get("data", [])
+                        if points:
+                            val = points[0].get("y", 0) if isinstance(points[0], dict) else points[0][1]
+                            star_items.append({"name": name, "value": val})
+                    if star_items:
+                        chart_data["star_alignment"] = star_items
+
+            # Per-base sequence quality (line chart)
+            bq_plot = plot_data.get("fastqc_per_base_sequence_quality_plot")
+            if bq_plot:
+                datasets = bq_plot.get("datasets", [])
+                if datasets:
+                    entries = datasets[0].get("data", [])
+                    if entries:
+                        # Use first sample
+                        points = entries[0].get("data", [])
+                        if points:
+                            chart_data["base_quality"] = points
+
+            # GC content (line chart with sample + theoretical)
+            gc_plot = plot_data.get("fastqc_per_sequence_gc_content_plot")
+            if gc_plot:
+                datasets = gc_plot.get("datasets", [])
+                if datasets:
+                    entries = datasets[0].get("data", [])
+                    sample_data = None
+                    theoretical_data = None
+                    for entry in entries:
+                        name = entry.get("name", "")
+                        points = entry.get("data", [])
+                        if "theoretical" in name.lower():
+                            theoretical_data = points
+                        elif sample_data is None:
+                            sample_data = points
+                    if sample_data:
+                        gc = {"sample": sample_data}
+                        if theoretical_data:
+                            gc["theoretical"] = theoretical_data
+                        chart_data["gc_content"] = gc
+
+            # Duplication levels (line chart)
+            dup_plot = plot_data.get("fastqc_sequence_duplication_levels_plot")
+            if dup_plot:
+                datasets = dup_plot.get("datasets", [])
+                if datasets:
+                    entries = datasets[0].get("data", [])
+                    if entries:
+                        points = entries[0].get("data", [])
+                        if points:
+                            chart_data["duplication"] = points
+
+        except Exception as e:
+            logger.warning("MultiQC chart data extraction failed: %s", e)
+
+        return chart_data
 
     @staticmethod
     def _compute_quality_rating(metrics: dict) -> str:

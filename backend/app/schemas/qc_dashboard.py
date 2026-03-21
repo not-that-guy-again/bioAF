@@ -32,6 +32,9 @@ class QCMetrics(BaseModel):
     avg_sequence_length: float | None = None
     total_samples: int | None = None
     quality_rating: str = "concerning"
+    # Chart data for interactive rendering
+    barcode_rank_data: list[list[int]] | None = None
+    chart_data: dict | None = None
 
 
 class QCPlot(BaseModel):
