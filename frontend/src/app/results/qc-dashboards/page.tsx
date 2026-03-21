@@ -143,6 +143,7 @@ function PlotImage({ fileId, title, onExpand }: { fileId: number; title: string;
           <img
             src={url}
             alt={title}
+            crossOrigin="anonymous"
             className="w-full rounded"
             onError={() => setError(true)}
           />
