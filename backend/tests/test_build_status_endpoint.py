@@ -123,10 +123,7 @@ async def test_build_status_requires_auth(client, session, admin_user, seed_plat
 async def test_components_list_shows_provisioning(client, session, admin_token, admin_user, seed_platform):
     """Components list returns 'provisioning' status for components that are building."""
     await session.execute(
-        text(
-            "UPDATE component_states SET enabled = true, status = 'provisioning' "
-            "WHERE component_key = 'rstudio'"
-        ),
+        text("UPDATE component_states SET enabled = true, status = 'provisioning' WHERE component_key = 'rstudio'"),
     )
     await session.commit()
 
