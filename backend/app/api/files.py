@@ -30,6 +30,8 @@ def _file_response(f) -> FileResponse:
         tags=f.tags_json if isinstance(f.tags_json, list) else [],
         uploader=UserSummary(id=f.uploader.id, name=f.uploader.name, email=f.uploader.email) if f.uploader else None,
         experiment_id=f.experiment_id,
+        source_type=f.source_type,
+        source_pipeline_run_id=f.source_pipeline_run_id,
         upload_timestamp=f.upload_timestamp,
         created_at=f.created_at,
     )

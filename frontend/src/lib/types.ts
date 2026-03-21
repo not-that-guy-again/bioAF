@@ -693,6 +693,8 @@ export interface FileResponse {
   tags: string[];
   uploader: UserSummary | null;
   experiment_id: number | null;
+  source_type: string;
+  source_pipeline_run_id: number | null;
   upload_timestamp: string;
   created_at: string;
 }

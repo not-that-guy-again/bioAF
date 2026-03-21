@@ -916,6 +916,8 @@ class QCDashboardService:
                     file_type="png",
                     tags=["qc_plot", plot_type],
                     experiment_id=run.experiment_id,
+                    source_type="qc_dashboard",
+                    source_pipeline_run_id=run.id,
                 )
                 plots_meta.append({"plot_type": plot_type, "title": title, "file_id": file.id})
 
