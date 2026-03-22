@@ -130,26 +130,50 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
                 ns.id, svc_name, namespace,
             )
             try:
-                svc = core_client.read_namespaced_service(
-                    name=svc_name, namespace=namespace
+                # Use raw HTTP to bypass python client caching issues
+                import httpx
+
+                api_client = adapter._get_api_client()
+                config = api_client.configuration
+                url = (
+                    f"{config.host}/api/v1/namespaces/{namespace}"
+                    f"/services/{svc_name}"
                 )
-                lb = svc.status.load_balancer
+                headers = {"Authorization": list(config.api_key.values())[0]}
+                resp = httpx.get(
+                    url,
+                    headers=headers,
+                    verify=config.ssl_ca_cert or False,
+                    timeout=10,
+                )
                 logger.info(
-                    "Service %s LB status: %s", svc_name, lb
+                    "Raw K8s API for %s: status=%s",
+                    svc_name, resp.status_code,
                 )
-                ingress_list = (lb.ingress or []) if lb else []
-                if ingress_list:
-                    ext_ip = ingress_list[0].ip or ingress_list[0].hostname
-                    port = 8888 if ns.session_type == "jupyter" else 8787
-                    ns.access_url = f"http://{ext_ip}:{port}"
-                    changed = True
-                    logger.info(
-                        "Synced LB IP for session %s: %s", ns.id, ns.access_url
+                if resp.status_code == 200:
+                    svc_data = resp.json()
+                    ingress_list = (
+                        svc_data.get("status", {})
+                        .get("loadBalancer", {})
+                        .get("ingress") or []
                     )
+                    logger.info(
+                        "Service %s ingress: %s", svc_name, ingress_list
+                    )
+                    if ingress_list:
+                        ext_ip = ingress_list[0].get("ip") or ingress_list[0].get("hostname")
+                        port = 8888 if ns.session_type == "jupyter" else 8787
+                        ns.access_url = f"http://{ext_ip}:{port}"
+                        changed = True
+                        logger.info(
+                            "Synced LB IP for session %s: %s", ns.id, ns.access_url
+                        )
+                    else:
+                        logger.warning("No ingress for service %s", svc_name)
                 else:
                     logger.warning(
-                        "No ingress for service %s, LB type=%s",
-                        svc_name, svc.spec.type,
+                        "K8s API returned %s for %s: %s",
+                        resp.status_code, svc_name, resp.text[:200],
                     )
             except Exception:
                 logger.exception("Failed to read service %s", svc_name)

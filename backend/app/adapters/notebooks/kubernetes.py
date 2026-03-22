@@ -507,32 +507,54 @@ class KubernetesNotebookProvider(NotebookProvider):
                 )
                 return
 
-            # Wait for LoadBalancer external IP (up to 2 minutes)
+            # Wait for LoadBalancer external IP (up to 3 minutes)
+            # Use raw httpx instead of python client (client returns stale
+            # ingress: None even when kubectl shows the IP).
+            import httpx
+
+            api_client = self._get_api_client()
+            config = api_client.configuration
+            svc_url = (
+                f"{config.host}/api/v1/namespaces/{namespace}"
+                f"/services/{service_name}"
+            )
+            headers = {"Authorization": list(config.api_key.values())[0]}
+
             access_url = None
-            for _ in range(24):
+            for attempt in range(36):
                 try:
-                    svc = core_client.read_namespaced_service(
-                        name=service_name, namespace=namespace
+                    resp = httpx.get(
+                        svc_url,
+                        headers=headers,
+                        verify=config.ssl_ca_cert or False,
+                        timeout=10,
                     )
-                    ingress_list = (
-                        (svc.status.load_balancer.ingress or [])
-                        if svc.status.load_balancer
-                        else []
-                    )
-                    if ingress_list:
-                        external_ip = ingress_list[0].ip or ingress_list[0].hostname
-                        access_url = f"http://{external_ip}:{container_port}"
-                        logger.info(
-                            "External URL for session %s: %s", session_id, access_url
+                    if resp.status_code == 200:
+                        ingress_list = (
+                            resp.json()
+                            .get("status", {})
+                            .get("loadBalancer", {})
+                            .get("ingress") or []
                         )
-                        break
+                        if ingress_list:
+                            ext_ip = (
+                                ingress_list[0].get("ip")
+                                or ingress_list[0].get("hostname")
+                            )
+                            access_url = f"http://{ext_ip}:{container_port}"
+                            logger.info(
+                                "External URL for session %s: %s",
+                                session_id, access_url,
+                            )
+                            break
                 except Exception:
                     pass
                 await asyncio.sleep(5)
 
             if not access_url:
                 logger.warning(
-                    "LoadBalancer IP not ready for %s after 2 min", service_name
+                    "LoadBalancer IP not ready for %s after 3 min",
+                    service_name,
                 )
 
             await self._update_session_in_db(
