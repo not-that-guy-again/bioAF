@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { isAuthenticated } from "@/lib/auth";
 import { InfrastructureHealthWidget } from "@/components/dashboard/InfrastructureHealthWidget";
 import { RunningJobsWidget } from "@/components/dashboard/RunningJobsWidget";
@@ -41,7 +40,6 @@ export default function DashboardPage() {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <Breadcrumb />
         <main className="flex-1 flex flex-col overflow-hidden p-6" data-testid="dashboard">
           <h1 className="text-2xl font-bold mb-4 shrink-0">Dashboard</h1>
 
