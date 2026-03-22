@@ -341,7 +341,7 @@ class KubernetesNotebookProvider(NotebookProvider):
         else:
             container_port = 8787
             container_command = [
-                "rserver",
+                "/usr/lib/rstudio-server/bin/rserver",
                 "--www-address=0.0.0.0",
                 f"--www-port={container_port}",
                 "--auth-none=1",
