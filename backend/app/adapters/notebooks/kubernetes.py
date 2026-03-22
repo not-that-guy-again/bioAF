@@ -359,7 +359,7 @@ class KubernetesNotebookProvider(NotebookProvider):
 
         # Build notebook container
         image = session_spec.get("image", "bioaf-scrna:latest")
-        notebook_container = {
+        notebook_container: dict = {
             "name": "notebook",
             "image": image,
             "command": container_command,
@@ -376,6 +376,10 @@ class KubernetesNotebookProvider(NotebookProvider):
                 },
             },
         }
+
+        # RStudio Server requires root to manage sessions and write pid files
+        if session_type == "rstudio":
+            notebook_container["securityContext"] = {"runAsUser": 0}
 
         # Pod manifest
         pod_manifest = {
