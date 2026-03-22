@@ -101,6 +101,10 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
                 name=ns.k8s_pod_name, namespace=namespace
             )
             phase = pod.status.phase
+            logger.info(
+                "Session %s pod %s phase=%s, db_status=%s, access_url=%s",
+                ns.id, ns.k8s_pod_name, phase, ns.status, ns.access_url,
+            )
             if phase == "Running" and ns.status == "starting":
                 conditions = pod.status.conditions or []
                 ready = any(
@@ -116,20 +120,24 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
                 ns.status = "failed"
                 changed = True
         except Exception:
-            pass
+            logger.exception("Failed to read pod %s", ns.k8s_pod_name)
 
         # Check LB IP if we don't have an access_url yet
         if not ns.access_url and ns.status in ("starting", "running"):
             svc_name = f"bioaf-notebook-svc-{ns.id}"
+            logger.info(
+                "Checking LB IP for session %s, svc=%s, ns=%s",
+                ns.id, svc_name, namespace,
+            )
             try:
                 svc = core_client.read_namespaced_service(
                     name=svc_name, namespace=namespace
                 )
-                ingress_list = (
-                    (svc.status.load_balancer.ingress or [])
-                    if svc.status.load_balancer
-                    else []
+                lb = svc.status.load_balancer
+                logger.info(
+                    "Service %s LB status: %s", svc_name, lb
                 )
+                ingress_list = (lb.ingress or []) if lb else []
                 if ingress_list:
                     ext_ip = ingress_list[0].ip or ingress_list[0].hostname
                     port = 8888 if ns.session_type == "jupyter" else 8787
@@ -138,8 +146,13 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
                     logger.info(
                         "Synced LB IP for session %s: %s", ns.id, ns.access_url
                     )
+                else:
+                    logger.warning(
+                        "No ingress for service %s, LB type=%s",
+                        svc_name, svc.spec.type,
+                    )
             except Exception:
-                pass
+                logger.exception("Failed to read service %s", svc_name)
 
         if changed:
             await session.flush()
