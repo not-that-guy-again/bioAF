@@ -69,7 +69,7 @@ async def test_session_launch(client, comp_bio_token):
     assert data["resource_profile"] == "small"
     assert data["cpu_cores"] == 2
     assert data["memory_gb"] == 4
-    assert data["status"] in ("starting", "pending")
+    assert data["status"] in ("starting", "pending", "running")
 
 
 @pytest.mark.asyncio

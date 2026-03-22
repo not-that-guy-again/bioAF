@@ -438,7 +438,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                         "protocol": "TCP",
                     }
                 ],
-                "type": "ClusterIP",
+                "type": "LoadBalancer",
             },
         }
         core_client.create_namespaced_service(namespace=namespace, body=service_manifest)
@@ -464,7 +464,26 @@ class KubernetesNotebookProvider(NotebookProvider):
                 }
             await asyncio.sleep(5)
 
-        access_url = f"http://{service_name}.{namespace}.svc.cluster.local:{container_port}"
+        # Wait for LoadBalancer external IP (poll up to 2 minutes)
+        access_url = None
+        for _ in range(24):
+            svc = core_client.read_namespaced_service(
+                name=service_name, namespace=namespace
+            )
+            ingress = (svc.status.load_balancer.ingress or []) if svc.status.load_balancer else []
+            if ingress:
+                external_ip = ingress[0].ip or ingress[0].hostname
+                access_url = f"http://{external_ip}:{container_port}"
+                logger.info("External URL for session %s: %s", session_id, access_url)
+                break
+            await asyncio.sleep(5)
+
+        if not access_url:
+            logger.warning(
+                "LoadBalancer IP not ready for %s after 2 min, using cluster-internal URL",
+                service_name,
+            )
+            access_url = f"http://{service_name}.{namespace}.svc.cluster.local:{container_port}"
 
         return {
             "session_id": session_id,

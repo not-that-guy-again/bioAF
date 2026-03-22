@@ -307,14 +307,25 @@ export default function NotebooksPage() {
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-2">
                           {s.proxy_url && s.status === "running" && (
-                            <a
-                              href={s.proxy_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs px-2 py-1 border border-bioaf-600 text-bioaf-600 rounded hover:bg-bioaf-50"
-                            >
-                              Open
-                            </a>
+                            <>
+                              <a
+                                href={s.proxy_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs px-2 py-1 border border-bioaf-600 text-bioaf-600 rounded hover:bg-bioaf-50"
+                              >
+                                Open
+                              </a>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(s.proxy_url!);
+                                }}
+                                title={s.proxy_url}
+                                className="text-xs px-2 py-1 border border-gray-400 text-gray-600 rounded hover:bg-gray-50"
+                              >
+                                Copy URL
+                              </button>
+                            </>
                           )}
                           {s.status === "running" && (
                             <button
@@ -362,14 +373,22 @@ export default function NotebooksPage() {
               actions={
                 <>
                   {viewingSession.proxy_url && viewingSession.status === "running" && (
-                    <a
-                      href={viewingSession.proxy_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 border border-bioaf-600 text-bioaf-600 rounded text-sm hover:bg-bioaf-50"
-                    >
-                      Open
-                    </a>
+                    <>
+                      <a
+                        href={viewingSession.proxy_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 border border-bioaf-600 text-bioaf-600 rounded text-sm hover:bg-bioaf-50"
+                      >
+                        Open
+                      </a>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(viewingSession.proxy_url!)}
+                        className="px-3 py-1.5 border border-gray-400 text-gray-600 rounded text-sm hover:bg-gray-50"
+                      >
+                        Copy URL
+                      </button>
+                    </>
                   )}
                   {["pending", "starting", "running", "idle"].includes(viewingSession.status) && (
                     <button
