@@ -12,9 +12,7 @@ async def test_login_creates_access_log_entry(client: AsyncClient, admin_user, s
     )
     assert response.status_code == 200
 
-    result = await session.execute(
-        text("SELECT * FROM access_log WHERE resource_type = 'auth' AND action = 'login'")
-    )
+    result = await session.execute(text("SELECT * FROM access_log WHERE resource_type = 'auth' AND action = 'login'"))
     rows = result.fetchall()
     assert len(rows) >= 1
     assert rows[0].user_id == admin_user.id

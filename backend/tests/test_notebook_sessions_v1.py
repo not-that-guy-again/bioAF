@@ -164,7 +164,7 @@ async def test_launch_rejects_with_building_message(client, session, comp_bio_to
         headers={"Authorization": f"Bearer {comp_bio_token}"},
     )
     assert response.status_code == 400
-    assert "currently being built" in response.json()["detail"]
+    assert "currently building" in response.json()["detail"]
 
 
 # -- Launch plumbs image URI and stores K8s results --

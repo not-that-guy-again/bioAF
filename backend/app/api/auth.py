@@ -38,7 +38,12 @@ async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)
 
     await log_action(session, user_id=user.id, entity_type="auth", entity_id=user.id, action="login")
     await AccessLogService.log_access(
-        session, user.organization_id, user.id, "auth", str(user.id), "login",
+        session,
+        user.organization_id,
+        user.id,
+        "auth",
+        str(user.id),
+        "login",
         {"email": user.email},
     )
     await session.commit()

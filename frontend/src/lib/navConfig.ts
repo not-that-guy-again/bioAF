@@ -71,6 +71,7 @@ export const navConfig: NavSection[] = [
     children: [
       { label: "Users & Roles", path: "/settings/users" },
       { label: "Access Logs", path: "/settings/access-logs" },
+      { label: "Audit Log", path: "/settings/audit-log" },
       { label: "GCP Configuration", path: "/settings/gcp" },
       { label: "Naming Profiles", path: "/settings/naming-profiles" },
       { label: "SMTP Configuration", path: "/settings/smtp" },
