@@ -107,11 +107,13 @@ export default function AuditLogPage() {
   const entityTypes = [
     "experiment", "sample", "user", "auth", "pipeline_run",
     "pipeline_catalog", "project", "file", "batch", "system",
+    "notebook", "reference",
   ];
 
   const actions = [
-    "create", "update", "delete", "login", "status_change",
+    "create", "update", "delete", "login", "logout", "status_change",
     "launch", "invite", "deactivate", "verify_email",
+    "download", "read", "view", "session",
   ];
 
   return (
