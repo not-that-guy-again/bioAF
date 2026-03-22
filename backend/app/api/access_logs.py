@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.api.dependencies import require_role
-from app.models.access_log import AccessLog
+from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.access_log import AccessLogEntry, AccessLogListResponse
 from app.services.access_log_service import AccessLogService
@@ -22,11 +22,12 @@ async def never_logged_in_users(
     """List users in the org who have never logged in."""
     org_id = current_user["org_id"]
 
+    # Check audit_log for logins since that's where all historical logins
+    # are recorded (access_log only has logins after the recent code change).
     logged_in_subq = (
-        select(AccessLog.user_id)
-        .where(AccessLog.organization_id == org_id)
-        .where(AccessLog.resource_type == "auth")
-        .where(AccessLog.action == "login")
+        select(AuditLog.user_id)
+        .where(AuditLog.entity_type == "auth")
+        .where(AuditLog.action == "login")
         .distinct()
         .subquery()
     )
