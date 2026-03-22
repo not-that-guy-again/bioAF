@@ -42,13 +42,13 @@ export default function DashboardPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <Breadcrumb />
-        <main className="flex-1 overflow-y-auto p-6" data-testid="dashboard">
-          <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
+        <main className="flex-1 flex flex-col overflow-hidden p-6" data-testid="dashboard">
+          <h1 className="text-2xl font-bold mb-4 shrink-0">Dashboard</h1>
 
           {showGcpBanner && (
             <div
               data-testid="gcp-setup-banner"
-              className="mb-6 flex items-start justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-800"
+              className="mb-6 shrink-0 flex items-start justify-between gap-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-800"
             >
               <div className="flex-1 text-sm">
                 <span className="font-semibold">GCP not configured.</span>{" "}
@@ -68,7 +68,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4 shrink-0">
             <InfrastructureHealthWidget />
             <RunningJobsWidget />
             <QueueDepthWidget />
@@ -76,7 +76,9 @@ export default function DashboardPage() {
             <IngestStatusWidget />
           </div>
 
-          <ActivityFeedWidget />
+          <div className="flex-1 min-h-0">
+            <ActivityFeedWidget className="h-full" />
+          </div>
         </main>
       </div>
     </div>
