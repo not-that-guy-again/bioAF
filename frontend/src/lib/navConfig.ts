@@ -65,6 +65,15 @@ export const navConfig: NavSection[] = [
     ],
   },
   {
+    label: "Profile",
+    icon: "user",
+    children: [
+      { label: "Session Credentials", path: "/profile/session-credentials" },
+      { label: "Security", path: "/profile/security" },
+      { label: "Notifications", path: "/profile/notifications" },
+    ],
+  },
+  {
     label: "Settings",
     icon: "settings",
     adminOnly: true,
