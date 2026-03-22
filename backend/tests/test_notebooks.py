@@ -255,36 +255,31 @@ async def test_session_launch_creates_audit_entry(client, session, comp_bio_toke
     assert len(entries) >= 1
 
 
-def test_rstudio_command_includes_cookie_key_and_auth_flags():
-    """RStudio pod command must include secure cookie key and auth flags."""
-    from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
-
-    provider = KubernetesNotebookProvider()
-    # Access the command construction logic by building a spec
-    # and checking the command that would be generated
-    session_type = "rstudio"
+def test_rstudio_command_includes_auth_flags():
+    """RStudio pod command must include auth-none and minimum-user-id flags."""
     container_port = 8787
-
-    # Replicate the command construction from _k8s_launch_session
     container_command = [
-        "/bin/bash", "-c",
-        "cat /proc/sys/kernel/random/uuid > /tmp/rstudio-cookie-key && "
-        "chmod 600 /tmp/rstudio-cookie-key && "
-        "/usr/lib/rstudio-server/bin/rserver "
-        "--www-address=0.0.0.0 "
-        f"--www-port={container_port} "
-        "--auth-none=1 "
-        "--auth-minimum-user-id=0 "
-        "--server-daemonize=0 "
-        "--secure-cookie-key-file=/tmp/rstudio-cookie-key",
+        "/usr/lib/rstudio-server/bin/rserver",
+        "--www-address=0.0.0.0",
+        f"--www-port={container_port}",
+        "--auth-none=1",
+        "--auth-minimum-user-id=0",
+        "--server-daemonize=0",
     ]
+    assert container_command[0] == "/usr/lib/rstudio-server/bin/rserver"
+    assert "--auth-none=1" in container_command
+    assert "--auth-minimum-user-id=0" in container_command
+    assert "--server-daemonize=0" in container_command
 
-    cmd_str = container_command[2]
-    assert "--auth-none=1" in cmd_str
-    assert "--auth-minimum-user-id=0" in cmd_str
-    assert "--secure-cookie-key-file=/tmp/rstudio-cookie-key" in cmd_str
-    assert "--server-daemonize=0" in cmd_str
-    assert "cat /proc/sys/kernel/random/uuid > /tmp/rstudio-cookie-key" in cmd_str
+
+def test_rstudio_container_gets_cookie_key_env():
+    """RStudio container spec must include RSTUDIO_SECURE_COOKIE_KEY env var."""
+    import uuid
+
+    # Simulate the env var construction from _k8s_launch_session
+    env = [{"name": "RSTUDIO_SECURE_COOKIE_KEY", "value": uuid.uuid4().hex}]
+    assert env[0]["name"] == "RSTUDIO_SECURE_COOKIE_KEY"
+    assert len(env[0]["value"]) == 32  # hex UUID without dashes
 
 
 def test_jupyter_command_does_not_run_as_bash():

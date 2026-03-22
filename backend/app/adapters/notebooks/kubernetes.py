@@ -340,20 +340,13 @@ class KubernetesNotebookProvider(NotebookProvider):
             ]
         else:
             container_port = 8787
-            # Generate a secure cookie key then start rserver.
-            # Without the key file, rserver produces malformed cookies
-            # that cause an infinite redirect loop even with auth-none.
             container_command = [
-                "/bin/bash", "-c",
-                "cat /proc/sys/kernel/random/uuid > /tmp/rstudio-cookie-key && "
-                "chmod 600 /tmp/rstudio-cookie-key && "
-                "/usr/lib/rstudio-server/bin/rserver "
-                "--www-address=0.0.0.0 "
-                f"--www-port={container_port} "
-                "--auth-none=1 "
-                "--auth-minimum-user-id=0 "
-                "--server-daemonize=0 "
-                "--secure-cookie-key-file=/tmp/rstudio-cookie-key",
+                "/usr/lib/rstudio-server/bin/rserver",
+                "--www-address=0.0.0.0",
+                f"--www-port={container_port}",
+                "--auth-none=1",
+                "--auth-minimum-user-id=0",
+                "--server-daemonize=0",
             ]
 
         # Build GCS sync init container
@@ -385,9 +378,17 @@ class KubernetesNotebookProvider(NotebookProvider):
             },
         }
 
-        # RStudio Server requires root to manage sessions and write pid files
+        # RStudio Server requires root to manage sessions and write pid files.
+        # RSTUDIO_SECURE_COOKIE_KEY provides the cookie signing key via env var,
+        # avoiding the file-based approach that fails with UUID-format strings.
         if session_type == "rstudio":
             notebook_container["securityContext"] = {"runAsUser": 0}
+            notebook_container["env"] = [
+                {
+                    "name": "RSTUDIO_SECURE_COOKIE_KEY",
+                    "value": uuid.uuid4().hex,
+                },
+            ]
 
         # Pod manifest
         pod_manifest = {
