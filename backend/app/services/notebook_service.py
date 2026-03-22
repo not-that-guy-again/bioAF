@@ -85,7 +85,13 @@ class NotebookService:
             notebook_session.k8s_namespace = result.get("namespace")
             notebook_session.access_url = result.get("access_url")
             notebook_session.gcs_home_prefix = result.get("gcs_home_prefix")
-            notebook_session.status = "starting" if result.get("status") != "error" else "failed"
+            adapter_status = result.get("status", "starting")
+            if adapter_status == "error":
+                notebook_session.status = "failed"
+            elif adapter_status == "running":
+                notebook_session.status = "running"
+            else:
+                notebook_session.status = "starting"
         except Exception as e:
             notebook_session.status = "failed"
             logger.error("Failed to launch notebook session %d: %s", notebook_session.id, e)
