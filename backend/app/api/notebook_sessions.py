@@ -18,9 +18,12 @@ from app.schemas.notebook_session import (
     ExperimentSummary,
 )
 from app.services.notebook_service import NotebookService
+from app.adapters.registry import get_notebook_adapter
 
 router = APIRouter(prefix="/api/v1/notebooks", tags=["notebook-sessions"])
 settings_router = APIRouter(prefix="/api/v1/settings", tags=["notebook-settings"])
+
+logger = __import__("logging").getLogger("bioaf.notebooks.api")
 
 
 class NotebookLaunchRequest(BaseModel):
@@ -78,6 +81,73 @@ async def _get_config_value(session: AsyncSession, key: str) -> str | None:
     return row[0] if row else None
 
 
+async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
+    """Check K8s for pod status and LB IP, update session record if needed."""
+    if not ns.k8s_pod_name:
+        return
+
+    try:
+        adapter = get_notebook_adapter()
+        if adapter.is_local:
+            return
+
+        core_client = adapter._get_k8s_core_client()
+        namespace = ns.k8s_namespace or "bioaf-notebooks"
+        changed = False
+
+        # Check pod status
+        try:
+            pod = core_client.read_namespaced_pod(
+                name=ns.k8s_pod_name, namespace=namespace
+            )
+            phase = pod.status.phase
+            if phase == "Running" and ns.status == "starting":
+                conditions = pod.status.conditions or []
+                ready = any(
+                    c.type == "Ready" and c.status == "True" for c in conditions
+                )
+                if ready:
+                    ns.status = "running"
+                    if not ns.started_at:
+                        from datetime import datetime, timezone
+                        ns.started_at = datetime.now(timezone.utc)
+                    changed = True
+            elif phase in ("Failed", "Unknown") and ns.status not in ("stopped", "failed"):
+                ns.status = "failed"
+                changed = True
+        except Exception:
+            pass
+
+        # Check LB IP if we don't have an access_url yet
+        if not ns.access_url and ns.status in ("starting", "running"):
+            svc_name = f"bioaf-notebook-svc-{ns.id}"
+            try:
+                svc = core_client.read_namespaced_service(
+                    name=svc_name, namespace=namespace
+                )
+                ingress_list = (
+                    (svc.status.load_balancer.ingress or [])
+                    if svc.status.load_balancer
+                    else []
+                )
+                if ingress_list:
+                    ext_ip = ingress_list[0].ip or ingress_list[0].hostname
+                    port = 8888 if ns.session_type == "jupyter" else 8787
+                    ns.access_url = f"http://{ext_ip}:{port}"
+                    changed = True
+                    logger.info(
+                        "Synced LB IP for session %s: %s", ns.id, ns.access_url
+                    )
+            except Exception:
+                pass
+
+        if changed:
+            await session.flush()
+
+    except Exception:
+        logger.debug("K8s sync failed for session %s", ns.id, exc_info=True)
+
+
 # -- Session endpoints --
 
 
@@ -94,15 +164,23 @@ async def list_sessions(
 
     filter_user_id = None if role == "admin" else user_id
 
-    sessions, total = await NotebookService.list_sessions(
+    sessions_list, total = await NotebookService.list_sessions(
         session,
         org_id,
         user_id=filter_user_id,
         session_type=session_type,
         status=status,
     )
+
+    # Sync active sessions that are missing access_url or still starting
+    for s in sessions_list:
+        if s.status in ("starting", "running") and (not s.access_url or s.status == "starting"):
+            await _sync_session_from_k8s(s, session)
+
+    await session.commit()
+
     return SessionListResponse(
-        sessions=[_session_response(s) for s in sessions],
+        sessions=[_session_response(s) for s in sessions_list],
         total=total,
     )
 

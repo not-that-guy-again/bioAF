@@ -57,6 +57,7 @@ class NotebookService:
             cpu_cores=cpu_cores,
             memory_gb=memory_gb,
             status="pending",
+            started_at=datetime.now(timezone.utc),
         )
         session.add(notebook_session)
         await session.flush()
