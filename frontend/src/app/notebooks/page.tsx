@@ -56,6 +56,14 @@ export default function NotebooksPage() {
     loadBuildStatus();
   }, [router]);
 
+  // Auto-refresh while any session is starting (waiting for pod + LB IP)
+  useEffect(() => {
+    const hasStarting = sessions.some((s) => s.status === "starting");
+    if (!hasStarting) return;
+    const interval = setInterval(() => loadSessions(), 10000);
+    return () => clearInterval(interval);
+  }, [sessions]);
+
   async function loadBuildStatus() {
     try {
       const status = await api.get<{

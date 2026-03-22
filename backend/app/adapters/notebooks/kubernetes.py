@@ -444,55 +444,141 @@ class KubernetesNotebookProvider(NotebookProvider):
         core_client.create_namespaced_service(namespace=namespace, body=service_manifest)
         logger.info("Created service %s in %s", service_name, namespace)
 
-        # Wait for pod readiness (poll up to 5 minutes)
-        for _ in range(60):
-            pod = core_client.read_namespaced_pod(name=pod_name, namespace=namespace)
-            if pod.status.phase == "Running":
-                conditions = pod.status.conditions or []
-                ready = any(c.type == "Ready" and c.status == "True" for c in conditions)
-                if ready:
-                    break
-            if pod.status.phase in ("Failed", "Unknown"):
-                logger.error("Pod %s entered %s phase", pod_name, pod.status.phase)
-                return {
-                    "session_id": session_id,
-                    "pod_name": pod_name,
-                    "namespace": namespace,
-                    "status": "error",
-                    "access_url": None,
-                    "gcs_home_prefix": gcs_home_prefix,
-                }
-            await asyncio.sleep(5)
-
-        # Wait for LoadBalancer external IP (poll up to 2 minutes)
-        access_url = None
-        for _ in range(24):
-            svc = core_client.read_namespaced_service(
-                name=service_name, namespace=namespace
+        # Launch background task to poll for pod readiness and LB IP,
+        # then update the DB session record once both are available.
+        asyncio.create_task(
+            self._poll_session_ready(
+                session_id, pod_name, service_name, namespace, container_port
             )
-            ingress = (svc.status.load_balancer.ingress or []) if svc.status.load_balancer else []
-            if ingress:
-                external_ip = ingress[0].ip or ingress[0].hostname
-                access_url = f"http://{external_ip}:{container_port}"
-                logger.info("External URL for session %s: %s", session_id, access_url)
-                break
-            await asyncio.sleep(5)
-
-        if not access_url:
-            logger.warning(
-                "LoadBalancer IP not ready for %s after 2 min, using cluster-internal URL",
-                service_name,
-            )
-            access_url = f"http://{service_name}.{namespace}.svc.cluster.local:{container_port}"
+        )
 
         return {
             "session_id": session_id,
             "pod_name": pod_name,
             "namespace": namespace,
-            "status": "running",
-            "access_url": access_url,
+            "status": "starting",
+            "access_url": None,
             "gcs_home_prefix": gcs_home_prefix,
         }
+
+    async def _poll_session_ready(
+        self,
+        session_id: int,
+        pod_name: str,
+        service_name: str,
+        namespace: str,
+        container_port: int,
+    ) -> None:
+        """Background: poll for pod readiness and LB IP, then update the DB."""
+        try:
+            core_client = self._get_k8s_core_client()
+
+            # Wait for pod readiness (up to 5 minutes)
+            pod_ready = False
+            for _ in range(60):
+                try:
+                    pod = core_client.read_namespaced_pod(
+                        name=pod_name, namespace=namespace
+                    )
+                    if pod.status.phase == "Running":
+                        conditions = pod.status.conditions or []
+                        if any(
+                            c.type == "Ready" and c.status == "True"
+                            for c in conditions
+                        ):
+                            pod_ready = True
+                            break
+                    if pod.status.phase in ("Failed", "Unknown"):
+                        logger.error(
+                            "Pod %s entered %s phase", pod_name, pod.status.phase
+                        )
+                        await self._update_session_in_db(
+                            session_id, status="failed", access_url=None
+                        )
+                        return
+                except Exception:
+                    pass
+                await asyncio.sleep(5)
+
+            if not pod_ready:
+                logger.error("Pod %s not ready after 5 min", pod_name)
+                await self._update_session_in_db(
+                    session_id, status="failed", access_url=None
+                )
+                return
+
+            # Wait for LoadBalancer external IP (up to 2 minutes)
+            access_url = None
+            for _ in range(24):
+                try:
+                    svc = core_client.read_namespaced_service(
+                        name=service_name, namespace=namespace
+                    )
+                    ingress_list = (
+                        (svc.status.load_balancer.ingress or [])
+                        if svc.status.load_balancer
+                        else []
+                    )
+                    if ingress_list:
+                        external_ip = ingress_list[0].ip or ingress_list[0].hostname
+                        access_url = f"http://{external_ip}:{container_port}"
+                        logger.info(
+                            "External URL for session %s: %s", session_id, access_url
+                        )
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(5)
+
+            if not access_url:
+                logger.warning(
+                    "LoadBalancer IP not ready for %s after 2 min", service_name
+                )
+
+            await self._update_session_in_db(
+                session_id, status="running", access_url=access_url
+            )
+
+        except Exception:
+            logger.exception("Background poll failed for session %s", session_id)
+            await self._update_session_in_db(
+                session_id, status="failed", access_url=None
+            )
+
+    async def _update_session_in_db(
+        self,
+        session_id: int,
+        status: str,
+        access_url: str | None,
+    ) -> None:
+        """Update a notebook session's status and access_url in the DB."""
+        if not self._session_factory:
+            logger.warning(
+                "No session_factory, cannot update session %s in DB", session_id
+            )
+            return
+
+        try:
+            async with self._session_factory() as db:
+                from sqlalchemy import text
+
+                await db.execute(
+                    text(
+                        "UPDATE notebook_sessions "
+                        "SET status = :status, access_url = :url "
+                        "WHERE id = :id"
+                    ),
+                    {"status": status, "url": access_url, "id": session_id},
+                )
+                await db.commit()
+                logger.info(
+                    "Updated session %s: status=%s access_url=%s",
+                    session_id,
+                    status,
+                    access_url,
+                )
+        except Exception:
+            logger.exception("Failed to update session %s in DB", session_id)
 
     async def _k8s_terminate_session(
         self,
