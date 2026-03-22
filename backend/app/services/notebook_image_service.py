@@ -237,7 +237,7 @@ async def submit_image_build(session: AsyncSession, project_id: str, region: str
         "options": {
             "machineType": "E2_HIGHCPU_8",
         },
-        "timeout": "3600s",
+        "timeout": "7200s",
     }
     if sa_email and sa_email != "null":
         build_body["serviceAccount"] = f"projects/{project_id}/serviceAccounts/{sa_email}"
