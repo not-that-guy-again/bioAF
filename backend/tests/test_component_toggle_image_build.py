@@ -184,7 +184,7 @@ async def test_toggle_cellxgene_does_not_trigger_build(client, session, admin_to
 async def test_toggle_rstudio_still_enables_on_build_failure(
     client, session, admin_token, admin_user, seed_deployed_stack
 ):
-    """If image build fails, component still enables (admin can retry)."""
+    """If image build fails, component shows build_failed status."""
     with patch(
         "app.api.stack_deploy.build_notebook_image",
         new_callable=AsyncMock,
@@ -197,5 +197,4 @@ async def test_toggle_rstudio_still_enables_on_build_failure(
     assert response.status_code == 200
     data = response.json()
     assert data["enabled"] is True
-    # Falls back to "enabled" status since build failed
-    assert data["status"] == "enabled"
+    assert data["status"] == "build_failed"

@@ -561,8 +561,7 @@ async def stack_component_toggle(
                     new_status = "provisioning"
                 except Exception as exc:
                     logger.warning("Failed to start notebook image build: %s", exc)
-                    # Still enable the component; admin can retry or set image manually
-                    new_status = "enabled"
+                    new_status = "build_failed"
 
         await session.execute(
             text("""
