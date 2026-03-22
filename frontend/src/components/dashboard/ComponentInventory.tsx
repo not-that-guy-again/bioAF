@@ -20,7 +20,6 @@ export function ComponentInventory({ components }: ComponentInventoryProps) {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Component</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cost</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -34,7 +33,6 @@ export function ComponentInventory({ components }: ComponentInventoryProps) {
                 <td className="px-6 py-4">
                   <StatusBadge status={comp.status} />
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500">{comp.estimated_monthly_cost}</td>
               </tr>
             ))}
           </tbody>

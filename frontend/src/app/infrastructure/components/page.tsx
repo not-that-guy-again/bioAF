@@ -802,8 +802,7 @@ export default function InfraComponentsPage() {
                                   </button>
                                 </div>
                               )}
-                              <div className="flex items-center justify-between mt-3">
-                                <span className="text-xs text-gray-500">{comp.cost_estimate}</span>
+                              <div className="flex items-center justify-end mt-3">
                                 <button
                                   onClick={() => handleComponentToggle(comp.key)}
                                   disabled={comp.status === "provisioning" || comp.status === "build_failed" || togglingComponent === comp.key}
