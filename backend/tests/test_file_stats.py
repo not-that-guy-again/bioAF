@@ -22,8 +22,11 @@ async def test_file_stats_with_data(client, admin_token, admin_user, session):
 
     def _f(name, ftype, source):
         return File(
-            filename=name, file_type=ftype, source_type=source,
-            organization_id=org_id, gcs_uri=f"gs://test-bucket/{name}",
+            filename=name,
+            file_type=ftype,
+            source_type=source,
+            organization_id=org_id,
+            gcs_uri=f"gs://test-bucket/{name}",
         )
 
     files = [

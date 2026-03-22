@@ -455,11 +455,7 @@ class KubernetesNotebookProvider(NotebookProvider):
 
         # Launch background task to poll for pod readiness and LB IP,
         # then update the DB session record once both are available.
-        asyncio.create_task(
-            self._poll_session_ready(
-                session_id, pod_name, service_name, namespace, container_port
-            )
-        )
+        asyncio.create_task(self._poll_session_ready(session_id, pod_name, service_name, namespace, container_port))
 
         return {
             "session_id": session_id,
@@ -486,24 +482,15 @@ class KubernetesNotebookProvider(NotebookProvider):
             pod_ready = False
             for _ in range(60):
                 try:
-                    pod = core_client.read_namespaced_pod(
-                        name=pod_name, namespace=namespace
-                    )
+                    pod = core_client.read_namespaced_pod(name=pod_name, namespace=namespace)
                     if pod.status.phase == "Running":
                         conditions = pod.status.conditions or []
-                        if any(
-                            c.type == "Ready" and c.status == "True"
-                            for c in conditions
-                        ):
+                        if any(c.type == "Ready" and c.status == "True" for c in conditions):
                             pod_ready = True
                             break
                     if pod.status.phase in ("Failed", "Unknown"):
-                        logger.error(
-                            "Pod %s entered %s phase", pod_name, pod.status.phase
-                        )
-                        await self._update_session_in_db(
-                            session_id, status="failed", access_url=None
-                        )
+                        logger.error("Pod %s entered %s phase", pod_name, pod.status.phase)
+                        await self._update_session_in_db(session_id, status="failed", access_url=None)
                         return
                 except Exception:
                     pass
@@ -511,9 +498,7 @@ class KubernetesNotebookProvider(NotebookProvider):
 
             if not pod_ready:
                 logger.error("Pod %s not ready after 5 min", pod_name)
-                await self._update_session_in_db(
-                    session_id, status="failed", access_url=None
-                )
+                await self._update_session_in_db(session_id, status="failed", access_url=None)
                 return
 
             # Wait for LoadBalancer external IP (up to 3 minutes)
@@ -523,10 +508,7 @@ class KubernetesNotebookProvider(NotebookProvider):
 
             api_client = self._get_api_client()
             config = api_client.configuration
-            svc_url = (
-                f"{config.host}/api/v1/namespaces/{namespace}"
-                f"/services/{service_name}"
-            )
+            svc_url = f"{config.host}/api/v1/namespaces/{namespace}/services/{service_name}"
             headers = {"Authorization": list(config.api_key.values())[0]}
 
             access_url = None
@@ -539,21 +521,14 @@ class KubernetesNotebookProvider(NotebookProvider):
                         timeout=10,
                     )
                     if resp.status_code == 200:
-                        ingress_list = (
-                            resp.json()
-                            .get("status", {})
-                            .get("loadBalancer", {})
-                            .get("ingress") or []
-                        )
+                        ingress_list = resp.json().get("status", {}).get("loadBalancer", {}).get("ingress") or []
                         if ingress_list:
-                            ext_ip = (
-                                ingress_list[0].get("ip")
-                                or ingress_list[0].get("hostname")
-                            )
+                            ext_ip = ingress_list[0].get("ip") or ingress_list[0].get("hostname")
                             access_url = f"http://{ext_ip}:{container_port}"
                             logger.info(
                                 "External URL for session %s: %s",
-                                session_id, access_url,
+                                session_id,
+                                access_url,
                             )
                             break
                 except Exception:
@@ -566,15 +541,11 @@ class KubernetesNotebookProvider(NotebookProvider):
                     service_name,
                 )
 
-            await self._update_session_in_db(
-                session_id, status="running", access_url=access_url
-            )
+            await self._update_session_in_db(session_id, status="running", access_url=access_url)
 
         except Exception:
             logger.exception("Background poll failed for session %s", session_id)
-            await self._update_session_in_db(
-                session_id, status="failed", access_url=None
-            )
+            await self._update_session_in_db(session_id, status="failed", access_url=None)
 
     async def _update_session_in_db(
         self,
@@ -584,9 +555,7 @@ class KubernetesNotebookProvider(NotebookProvider):
     ) -> None:
         """Update a notebook session's status and access_url in the DB."""
         if not self._session_factory:
-            logger.warning(
-                "No session_factory, cannot update session %s in DB", session_id
-            )
+            logger.warning("No session_factory, cannot update session %s in DB", session_id)
             return
 
         try:
@@ -594,11 +563,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 from sqlalchemy import text
 
                 await db.execute(
-                    text(
-                        "UPDATE notebook_sessions "
-                        "SET status = :status, access_url = :url "
-                        "WHERE id = :id"
-                    ),
+                    text("UPDATE notebook_sessions SET status = :status, access_url = :url WHERE id = :id"),
                     {"status": status, "url": access_url, "id": session_id},
                 )
                 await db.commit()

@@ -62,6 +62,7 @@ class TestLaunchSession:
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+        adapter._poll_session_ready = AsyncMock()
 
         await adapter._k8s_launch_session(_session_spec())
 
@@ -77,6 +78,7 @@ class TestLaunchSession:
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+        adapter._poll_session_ready = AsyncMock()
 
         await adapter._k8s_launch_session(_session_spec("jupyter"))
 
@@ -91,6 +93,7 @@ class TestLaunchSession:
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+        adapter._poll_session_ready = AsyncMock()
 
         await adapter._k8s_launch_session(_session_spec("rstudio"))
 
@@ -105,6 +108,7 @@ class TestLaunchSession:
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+        adapter._poll_session_ready = AsyncMock()
 
         await adapter._k8s_launch_session(_session_spec())
 
@@ -112,16 +116,23 @@ class TestLaunchSession:
 
     @pytest.mark.asyncio
     async def test_launch_returns_session_data(self, adapter, mock_k8s_clients):
-        """Test 5: launch_session returns pod name, access URL, and status."""
+        """Test 5: launch_session returns pod name and starting status.
+
+        The adapter now returns immediately with status 'starting' and polls
+        for pod readiness + LB IP in a background task.
+        """
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+
+        # Stub out background poll so it doesn't crash on missing config
+        adapter._poll_session_ready = AsyncMock()
 
         result = await adapter._k8s_launch_session(_session_spec())
 
         assert "pod_name" in result
         assert "access_url" in result
-        assert result["status"] == "running"
+        assert result["status"] == "starting"
         assert result["pod_name"] == "bioaf-notebook-42"
 
     @pytest.mark.asyncio
@@ -130,6 +141,7 @@ class TestLaunchSession:
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
+        adapter._poll_session_ready = AsyncMock()
 
         await adapter._k8s_launch_session(_session_spec())
 

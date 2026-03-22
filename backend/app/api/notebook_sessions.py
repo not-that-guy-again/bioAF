@@ -97,23 +97,24 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
 
         # Check pod status
         try:
-            pod = core_client.read_namespaced_pod(
-                name=ns.k8s_pod_name, namespace=namespace
-            )
+            pod = core_client.read_namespaced_pod(name=ns.k8s_pod_name, namespace=namespace)
             phase = pod.status.phase
             logger.info(
                 "Session %s pod %s phase=%s, db_status=%s, access_url=%s",
-                ns.id, ns.k8s_pod_name, phase, ns.status, ns.access_url,
+                ns.id,
+                ns.k8s_pod_name,
+                phase,
+                ns.status,
+                ns.access_url,
             )
             if phase == "Running" and ns.status == "starting":
                 conditions = pod.status.conditions or []
-                ready = any(
-                    c.type == "Ready" and c.status == "True" for c in conditions
-                )
+                ready = any(c.type == "Ready" and c.status == "True" for c in conditions)
                 if ready:
                     ns.status = "running"
                     if not ns.started_at:
                         from datetime import datetime, timezone
+
                         ns.started_at = datetime.now(timezone.utc)
                     changed = True
             elif phase in ("Failed", "Unknown") and ns.status not in ("stopped", "failed"):
@@ -127,7 +128,9 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
             svc_name = f"bioaf-notebook-svc-{ns.id}"
             logger.info(
                 "Checking LB IP for session %s, svc=%s, ns=%s",
-                ns.id, svc_name, namespace,
+                ns.id,
+                svc_name,
+                namespace,
             )
             try:
                 # Use raw HTTP to bypass python client caching issues
@@ -135,10 +138,7 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
 
                 api_client = adapter._get_api_client()
                 config = api_client.configuration
-                url = (
-                    f"{config.host}/api/v1/namespaces/{namespace}"
-                    f"/services/{svc_name}"
-                )
+                url = f"{config.host}/api/v1/namespaces/{namespace}/services/{svc_name}"
                 headers = {"Authorization": list(config.api_key.values())[0]}
                 resp = httpx.get(
                     url,
@@ -148,32 +148,27 @@ async def _sync_session_from_k8s(ns, session: AsyncSession) -> None:
                 )
                 logger.info(
                     "Raw K8s API for %s: status=%s",
-                    svc_name, resp.status_code,
+                    svc_name,
+                    resp.status_code,
                 )
                 if resp.status_code == 200:
                     svc_data = resp.json()
-                    ingress_list = (
-                        svc_data.get("status", {})
-                        .get("loadBalancer", {})
-                        .get("ingress") or []
-                    )
-                    logger.info(
-                        "Service %s ingress: %s", svc_name, ingress_list
-                    )
+                    ingress_list = svc_data.get("status", {}).get("loadBalancer", {}).get("ingress") or []
+                    logger.info("Service %s ingress: %s", svc_name, ingress_list)
                     if ingress_list:
                         ext_ip = ingress_list[0].get("ip") or ingress_list[0].get("hostname")
                         port = 8888 if ns.session_type == "jupyter" else 8787
                         ns.access_url = f"http://{ext_ip}:{port}"
                         changed = True
-                        logger.info(
-                            "Synced LB IP for session %s: %s", ns.id, ns.access_url
-                        )
+                        logger.info("Synced LB IP for session %s: %s", ns.id, ns.access_url)
                     else:
                         logger.warning("No ingress for service %s", svc_name)
                 else:
                     logger.warning(
                         "K8s API returned %s for %s: %s",
-                        resp.status_code, svc_name, resp.text[:200],
+                        resp.status_code,
+                        svc_name,
+                        resp.text[:200],
                     )
             except Exception:
                 logger.exception("Failed to read service %s", svc_name)
