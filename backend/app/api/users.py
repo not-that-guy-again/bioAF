@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
+from app.models.session_credential import SessionCredential
 from app.schemas.user import AcceptInviteRequest, BulkInvite, UserInvite, UserListResponse, UserResponse, UserUpdate
 from app.services.auth_service import AuthService
 from app.services.email_service import EmailService
@@ -20,8 +22,22 @@ def _require_admin(request: Request) -> dict:
 @router.get("", response_model=UserListResponse)
 async def list_users(request: Request, session: AsyncSession = Depends(get_session)):
     current_user = _require_admin(request)
-    users = await UserService.list_users(session, int(current_user["org_id"]))
-    return UserListResponse(users=[UserResponse.model_validate(u) for u in users], total=len(users))
+    org_id = int(current_user["org_id"])
+    users = await UserService.list_users(session, org_id)
+
+    # Batch-fetch which users have session credentials configured
+    cred_result = await session.execute(
+        select(SessionCredential.user_id).where(SessionCredential.organization_id == org_id)
+    )
+    configured_user_ids = {row[0] for row in cred_result.all()}
+
+    user_responses = []
+    for u in users:
+        resp = UserResponse.model_validate(u)
+        resp.session_credentials_configured = u.id in configured_user_ids
+        user_responses.append(resp)
+
+    return UserListResponse(users=user_responses, total=len(user_responses))
 
 
 @router.post("", response_model=UserResponse)
@@ -41,7 +57,6 @@ async def invite_user(body: UserInvite, request: Request, session: AsyncSession 
 
     # Send invitation email
     invite_link = f"/api/users/accept-invite?token={invite_token}"
-    from sqlalchemy import select
     from app.models.organization import Organization
 
     result = await session.execute(select(Organization).where(Organization.id == org_id))
