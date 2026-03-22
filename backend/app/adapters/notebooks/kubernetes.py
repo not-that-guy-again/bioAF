@@ -340,13 +340,20 @@ class KubernetesNotebookProvider(NotebookProvider):
             ]
         else:
             container_port = 8787
+            # Generate a secure cookie key then start rserver.
+            # Without the key file, rserver produces malformed cookies
+            # that cause an infinite redirect loop even with auth-none.
             container_command = [
-                "/usr/lib/rstudio-server/bin/rserver",
-                "--www-address=0.0.0.0",
-                f"--www-port={container_port}",
-                "--auth-none=1",
-                "--auth-minimum-user-id=0",
-                "--server-daemonize=0",
+                "/bin/bash", "-c",
+                "cat /proc/sys/kernel/random/uuid > /tmp/rstudio-cookie-key && "
+                "chmod 600 /tmp/rstudio-cookie-key && "
+                "/usr/lib/rstudio-server/bin/rserver "
+                "--www-address=0.0.0.0 "
+                f"--www-port={container_port} "
+                "--auth-none=1 "
+                "--auth-minimum-user-id=0 "
+                "--server-daemonize=0 "
+                "--secure-cookie-key-file=/tmp/rstudio-cookie-key",
             ]
 
         # Build GCS sync init container

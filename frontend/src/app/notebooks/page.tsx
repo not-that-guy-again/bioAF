@@ -270,7 +270,7 @@ export default function NotebooksPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profile</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Start Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Idle</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Access URL</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Experiment</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
@@ -298,11 +298,16 @@ export default function NotebooksPage() {
                       <td className="px-4 py-3 text-sm">
                         {s.started_at ? new Date(s.started_at).toLocaleString() : "\u2014"}
                       </td>
-                      <td className="px-4 py-3 text-sm">
-                        {s.idle_since ? (
-                          <span className="text-yellow-700">
-                            Since {new Date(s.idle_since).toLocaleTimeString()}
-                          </span>
+                      <td className="px-4 py-3 text-sm font-mono" onClick={(e) => e.stopPropagation()}>
+                        {s.proxy_url && s.status === "running" ? (
+                          <a
+                            href={s.proxy_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-bioaf-600 hover:underline"
+                          >
+                            {s.proxy_url.replace("http://", "")}
+                          </a>
                         ) : "\u2014"}
                       </td>
                       <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
@@ -319,9 +324,9 @@ export default function NotebooksPage() {
                               href={s.proxy_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-bioaf-600 hover:underline font-mono"
+                              className="text-xs px-2 py-1 border border-bioaf-600 text-bioaf-600 rounded hover:bg-bioaf-50"
                             >
-                              {s.proxy_url}
+                              Open
                             </a>
                           )}
                           {s.status === "running" && (
@@ -377,8 +382,16 @@ export default function NotebooksPage() {
                       rel="noopener noreferrer"
                       className="px-3 py-1.5 border border-bioaf-600 text-bioaf-600 rounded text-sm hover:bg-bioaf-50"
                     >
-                      Open {viewingSession.proxy_url}
+                      Open
                     </a>
+                  )}
+                  {viewingSession.status === "running" && (
+                    <button
+                      onClick={() => { handleSync(viewingSession.id); }}
+                      className="px-3 py-1.5 border border-green-600 text-green-600 rounded text-sm hover:bg-green-50"
+                    >
+                      Sync
+                    </button>
                   )}
                   {["pending", "starting", "running", "idle"].includes(viewingSession.status) && (
                     <button
