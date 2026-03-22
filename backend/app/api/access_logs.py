@@ -1,14 +1,57 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.api.dependencies import require_role
+from app.models.access_log import AccessLog
+from app.models.user import User
 from app.schemas.access_log import AccessLogEntry, AccessLogListResponse
 from app.services.access_log_service import AccessLogService
 
 router = APIRouter(prefix="/api/access-logs", tags=["access-logs"])
+
+
+@router.get("/never-logged-in")
+async def never_logged_in_users(
+    current_user: dict = require_role("admin"),
+    session: AsyncSession = Depends(get_session),
+):
+    """List users in the org who have never logged in."""
+    org_id = current_user["org_id"]
+
+    logged_in_subq = (
+        select(AccessLog.user_id)
+        .where(AccessLog.organization_id == org_id)
+        .where(AccessLog.resource_type == "auth")
+        .where(AccessLog.action == "login")
+        .distinct()
+        .subquery()
+    )
+
+    result = await session.execute(
+        select(User.id, User.email, User.name, User.role, User.status, User.created_at)
+        .where(User.organization_id == org_id)
+        .where(User.id.notin_(select(logged_in_subq.c.user_id)))
+        .order_by(User.created_at.asc())
+    )
+    rows = result.all()
+
+    return {
+        "users": [
+            {
+                "id": r.id,
+                "email": r.email,
+                "name": r.name,
+                "role": r.role,
+                "status": r.status,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.get("", response_model=AccessLogListResponse)

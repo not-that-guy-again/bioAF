@@ -17,6 +17,15 @@ interface AccessLogEntry {
   created_at: string;
 }
 
+interface NeverLoggedInUser {
+  id: number;
+  email: string;
+  name: string | null;
+  role: string;
+  status: string;
+  created_at: string | null;
+}
+
 export default function SettingsAccessLogsPage() {
   const router = useRouter();
   const [logs, setLogs] = useState<AccessLogEntry[]>([]);
@@ -25,6 +34,8 @@ export default function SettingsAccessLogsPage() {
   const [loading, setLoading] = useState(true);
   const [resourceType, setResourceType] = useState("");
   const [action, setAction] = useState("");
+  const [neverLoggedIn, setNeverLoggedIn] = useState<NeverLoggedInUser[]>([]);
+  const [neverLoggedInLoading, setNeverLoggedInLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -51,7 +62,27 @@ export default function SettingsAccessLogsPage() {
     load();
   }, [page, resourceType, action]);
 
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await api.get<{ users: NeverLoggedInUser[] }>("/api/access-logs/never-logged-in");
+        setNeverLoggedIn(data.users);
+      } catch {
+        // ignore
+      } finally {
+        setNeverLoggedInLoading(false);
+      }
+    };
+    load();
+  }, []);
+
   const totalPages = Math.ceil(total / 50);
+
+  function userLabel(entry: AccessLogEntry): string {
+    const meta = entry.metadata_json;
+    if (meta?.email && typeof meta.email === "string") return meta.email;
+    return `User #${entry.user_id}`;
+  }
 
   return (
     <div className="flex h-screen">
@@ -61,6 +92,26 @@ export default function SettingsAccessLogsPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-6">Access Logs</h1>
 
+          {/* Never-logged-in banner */}
+          {!neverLoggedInLoading && neverLoggedIn.length > 0 && (
+            <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <h2 className="text-sm font-semibold text-amber-800 mb-2">
+                Users who have never logged in ({neverLoggedIn.length})
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {neverLoggedIn.map((u) => (
+                  <span
+                    key={u.id}
+                    className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded"
+                  >
+                    {u.email}
+                    <span className="text-amber-500">({u.role})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 mb-4">
             <select
               value={resourceType}
@@ -68,6 +119,7 @@ export default function SettingsAccessLogsPage() {
               className="border border-gray-300 rounded px-3 py-1.5 text-sm"
             >
               <option value="">All resource types</option>
+              <option value="auth">Auth</option>
               <option value="file">File</option>
               <option value="notebook">Notebook</option>
               <option value="dataset">Dataset</option>
@@ -79,6 +131,7 @@ export default function SettingsAccessLogsPage() {
               className="border border-gray-300 rounded px-3 py-1.5 text-sm"
             >
               <option value="">All actions</option>
+              <option value="login">Login</option>
               <option value="read">Read</option>
               <option value="download">Download</option>
               <option value="view">View</option>
@@ -90,7 +143,7 @@ export default function SettingsAccessLogsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-700">User ID</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-700">User</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-700">Resource</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-700">Resource ID</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-700">Action</th>
@@ -105,7 +158,7 @@ export default function SettingsAccessLogsPage() {
                 ) : (
                   logs.map((log) => (
                     <tr key={log.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2.5 text-gray-900">{log.user_id}</td>
+                      <td className="px-4 py-2.5 text-gray-900">{userLabel(log)}</td>
                       <td className="px-4 py-2.5 text-gray-600">{log.resource_type}</td>
                       <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{log.resource_id}</td>
                       <td className="px-4 py-2.5">
