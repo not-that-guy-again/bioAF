@@ -83,7 +83,7 @@ export default function NotebooksPage() {
 
   async function loadSessions() {
     try {
-      const data = await api.get<SessionListResponse>("/api/notebooks/sessions");
+      const data = await api.get<SessionListResponse>("/api/v1/notebooks/sessions");
       setSessions(data.sessions);
     } catch {
     } finally {
