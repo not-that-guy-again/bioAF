@@ -345,6 +345,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 "--www-address=0.0.0.0",
                 f"--www-port={container_port}",
                 "--auth-none=1",
+                "--server-daemonize=0",
             ]
 
         # Build GCS sync init container
