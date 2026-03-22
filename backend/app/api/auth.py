@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.component import VerificationCode
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     PasswordResetConfirm,
@@ -162,6 +163,28 @@ async def get_current_user(request: Request, session: AsyncSession = Depends(get
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+
+@router.post("/me/change-password")
+async def change_password(
+    body: ChangePasswordRequest, request: Request, session: AsyncSession = Depends(get_session),
+):
+    current_user = request.state.current_user
+    user_id = int(current_user["sub"])
+    user = await UserService.get_by_id(session, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not AuthService.verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    user.password_hash = AuthService.hash_password(body.new_password)
+    await session.flush()
+
+    await log_action(session, user_id=user.id, entity_type="auth", entity_id=user.id, action="change_password")
+    await session.commit()
+
+    return {"message": "Password changed successfully"}
 
 
 @router.get("/me/session-credentials", response_model=SessionCredentialResponse)
