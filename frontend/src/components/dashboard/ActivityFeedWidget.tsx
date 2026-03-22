@@ -41,6 +41,12 @@ export function ActivityFeedWidget({ className }: ActivityFeedWidgetProps) {
     critical: "bg-red-400",
   };
 
+  function humanize(text: string): string {
+    return text.replace(/[a-z0-9]+(_[a-z0-9]+)+/g, (match) =>
+      match.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    );
+  }
+
   function formatTimeAgo(dateStr: string): string {
     const now = new Date();
     const date = new Date(dateStr);
@@ -100,10 +106,10 @@ export function ActivityFeedWidget({ className }: ActivityFeedWidgetProps) {
                 }`}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-700 truncate">{e.summary}</p>
+                <p className="text-sm text-gray-700 truncate">{humanize(e.summary)}</p>
                 <p className="text-xs text-gray-400">
                   {e.user_email && (
-                    <span className="text-gray-500">{e.user_email} &middot; </span>
+                    <span className="text-gray-500">executed by {e.user_email} &middot; </span>
                   )}
                   {formatTimeAgo(e.created_at)}
                 </p>
