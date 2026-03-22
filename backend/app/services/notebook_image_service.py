@@ -212,8 +212,11 @@ async def submit_image_build(session: AsyncSession, project_id: str, region: str
     image_uri = get_image_uri(project_id, region)
     credentials = await _get_credentials(session)
 
-    # Use the platform's service account so Cloud Build has AR push permissions
-    sa_email = await _read_config(session, "backend_service_account_email")
+    # Resolve the platform SA email for Cloud Build to use.
+    # Priority: gcp_service_account_email from config, then credentials object.
+    sa_email = await _read_config(session, "gcp_service_account_email")
+    if not sa_email or sa_email == "null":
+        sa_email = getattr(credentials, "service_account_email", None)
 
     # Submit Cloud Build
     build_url = f"https://cloudbuild.googleapis.com/v1/projects/{project_id}/builds"
@@ -238,6 +241,7 @@ async def submit_image_build(session: AsyncSession, project_id: str, region: str
     }
     if sa_email and sa_email != "null":
         build_body["serviceAccount"] = f"projects/{project_id}/serviceAccounts/{sa_email}"
+        logger.info("Cloud Build will run as SA: %s", sa_email)
 
     result = _authorized_request(credentials, "POST", build_url, build_body)
     build_id = result.get("metadata", {}).get("build", {}).get("id", "")
