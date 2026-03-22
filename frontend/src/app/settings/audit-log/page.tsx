@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { ContentLoading } from "@/components/shared/ContentLoading";
 
 interface AuditUser {
   id: number;
@@ -196,7 +197,7 @@ export default function AuditLogPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                  <tr><td colSpan={5} className="px-4 py-8"><ContentLoading /></td></tr>
                 ) : entries.length === 0 ? (
                   <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No audit log entries</td></tr>
                 ) : (

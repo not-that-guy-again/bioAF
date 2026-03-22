@@ -21,7 +21,7 @@ export function IngestStatusWidget() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timeout = setTimeout(() => setLoading(false), 30000);
+    const timeout = setTimeout(() => setLoading(false), 60000);
     api
       .getWithRetry<FileStats>("/api/files/stats")
       .then((data) => setStats(data))

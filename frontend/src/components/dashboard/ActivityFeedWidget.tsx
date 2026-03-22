@@ -26,7 +26,7 @@ export function ActivityFeedWidget({ className }: ActivityFeedWidgetProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timeout = setTimeout(() => setLoading(false), 30000);
+    const timeout = setTimeout(() => setLoading(false), 60000);
     api
       .getWithRetry<{ events: ActivityEvent[] }>("/api/activity-feed?page_size=15")
       .then((data) => setEvents(data.events))
