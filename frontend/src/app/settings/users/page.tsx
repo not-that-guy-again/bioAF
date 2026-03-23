@@ -204,7 +204,7 @@ export default function SettingsUsersPage() {
   };
 
   const renderUserActions = (user: User) => {
-    const hasLoggedIn = !!user.last_login;
+    const isDeactivated = user.status === "deactivated";
 
     return (
       <div className="flex flex-wrap gap-2">
@@ -219,7 +219,7 @@ export default function SettingsUsersPage() {
         >
           Edit
         </button>
-        {!hasLoggedIn && user.status === "invited" && (
+        {user.status === "invited" && (
           <button
             onClick={() => {
               setPendingAction({ type: "resend_invite", user });
@@ -230,7 +230,7 @@ export default function SettingsUsersPage() {
             Resend Invite
           </button>
         )}
-        {user.status === "active" && !smtpConfigured && (
+        {!isDeactivated && !smtpConfigured && (
           <button
             onClick={() => {
               setTempPasswordUser(user);
@@ -242,7 +242,7 @@ export default function SettingsUsersPage() {
             Change Password
           </button>
         )}
-        {user.status === "active" && smtpConfigured && (
+        {!isDeactivated && smtpConfigured && (
           <button
             onClick={() => {
               setPendingAction({ type: "reset_password_email", user });
@@ -253,7 +253,7 @@ export default function SettingsUsersPage() {
             Send Password Reset Link
           </button>
         )}
-        {user.status === "active" && (
+        {!isDeactivated && (
           <button
             onClick={() => {
               setPendingAction({ type: "lock", user });
@@ -264,7 +264,7 @@ export default function SettingsUsersPage() {
             Lock
           </button>
         )}
-        {user.status === "active" && (
+        {!isDeactivated && (
           <button
             onClick={() => {
               setPendingAction({ type: "deactivate", user });
