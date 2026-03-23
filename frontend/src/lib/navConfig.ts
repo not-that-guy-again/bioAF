@@ -77,7 +77,8 @@ export const navConfig: NavSection[] = [
     icon: "settings",
     adminOnly: true,
     children: [
-      { label: "Users & Roles", path: "/settings/users" },
+      { label: "Users", path: "/settings/users" },
+      { label: "Roles & Permissions", path: "/settings/roles" },
       { label: "Audit Log", path: "/settings/audit-log" },
       { label: "GCP Configuration", path: "/settings/gcp" },
       { label: "Naming Profiles", path: "/settings/naming-profiles" },
