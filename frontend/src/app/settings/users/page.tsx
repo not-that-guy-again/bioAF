@@ -17,7 +17,7 @@ interface NeverLoggedInUser {
   id: number;
   email: string;
   name: string | null;
-  role: string;
+  role_name: string;
   status: string;
   created_at: string | null;
 }
@@ -50,7 +50,7 @@ export default function SettingsUsersPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
-    if (user?.role !== "admin") { router.push("/"); return; }
+    if (user?.role_name !== "admin") { router.push("/"); return; }
     fetchUsers();
     api.get<{ users: NeverLoggedInUser[] }>("/api/access-logs/never-logged-in")
       .then((data) => setNeverLoggedIn(data.users))
@@ -129,7 +129,7 @@ export default function SettingsUsersPage() {
 
     const updates: Record<string, string> = {};
     if (editName !== (editingUser.name || "")) updates.name = editName;
-    if (editRole !== editingUser.role) updates.role = editRole;
+    if (editRole !== editingUser.role_name) updates.role = editRole;
 
     if (Object.keys(updates).length === 0) {
       setEditingUser(null);
@@ -171,7 +171,7 @@ export default function SettingsUsersPage() {
       case "role_change":
         return {
           title: "Change User Role",
-          message: `Change ${pendingAction.user.email} from ${pendingAction.user.role} to ${pendingAction.newRole}?`,
+          message: `Change ${pendingAction.user.email} from ${pendingAction.user.role_name} to ${pendingAction.newRole}?`,
           variant: "default",
         };
       case "resend_invite":
@@ -212,7 +212,7 @@ export default function SettingsUsersPage() {
           onClick={() => {
             setEditingUser(user);
             setEditName(user.name || "");
-            setEditRole(user.role);
+            setEditRole(user.role_name);
             setViewingUser(null);
           }}
           className="px-3 py-1.5 text-sm bg-bioaf-600 text-white rounded hover:bg-bioaf-700"
@@ -317,7 +317,7 @@ export default function SettingsUsersPage() {
                 {neverLoggedIn.map((u) => (
                   <li key={u.id}>
                     {u.email}
-                    {u.role !== "viewer" && <span className="ml-2 text-amber-500">({u.role})</span>}
+                    {u.role_name !== "viewer" && <span className="ml-2 text-amber-500">({u.role_name})</span>}
                     {u.created_at && (
                       <span className="ml-2 text-amber-400 text-xs">
                         invited {new Date(u.created_at).toLocaleDateString()}
@@ -376,7 +376,7 @@ export default function SettingsUsersPage() {
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                          {user.role}
+                          {user.role_name}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -520,7 +520,7 @@ export default function SettingsUsersPage() {
               fields={[
                 { label: "Email", value: viewingUser.email },
                 { label: "Name", value: viewingUser.name },
-                { label: "Role", value: viewingUser.role },
+                { label: "Role", value: viewingUser.role_name },
                 { label: "Status", value: viewingUser.status },
                 {
                   label: "Last Login",

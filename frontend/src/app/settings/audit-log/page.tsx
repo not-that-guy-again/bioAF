@@ -42,7 +42,7 @@ export default function AuditLogPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
-    if (user?.role !== "admin") { router.push("/"); return; }
+    if (user?.role_name !== "admin") { router.push("/"); return; }
   }, [router]);
 
   const load = useCallback(async () => {

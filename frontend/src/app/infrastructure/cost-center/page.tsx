@@ -77,7 +77,7 @@ export default function InfraCostCenterPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
-    if (user?.role !== "admin") { router.push("/"); return; }
+    if (user?.role_name !== "admin") { router.push("/"); return; }
 
     const load = async () => {
       try {

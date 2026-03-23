@@ -23,7 +23,7 @@ export default function UsersPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
-    if (user?.role !== "admin") { router.push("/"); return; }
+    if (user?.role_name !== "admin") { router.push("/"); return; }
     fetchUsers();
   }, [router]);
 
@@ -94,7 +94,7 @@ export default function UsersPage() {
                       <td className="px-6 py-4 text-sm text-gray-500">{user.name || "—"}</td>
                       <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                         <select
-                          value={user.role}
+                          value={user.role_name}
                           onChange={(e) => handleRoleChange(user.id, e.target.value)}
                           className="text-sm border rounded px-2 py-1"
                         >
@@ -126,7 +126,7 @@ export default function UsersPage() {
               fields={[
                 { label: "Email", value: viewingUser.email },
                 { label: "Name", value: viewingUser.name },
-                { label: "Role", value: viewingUser.role },
+                { label: "Role", value: viewingUser.role_name },
                 { label: "Status", value: viewingUser.status },
                 { label: "Created", value: new Date(viewingUser.created_at).toLocaleString() },
                 { label: "Updated", value: new Date(viewingUser.updated_at).toLocaleString() },

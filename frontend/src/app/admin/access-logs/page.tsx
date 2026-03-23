@@ -29,7 +29,7 @@ export default function AccessLogsPage() {
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
-    if (user?.role !== "admin") { router.push("/"); return; }
+    if (user?.role_name !== "admin") { router.push("/"); return; }
   }, [router]);
 
   useEffect(() => {

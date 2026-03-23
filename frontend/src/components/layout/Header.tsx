@@ -27,7 +27,7 @@ export function Header() {
               {(user.email as string) || "User"}
             </span>
             <span className="text-xs bg-bioaf-100 text-bioaf-700 px-2 py-1 rounded">
-              {user.role as string}
+              {user.role_name as string}
             </span>
             <button
               onClick={handleLogout}

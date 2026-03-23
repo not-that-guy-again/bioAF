@@ -103,7 +103,7 @@ function SidebarSection({
 export function Sidebar() {
   const pathname = usePathname();
   const user = getCurrentUser();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role_name === "admin";
 
   // Initialize expanded state: auto-expand section containing active path
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
@@ -176,7 +176,7 @@ export function Sidebar() {
         {user && (
           <div className="text-xs text-gray-400">
             <div className="truncate">{user.email as string}</div>
-            <div className="text-gray-500 mt-0.5">{user.role as string}</div>
+            <div className="text-gray-500 mt-0.5">{user.role_name as string}</div>
           </div>
         )}
         <div className="text-xs text-gray-600 mt-2">v0.1.0</div>
