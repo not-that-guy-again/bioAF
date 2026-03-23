@@ -307,14 +307,14 @@ export default function NotificationPreferencesPage() {
                             <div key={ch.key} className="w-12 flex justify-center">
                               <button
                                 onClick={() => toggle(event.type, ch.key)}
-                                className={`w-9 h-5 rounded-full relative transition-colors ${
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                                   isEnabled(event.type, ch.key)
                                     ? "bg-bioaf-600"
                                     : "bg-gray-300"
                                 }`}
                               >
                                 <span
-                                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
                                     isEnabled(event.type, ch.key)
                                       ? "translate-x-4"
                                       : "translate-x-0.5"
