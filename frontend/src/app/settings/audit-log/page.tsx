@@ -118,7 +118,7 @@ export default function AuditLogPage() {
     "create", "update", "delete", "login", "logout", "status_change",
     "launch", "invite", "deactivate", "verify_email",
     "download", "read", "view", "session",
-    "change_password", "admin_reset_password", "resend_invite",
+    "change_password", "admin_reset_password", "resend_invite", "lock",
   ];
 
   return (

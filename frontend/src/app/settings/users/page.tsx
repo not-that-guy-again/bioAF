@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -24,10 +24,10 @@ interface NeverLoggedInUser {
 
 type PendingAction =
   | { type: "deactivate"; user: User }
+  | { type: "lock"; user: User }
   | { type: "role_change"; user: User; newRole: string }
   | { type: "resend_invite"; user: User }
-  | { type: "reset_password_email"; user: User }
-  | { type: "reset_password_temp"; user: User };
+  | { type: "reset_password_email"; user: User };
 
 export default function SettingsUsersPage() {
   const router = useRouter();
@@ -45,8 +45,7 @@ export default function SettingsUsersPage() {
   const [tempPassword, setTempPassword] = useState("");
   const [showTempPasswordForm, setShowTempPasswordForm] = useState(false);
   const [tempPasswordUser, setTempPasswordUser] = useState<User | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [smtpConfigured, setSmtpConfigured] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -56,18 +55,10 @@ export default function SettingsUsersPage() {
     api.get<{ users: NeverLoggedInUser[] }>("/api/access-logs/never-logged-in")
       .then((data) => setNeverLoggedIn(data.users))
       .catch(() => {});
+    api.get<{ setup_complete: boolean; smtp_configured: boolean }>("/api/bootstrap/status")
+      .then((data) => setSmtpConfigured(data.smtp_configured))
+      .catch(() => {});
   }, [router]);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -90,6 +81,10 @@ export default function SettingsUsersPage() {
           await api.post(`/api/users/${pendingAction.user.id}/deactivate`);
           setSuccess(`${pendingAction.user.email} deactivated`);
           break;
+        case "lock":
+          await api.post(`/api/users/${pendingAction.user.id}/lock`);
+          setSuccess(`${pendingAction.user.email} locked`);
+          break;
         case "role_change":
           await api.patch(`/api/users/${pendingAction.user.id}`, { role: pendingAction.newRole });
           setSuccess(`${pendingAction.user.email} role changed to ${pendingAction.newRole}`);
@@ -101,9 +96,6 @@ export default function SettingsUsersPage() {
         case "reset_password_email":
           await api.post(`/api/users/${pendingAction.user.id}/admin-reset-password`, { mode: "email" });
           setSuccess(`Password reset email sent to ${pendingAction.user.email}`);
-          break;
-        case "reset_password_temp":
-          // handled in temp password form
           break;
       }
       fetchUsers();
@@ -121,10 +113,10 @@ export default function SettingsUsersPage() {
         mode: "temporary",
         temporary_password: tempPassword,
       });
-      setSuccess(`Temporary password set for ${tempPasswordUser.email}`);
+      setSuccess(`Password changed for ${tempPasswordUser.email}`);
       fetchUsers();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to set temporary password");
+      setError(e instanceof ApiError ? e.message : "Failed to set password");
     }
     setTempPassword("");
     setTempPasswordUser(null);
@@ -167,7 +159,13 @@ export default function SettingsUsersPage() {
       case "deactivate":
         return {
           title: "Deactivate User",
-          message: `Are you sure you want to deactivate ${pendingAction.user.email}? They will lose access to the platform.`,
+          message: `Are you sure you want to deactivate ${pendingAction.user.email}? They will lose access. Their data is retained.`,
+          variant: "danger",
+        };
+      case "lock":
+        return {
+          title: "Lock User",
+          message: `Lock ${pendingAction.user.email}? This disables their login until unlocked.`,
           variant: "danger",
         };
       case "role_change":
@@ -203,6 +201,82 @@ export default function SettingsUsersPage() {
     if (diffDays === 1) return "Yesterday";
     if (diffDays < 7) return `${diffDays} days ago`;
     return date.toLocaleDateString();
+  };
+
+  const renderUserActions = (user: User) => {
+    const hasLoggedIn = !!user.last_login;
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => {
+            setEditingUser(user);
+            setEditName(user.name || "");
+            setEditRole(user.role);
+            setViewingUser(null);
+          }}
+          className="px-3 py-1.5 text-sm bg-bioaf-600 text-white rounded hover:bg-bioaf-700"
+        >
+          Edit
+        </button>
+        {!hasLoggedIn && user.status === "invited" && (
+          <button
+            onClick={() => {
+              setPendingAction({ type: "resend_invite", user });
+              setViewingUser(null);
+            }}
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+          >
+            Resend Invite
+          </button>
+        )}
+        {user.status === "active" && !smtpConfigured && (
+          <button
+            onClick={() => {
+              setTempPasswordUser(user);
+              setShowTempPasswordForm(true);
+              setViewingUser(null);
+            }}
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+          >
+            Change Password
+          </button>
+        )}
+        {user.status === "active" && smtpConfigured && (
+          <button
+            onClick={() => {
+              setPendingAction({ type: "reset_password_email", user });
+              setViewingUser(null);
+            }}
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+          >
+            Send Password Reset Link
+          </button>
+        )}
+        {user.status === "active" && (
+          <button
+            onClick={() => {
+              setPendingAction({ type: "lock", user });
+              setViewingUser(null);
+            }}
+            className="px-3 py-1.5 text-sm bg-white border border-amber-300 text-amber-700 rounded hover:bg-amber-50"
+          >
+            Lock
+          </button>
+        )}
+        {user.status === "active" && (
+          <button
+            onClick={() => {
+              setPendingAction({ type: "deactivate", user });
+              setViewingUser(null);
+            }}
+            className="px-3 py-1.5 text-sm bg-white border border-red-300 text-red-600 rounded hover:bg-red-50"
+          >
+            Deactivate
+          </button>
+        )}
+      </div>
+    );
   };
 
   const confirm = getConfirmMessage();
@@ -265,7 +339,7 @@ export default function SettingsUsersPage() {
           {loading ? (
             <LoadingSpinner size="lg" />
           ) : (
-            <div className="bg-white rounded-lg shadow overflow-visible">
+            <div className="bg-white rounded-lg shadow overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -286,9 +360,6 @@ export default function SettingsUsersPage() {
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Session Keys
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -325,86 +396,6 @@ export default function SettingsUsersPage() {
                           </span>
                         )}
                       </td>
-                      <td
-                        className="px-4 py-3"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="relative" ref={openMenuId === user.id ? menuRef : null}>
-                          <button
-                            onClick={() =>
-                              setOpenMenuId(openMenuId === user.id ? null : user.id)
-                            }
-                            className="text-gray-400 hover:text-gray-600 px-2 py-1 rounded"
-                          >
-                            &#8943;
-                          </button>
-                          {openMenuId === user.id && (
-                            <div className="fixed z-50 w-48 bg-white border rounded-lg shadow-lg py-1"
-                              style={{
-                                top: (menuRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
-                                left: (menuRef.current?.getBoundingClientRect().right ?? 0) - 192,
-                              }}
-                            >
-                              <button
-                                onClick={() => {
-                                  setEditingUser(user);
-                                  setEditName(user.name || "");
-                                  setEditRole(user.role);
-                                  setOpenMenuId(null);
-                                }}
-                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                              >
-                                Edit
-                              </button>
-                              {user.status === "active" && (
-                                <button
-                                  onClick={() => {
-                                    setPendingAction({ type: "reset_password_email", user });
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                >
-                                  Send Reset Email
-                                </button>
-                              )}
-                              {user.status === "active" && (
-                                <button
-                                  onClick={() => {
-                                    setTempPasswordUser(user);
-                                    setShowTempPasswordForm(true);
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                >
-                                  Set Temp Password
-                                </button>
-                              )}
-                              {user.status === "invited" && (
-                                <button
-                                  onClick={() => {
-                                    setPendingAction({ type: "resend_invite", user });
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                >
-                                  Resend Invite
-                                </button>
-                              )}
-                              {user.status === "active" && (
-                                <button
-                                  onClick={() => {
-                                    setPendingAction({ type: "deactivate", user });
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                >
-                                  Deactivate
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -412,35 +403,37 @@ export default function SettingsUsersPage() {
             </div>
           )}
 
-          {/* Confirmation dialog for all destructive/important actions */}
-          {pendingAction && pendingAction.type !== "reset_password_temp" && (
+          {/* Confirmation dialog */}
+          {pendingAction && (
             <ConfirmDialog
               open={true}
               title={confirm.title}
               message={confirm.message}
               variant={confirm.variant}
               confirmLabel={
-                pendingAction.type === "deactivate" ? "Deactivate" : "Confirm"
+                pendingAction.type === "deactivate" ? "Deactivate"
+                  : pendingAction.type === "lock" ? "Lock"
+                    : "Confirm"
               }
               onConfirm={handleConfirmAction}
               onCancel={() => setPendingAction(null)}
             />
           )}
 
-          {/* Temp password form modal */}
+          {/* Change password form modal */}
           {showTempPasswordForm && tempPasswordUser && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-                <h3 className="text-lg font-semibold mb-2">Set Temporary Password</h3>
+                <h3 className="text-lg font-semibold mb-2">Change Password</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Set a temporary password for {tempPasswordUser.email}. They should change
+                  Set a new password for {tempPasswordUser.email}. They should change
                   it after logging in.
                 </p>
                 <input
                   type="password"
                   value={tempPassword}
                   onChange={(e) => setTempPassword(e.target.value)}
-                  placeholder="Enter temporary password"
+                  placeholder="Enter new password"
                   className="w-full px-3 py-2 border rounded-md text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-bioaf-500"
                 />
                 <div className="flex justify-end gap-3">
@@ -548,66 +541,7 @@ export default function SettingsUsersPage() {
                   value: new Date(viewingUser.updated_at).toLocaleString(),
                 },
               ]}
-              actions={
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => {
-                      setEditingUser(viewingUser);
-                      setEditName(viewingUser.name || "");
-                      setEditRole(viewingUser.role);
-                      setViewingUser(null);
-                    }}
-                    className="px-3 py-1.5 text-sm bg-bioaf-600 text-white rounded hover:bg-bioaf-700"
-                  >
-                    Edit
-                  </button>
-                  {viewingUser.status === "active" && (
-                    <button
-                      onClick={() => {
-                        setPendingAction({ type: "reset_password_email", user: viewingUser });
-                        setViewingUser(null);
-                      }}
-                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                    >
-                      Send Reset Email
-                    </button>
-                  )}
-                  {viewingUser.status === "active" && (
-                    <button
-                      onClick={() => {
-                        setTempPasswordUser(viewingUser);
-                        setShowTempPasswordForm(true);
-                        setViewingUser(null);
-                      }}
-                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                    >
-                      Set Temp Password
-                    </button>
-                  )}
-                  {viewingUser.status === "invited" && (
-                    <button
-                      onClick={() => {
-                        setPendingAction({ type: "resend_invite", user: viewingUser });
-                        setViewingUser(null);
-                      }}
-                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
-                    >
-                      Resend Invite
-                    </button>
-                  )}
-                  {viewingUser.status === "active" && (
-                    <button
-                      onClick={() => {
-                        setPendingAction({ type: "deactivate", user: viewingUser });
-                        setViewingUser(null);
-                      }}
-                      className="px-3 py-1.5 text-sm bg-white border border-red-300 text-red-600 rounded hover:bg-red-50"
-                    >
-                      Deactivate
-                    </button>
-                  )}
-                </div>
-              }
+              actions={renderUserActions(viewingUser)}
             />
           )}
         </main>

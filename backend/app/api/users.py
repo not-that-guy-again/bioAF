@@ -182,6 +182,43 @@ async def deactivate_user(user_id: int, request: Request, session: AsyncSession 
     return UserResponse.model_validate(user)
 
 
+@router.post("/{user_id}/lock")
+async def lock_user(user_id: int, request: Request, session: AsyncSession = Depends(get_session)):
+    current_user = _require_admin(request)
+    actor_id = int(current_user["sub"])
+
+    user = await UserService.get_by_id(session, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.id == actor_id:
+        raise HTTPException(status_code=400, detail="Cannot lock yourself")
+
+    if user.role == "admin":
+        admin_count = await _count_active_admins(session, user.organization_id)
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot lock the last active admin")
+
+    old_status = user.status
+    user.status = "locked"
+    await session.flush()
+    await log_action(
+        session,
+        user_id=actor_id,
+        entity_type="user",
+        entity_id=user.id,
+        action="lock",
+        details={
+            "target_email": user.email,
+            "description": f"Locked {user.email}",
+        },
+        previous_value={"status": old_status},
+    )
+    await session.commit()
+    await session.refresh(user)
+    return UserResponse.model_validate(user)
+
+
 @router.post("/{user_id}/resend-invite")
 async def resend_invite(user_id: int, request: Request, session: AsyncSession = Depends(get_session)):
     current_user = _require_admin(request)
