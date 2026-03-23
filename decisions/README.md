@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 | ADR | Title | Status | Date |
-|-----|-------|--------|------|
+| ----- | ------- | -------- | ------ |
 | [ADR-001](ADR-001-gcp-only.md) | GCP as Sole Supported Cloud Provider | Accepted | 2026-03-05 |
 | [ADR-002](ADR-002-mandatory-optional-split.md) | Mandatory Foundation with Optional Components | Accepted | 2026-03-05 |
 | [ADR-003](ADR-003-email-based-auth.md) | Email-Based Authentication as Primary Auth Method | Accepted | 2026-03-05 |

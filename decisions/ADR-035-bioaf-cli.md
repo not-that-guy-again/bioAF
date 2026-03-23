@@ -65,7 +65,7 @@ The CLI reads the token from the file. No interactive login, no user credentials
 ### CLI Commands
 
 | Command | Purpose |
-|---|---|
+| --- | --- |
 | `bioaf snapshot save "description"` | Capture environment state and upload to platform |
 | `bioaf snapshot list` | List previous snapshots for this session |
 | `bioaf env info` | Show current environment name, version, and image URI |

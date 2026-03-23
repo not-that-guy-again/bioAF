@@ -28,7 +28,7 @@ Each bioAF user manages a single set of **session credentials** (username + pass
 A `session_credentials` table with a one-to-one relationship to `users`:
 
 | Column | Type | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `id` | Integer PK | Auto-increment |
 | `user_id` | Integer FK (unique) | One credential per user |
 | `organization_id` | Integer FK | Scopes username uniqueness |
@@ -81,6 +81,7 @@ All credential changes are recorded in the audit log with the actor's user ID.
 ### Frontend
 
 The profile page displays a collapsible session credentials section:
+
 - **Configured:** blue banner with username and last-updated timestamp, "Change" button
 - **Not configured:** red warning banner, "Set Up" button
 - Launching an RStudio session without configured credentials returns an error

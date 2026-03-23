@@ -29,7 +29,7 @@ Replace hardcoded role checks with a permission-based RBAC system. Admins define
 Permissions follow a **resource + action** structure:
 
 | Resource | Actions |
-|---|---|
+| --- | --- |
 | `experiments` | `view`, `create`, `edit`, `delete`, `change_status` |
 | `samples` | `view`, `create`, `edit`, `delete` |
 | `pipelines` | `view`, `launch`, `cancel`, `configure` |
@@ -68,7 +68,7 @@ System roles (`is_system = true`) are the four built-in roles. They cannot be de
 ### Built-In Role Defaults
 
 | Role | Default Permissions |
-|---|---|
+| --- | --- |
 | `admin` | All permissions on all resources |
 | `comp_bio` | Full access to experiments, samples, pipelines, notebooks, work_nodes, environments, files, projects. View-only on users, infrastructure, audit_log, cost_center |
 | `bench` | View/create/edit on experiments and samples. View on pipelines, files, projects. Upload files |

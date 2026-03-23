@@ -52,7 +52,7 @@ Admin enables RStudio/JupyterHub
 ### Build Configuration
 
 | Setting | Value | Rationale |
-|---|---|---|
+| --- | --- | --- |
 | Machine type | `E2_HIGHCPU_8` | R/Bioconductor compilation is CPU-bound |
 | Timeout | 7200s (2 hours) | First build compiles R packages from source |
 | Logging | `CLOUD_LOGGING_ONLY` | Avoids requiring a separate logging bucket |
@@ -79,7 +79,7 @@ The service creates the `bioaf-images` repository automatically via the Artifact
 Build state is stored in `platform_config` (key-value table):
 
 | Key | Purpose |
-|---|---|
+| --- | --- |
 | `bioaf_scrna_image` | Full image URI (set only after successful build) |
 | `notebook_image_build_id` | Current/last Cloud Build ID |
 | `notebook_image_build_status` | QUEUED, WORKING, SUCCESS, FAILURE, CANCELLED, TIMEOUT |

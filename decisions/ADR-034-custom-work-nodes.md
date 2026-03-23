@@ -54,7 +54,7 @@ Platform:
 ### Pod Filesystem Layout
 
 | Mount | Source | Mode | Purpose |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `/data/` | GCS FUSE (selected project directories) | Read-only | Pipeline outputs, uploaded files, shared results |
 | `/home/<username>/` | GCS FUSE (user's persistent home) | Read-write | Scripts, configs, saved results (persists across sessions) |
 | `/scratch/` | `emptyDir` (node-local SSD) | Read-write | Temp files, intermediate computation, working data |
@@ -104,7 +104,7 @@ The heartbeat also checks for user-owned processes with CPU activity above a min
 The launch UI presents a curated list of machine types appropriate for computational biology workloads:
 
 | Category | Machine Types | Use Case |
-|---|---|---|
+| --- | --- | --- |
 | Standard | `n2-standard-4`, `n2-standard-8` | Light analysis, data wrangling |
 | High-memory | `n2-highmem-8`, `n2-highmem-16`, `n2-highmem-32` | Seurat integration, large datasets |
 | GPU | `n1-standard-8` + T4, `n1-standard-16` + V100 | scVI, rapids-singlecell, deep learning |
