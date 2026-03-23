@@ -33,6 +33,10 @@
 | [ADR-029](ADR-029-signed-url-direct-upload.md) | Signed URL Direct Upload for File Ingestion | Accepted | 2026-03-15 |
 | [ADR-030](ADR-030-session-credentials-pam-auth.md) | Per-User Session Credentials with PAM Authentication | Accepted | 2026-03-22 |
 | [ADR-031](ADR-031-notebook-image-build-pipeline.md) | Cloud Build Pipeline for Notebook Container Images | Accepted | 2026-03-22 |
+| [ADR-032](ADR-032-custom-rbac.md) | Custom RBAC with Permission-Based Access Control | Accepted | 2026-03-22 |
+| [ADR-033](ADR-033-versioned-compute-environments.md) | Versioned Compute Environments | Accepted | 2026-03-22 |
+| [ADR-034](ADR-034-custom-work-nodes.md) | Custom Ephemeral Work Nodes | Accepted | 2026-03-22 |
+| [ADR-035](ADR-035-bioaf-cli.md) | bioaf CLI for In-Session Provenance and Heartbeat | Accepted | 2026-03-22 |
 
 ## How to Use This Directory
 
