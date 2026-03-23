@@ -68,8 +68,8 @@ class TestRStudioSessionCredentials:
         assert "--auth-minimum-user-id=0" not in cmd_str
 
     @pytest.mark.asyncio
-    async def test_rstudio_has_user_setup_init_container(self, adapter, mock_k8s_clients):
-        """RStudio pods must have an init container that creates the Unix user."""
+    async def test_rstudio_creates_user_in_main_container(self, adapter, mock_k8s_clients):
+        """RStudio must create the Unix user in the main container startup script."""
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
@@ -80,27 +80,17 @@ class TestRStudioSessionCredentials:
         await adapter._k8s_launch_session(spec)
 
         pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]
-        init_containers = pod_body["spec"].get("initContainers", [])
+        containers = pod_body["spec"]["containers"]
+        cmd_str = " ".join(containers[0].get("command", []))
 
-        # Should have at least 2 init containers: GCS sync + user setup
-        assert len(init_containers) >= 2
-
-        # Find the user-setup init container
-        user_setup = None
-        for ic in init_containers:
-            cmd_str = " ".join(ic.get("command", []))
-            if "useradd" in cmd_str or "chpasswd" in cmd_str:
-                user_setup = ic
-                break
-
-        assert user_setup is not None, "No user-setup init container found"
-        cmd_str = " ".join(user_setup.get("command", []))
+        assert "useradd" in cmd_str
         assert "bmills" in cmd_str
         assert "chpasswd" in cmd_str
+        assert "rserver" in cmd_str
 
     @pytest.mark.asyncio
-    async def test_rstudio_user_setup_forces_home_jovyan(self, adapter, mock_k8s_clients):
-        """User setup init container should set home to /home/jovyan."""
+    async def test_rstudio_startup_sets_home_jovyan(self, adapter, mock_k8s_clients):
+        """RStudio startup script should set home to /home/jovyan."""
         mock_core, mock_rbac = mock_k8s_clients
         adapter._get_k8s_core_client = MagicMock(return_value=mock_core)
         adapter._get_k8s_rbac_client = MagicMock(return_value=mock_rbac)
@@ -111,17 +101,9 @@ class TestRStudioSessionCredentials:
         await adapter._k8s_launch_session(spec)
 
         pod_body = mock_core.create_namespaced_pod.call_args[1]["body"]
-        init_containers = pod_body["spec"].get("initContainers", [])
+        containers = pod_body["spec"]["containers"]
+        cmd_str = " ".join(containers[0].get("command", []))
 
-        user_setup = None
-        for ic in init_containers:
-            cmd_str = " ".join(ic.get("command", []))
-            if "useradd" in cmd_str:
-                user_setup = ic
-                break
-
-        assert user_setup is not None
-        cmd_str = " ".join(user_setup.get("command", []))
         assert "/home/jovyan" in cmd_str
 
     @pytest.mark.asyncio
