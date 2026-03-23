@@ -265,7 +265,7 @@ export default function SettingsUsersPage() {
           {loading ? (
             <LoadingSpinner size="lg" />
           ) : (
-            <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="bg-white rounded-lg shadow overflow-visible">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
@@ -326,7 +326,7 @@ export default function SettingsUsersPage() {
                         )}
                       </td>
                       <td
-                        className="px-4 py-3 relative"
+                        className="px-4 py-3"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="relative" ref={openMenuId === user.id ? menuRef : null}>
@@ -339,7 +339,12 @@ export default function SettingsUsersPage() {
                             &#8943;
                           </button>
                           {openMenuId === user.id && (
-                            <div className="absolute right-0 mt-1 w-48 bg-white border rounded-lg shadow-lg z-10 py-1">
+                            <div className="fixed z-50 w-48 bg-white border rounded-lg shadow-lg py-1"
+                              style={{
+                                top: (menuRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
+                                left: (menuRef.current?.getBoundingClientRect().right ?? 0) - 192,
+                              }}
+                            >
                               <button
                                 onClick={() => {
                                   setEditingUser(user);
@@ -543,6 +548,66 @@ export default function SettingsUsersPage() {
                   value: new Date(viewingUser.updated_at).toLocaleString(),
                 },
               ]}
+              actions={
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingUser(viewingUser);
+                      setEditName(viewingUser.name || "");
+                      setEditRole(viewingUser.role);
+                      setViewingUser(null);
+                    }}
+                    className="px-3 py-1.5 text-sm bg-bioaf-600 text-white rounded hover:bg-bioaf-700"
+                  >
+                    Edit
+                  </button>
+                  {viewingUser.status === "active" && (
+                    <button
+                      onClick={() => {
+                        setPendingAction({ type: "reset_password_email", user: viewingUser });
+                        setViewingUser(null);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                    >
+                      Send Reset Email
+                    </button>
+                  )}
+                  {viewingUser.status === "active" && (
+                    <button
+                      onClick={() => {
+                        setTempPasswordUser(viewingUser);
+                        setShowTempPasswordForm(true);
+                        setViewingUser(null);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                    >
+                      Set Temp Password
+                    </button>
+                  )}
+                  {viewingUser.status === "invited" && (
+                    <button
+                      onClick={() => {
+                        setPendingAction({ type: "resend_invite", user: viewingUser });
+                        setViewingUser(null);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50"
+                    >
+                      Resend Invite
+                    </button>
+                  )}
+                  {viewingUser.status === "active" && (
+                    <button
+                      onClick={() => {
+                        setPendingAction({ type: "deactivate", user: viewingUser });
+                        setViewingUser(null);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-white border border-red-300 text-red-600 rounded hover:bg-red-50"
+                    >
+                      Deactivate
+                    </button>
+                  )}
+                </div>
+              }
             />
           )}
         </main>

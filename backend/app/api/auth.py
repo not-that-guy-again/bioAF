@@ -167,7 +167,9 @@ async def get_current_user(request: Request, session: AsyncSession = Depends(get
 
 @router.post("/me/change-password")
 async def change_password(
-    body: ChangePasswordRequest, request: Request, session: AsyncSession = Depends(get_session),
+    body: ChangePasswordRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
 ):
     current_user = request.state.current_user
     user_id = int(current_user["sub"])
@@ -181,7 +183,14 @@ async def change_password(
     user.password_hash = AuthService.hash_password(body.new_password)
     await session.flush()
 
-    await log_action(session, user_id=user.id, entity_type="auth", entity_id=user.id, action="change_password")
+    await log_action(
+        session,
+        user_id=user.id,
+        entity_type="user",
+        entity_id=user.id,
+        action="change_password",
+        details={"description": f"{user.email} changed their own password"},
+    )
     await session.commit()
 
     return {"message": "Password changed successfully"}
@@ -204,7 +213,9 @@ async def get_session_credentials(request: Request, session: AsyncSession = Depe
 
 @router.put("/me/session-credentials", response_model=SessionCredentialResponse)
 async def upsert_session_credentials(
-    body: SessionCredentialRequest, request: Request, session: AsyncSession = Depends(get_session),
+    body: SessionCredentialRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
 ):
     current_user = request.state.current_user
     user_id = int(current_user["sub"])

@@ -98,8 +98,11 @@ async def test_username_collision_appends_suffix(client: AsyncClient, admin_toke
 
     # Create credentials for admin user (username: "admin")
     await SessionCredentialService.create_or_update(
-        session, user_id=admin_user.id, org_id=admin_user.organization_id,
-        email=admin_user.email, password="pass1",
+        session,
+        user_id=admin_user.id,
+        org_id=admin_user.organization_id,
+        email=admin_user.email,
+        password="pass1",
     )
     await session.commit()
 
@@ -118,8 +121,11 @@ async def test_username_collision_appends_suffix(client: AsyncClient, admin_toke
     await session.flush()
 
     cred = await SessionCredentialService.create_or_update(
-        session, user_id=user2.id, org_id=user2.organization_id,
-        email=user2.email, password="pass2",
+        session,
+        user_id=user2.id,
+        org_id=user2.organization_id,
+        email=user2.email,
+        password="pass2",
     )
     await session.commit()
 
@@ -147,7 +153,9 @@ async def test_username_validation_rejects_invalid(client: AsyncClient, admin_to
 
 @pytest.mark.asyncio
 async def test_user_list_includes_session_credentials_configured(
-    client: AsyncClient, admin_token: str, admin_user,
+    client: AsyncClient,
+    admin_token: str,
+    admin_user,
 ):
     """Admin user list response includes session_credentials_configured field."""
     resp = await client.get(
@@ -163,7 +171,9 @@ async def test_user_list_includes_session_credentials_configured(
 
 @pytest.mark.asyncio
 async def test_user_list_includes_last_login(
-    client: AsyncClient, admin_token: str, admin_user,
+    client: AsyncClient,
+    admin_token: str,
+    admin_user,
 ):
     """Admin user list response includes last_login field."""
     resp = await client.get(

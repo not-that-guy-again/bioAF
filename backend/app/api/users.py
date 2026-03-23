@@ -26,7 +26,9 @@ async def _count_active_admins(session: AsyncSession, org_id: int) -> int:
     from sqlalchemy import func
 
     result = await session.execute(
-        select(func.count()).select_from(User).where(
+        select(func.count())
+        .select_from(User)
+        .where(
             User.organization_id == org_id,
             User.role == "admin",
             User.status == "active",
@@ -138,9 +140,19 @@ async def update_user(user_id: int, body: UserUpdate, request: Request, session:
                     detail="Cannot change role of the last active admin",
                 )
         user = await UserService.update_role(session, user, body.role, actor_id)
-    if body.name is not None:
+    if body.name is not None and body.name != (user.name or ""):
+        old_name = user.name
         user.name = body.name
         await session.flush()
+        await log_action(
+            session,
+            user_id=actor_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="update",
+            details={"field": "name", "new_value": body.name, "target_email": user.email},
+            previous_value={"field": "name", "old_value": old_name},
+        )
 
     await session.commit()
     await session.refresh(user)
@@ -198,7 +210,7 @@ async def resend_invite(user_id: int, request: Request, session: AsyncSession = 
         entity_type="user",
         entity_id=user.id,
         action="resend_invite",
-        details={"email": user.email},
+        details={"target_email": user.email, "description": f"Resent invitation email to {user.email}"},
     )
     await session.commit()
 
@@ -207,7 +219,9 @@ async def resend_invite(user_id: int, request: Request, session: AsyncSession = 
 
 @router.post("/{user_id}/admin-reset-password")
 async def admin_reset_password(
-    user_id: int, body: AdminResetPasswordRequest, request: Request,
+    user_id: int,
+    body: AdminResetPasswordRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ):
     current_user = _require_admin(request)
@@ -234,8 +248,16 @@ async def admin_reset_password(
         EmailService.send_password_reset(user.email, code)
 
         await log_action(
-            session, user_id=actor_id, entity_type="user", entity_id=user.id,
-            action="admin_reset_password", details={"mode": "email"},
+            session,
+            user_id=actor_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="admin_reset_password",
+            details={
+                "mode": "email",
+                "target_email": user.email,
+                "description": f"Sent password reset email to {user.email}",
+            },
         )
         await session.commit()
         return {"message": "Password reset email sent"}
@@ -248,8 +270,16 @@ async def admin_reset_password(
         await session.flush()
 
         await log_action(
-            session, user_id=actor_id, entity_type="user", entity_id=user.id,
-            action="admin_reset_password", details={"mode": "temporary"},
+            session,
+            user_id=actor_id,
+            entity_type="user",
+            entity_id=user.id,
+            action="admin_reset_password",
+            details={
+                "mode": "temporary",
+                "target_email": user.email,
+                "description": f"Set temporary password for {user.email}",
+            },
         )
         await session.commit()
         return {"message": "Temporary password set"}

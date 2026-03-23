@@ -32,14 +32,15 @@ class SessionCredentialService:
 
     @staticmethod
     async def get_by_user_id(session: AsyncSession, user_id: int) -> SessionCredential | None:
-        result = await session.execute(
-            select(SessionCredential).where(SessionCredential.user_id == user_id)
-        )
+        result = await session.execute(select(SessionCredential).where(SessionCredential.user_id == user_id))
         return result.scalar_one_or_none()
 
     @staticmethod
     async def _resolve_unique_username(
-        session: AsyncSession, base_username: str, org_id: int, exclude_user_id: int | None = None,
+        session: AsyncSession,
+        base_username: str,
+        org_id: int,
+        exclude_user_id: int | None = None,
     ) -> str:
         """Find a unique username within the org, appending numeric suffix if needed."""
         candidate = base_username
@@ -77,11 +78,17 @@ class SessionCredentialService:
                 resolved_username = existing.username
             else:
                 resolved_username = await SessionCredentialService._resolve_unique_username(
-                    session, base, org_id, exclude_user_id=user_id,
+                    session,
+                    base,
+                    org_id,
+                    exclude_user_id=user_id,
                 )
         else:
             resolved_username = await SessionCredentialService._resolve_unique_username(
-                session, username, org_id, exclude_user_id=user_id,
+                session,
+                username,
+                org_id,
+                exclude_user_id=user_id,
             )
 
         password_hash = AuthService.hash_password(password)
