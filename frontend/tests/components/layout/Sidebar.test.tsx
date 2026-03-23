@@ -13,6 +13,19 @@ jest.mock("@/lib/auth", () => ({
   getCurrentUser: () => mockGetCurrentUser(),
 }));
 
+// Mock usePermissions
+const mockCanAccess = jest.fn().mockReturnValue(true);
+const mockRoleName = jest.fn().mockReturnValue("admin");
+jest.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => ({
+    canAccess: (...args: unknown[]) => mockCanAccess(...args),
+    roleName: mockRoleName(),
+    loading: false,
+    permissions: new Set(),
+  }),
+  clearPermissionsCache: jest.fn(),
+}));
+
 describe("Sidebar", () => {
   beforeEach(() => {
     mockPathname.mockReturnValue("/dashboard");
@@ -21,6 +34,8 @@ describe("Sidebar", () => {
       role_name: "admin",
       sub: "1",
     });
+    mockCanAccess.mockReturnValue(true);
+    mockRoleName.mockReturnValue("admin");
   });
 
   it("renders all 8 top-level items for admin user", () => {
@@ -53,6 +68,20 @@ describe("Sidebar", () => {
       email: "bench@bioaf.org",
       role_name: "bench",
       sub: "2",
+    });
+    mockRoleName.mockReturnValue("bench");
+    // Bench users: only experiments, samples, pipelines(view), notebooks(view), environments(view), files(view/upload), projects(view)
+    mockCanAccess.mockImplementation((resource: string, action: string) => {
+      const benchPerms: Record<string, string[]> = {
+        experiments: ["view", "create", "edit", "upload"],
+        samples: ["view", "create", "edit"],
+        pipelines: ["view"],
+        notebooks: ["view"],
+        environments: ["view"],
+        files: ["view", "upload"],
+        projects: ["view"],
+      };
+      return benchPerms[resource]?.includes(action) ?? false;
     });
     render(<Sidebar />);
     const nav = screen.getByTestId("sidebar-nav");

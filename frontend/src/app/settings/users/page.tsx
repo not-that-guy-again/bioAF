@@ -7,7 +7,8 @@ import { Header } from "@/components/layout/Header";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { InviteForm } from "@/components/auth/InviteForm";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { isAuthenticated, getCurrentUser } from "@/lib/auth";
+import { isAuthenticated } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { api, ApiError } from "@/lib/api";
 import type { User, Role, RoleListResponse } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -31,6 +32,7 @@ type PendingAction =
 
 export default function SettingsUsersPage() {
   const router = useRouter();
+  const { canAccess, loading: permLoading } = usePermissions();
   const [users, setUsers] = useState<User[]>([]);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -50,8 +52,8 @@ export default function SettingsUsersPage() {
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
-    const user = getCurrentUser();
-    if (user?.role_name !== "admin") { router.push("/"); return; }
+    if (permLoading) return;
+    if (!canAccess("users", "view")) { router.push("/dashboard"); return; }
     fetchUsers();
     api.get<RoleListResponse>("/api/roles")
       .then((data) => setRoles(data.roles))
@@ -62,7 +64,7 @@ export default function SettingsUsersPage() {
     api.get<{ setup_complete: boolean; smtp_configured: boolean }>("/api/bootstrap/status")
       .then((data) => setSmtpConfigured(data.smtp_configured))
       .catch(() => {});
-  }, [router]);
+  }, [router, permLoading, canAccess]);
 
   const fetchUsers = async () => {
     try {

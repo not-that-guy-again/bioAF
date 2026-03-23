@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { getCurrentUser, removeToken } from "@/lib/auth";
+import { clearPermissionsCache } from "@/hooks/usePermissions";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { DeploymentBanner } from "@/components/infrastructure/DeploymentBanner";
 
@@ -11,6 +12,7 @@ export function Header() {
 
   const handleLogout = () => {
     removeToken();
+    clearPermissionsCache();
     router.push("/login");
   };
 

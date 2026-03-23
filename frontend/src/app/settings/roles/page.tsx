@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { isAuthenticated, getCurrentUser } from "@/lib/auth";
+import { isAuthenticated } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { api, ApiError } from "@/lib/api";
 import type { Role, RoleListResponse, PermissionEntry } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -14,6 +15,7 @@ type PermissionCatalog = Record<string, string[]>;
 
 export default function SettingsRolesPage() {
   const router = useRouter();
+  const { canAccess, loading: permLoading } = usePermissions();
   const [roles, setRoles] = useState<Role[]>([]);
   const [catalog, setCatalog] = useState<PermissionCatalog>({});
   const [loading, setLoading] = useState(true);
@@ -36,10 +38,10 @@ export default function SettingsRolesPage() {
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
-    const user = getCurrentUser();
-    if (user?.role_name !== "admin") { router.push("/"); return; }
+    if (permLoading) return;
+    if (!canAccess("roles", "view")) { router.push("/dashboard"); return; }
     loadData();
-  }, [router]);
+  }, [router, permLoading, canAccess]);
 
   async function loadData() {
     try {

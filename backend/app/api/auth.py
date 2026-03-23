@@ -170,6 +170,10 @@ async def get_current_user(request: Request, session: AsyncSession = Depends(get
     profile = UserProfile.model_validate(user)
     role = await role_service.get_role_by_id(session, user.role_id)
     profile.role_name = role.name if role else ""
+    from app.schemas.auth import PermissionEntry
+
+    perms = await role_service.get_role_permissions(session, user.role_id)
+    profile.permissions = [PermissionEntry(**p) for p in perms]
     return profile
 
 

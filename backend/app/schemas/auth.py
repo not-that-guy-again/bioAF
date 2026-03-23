@@ -40,6 +40,11 @@ class AdminResetPasswordRequest(BaseModel):
     temporary_password: str | None = None
 
 
+class PermissionEntry(BaseModel):
+    resource: str
+    action: str
+
+
 class UserProfile(BaseModel):
     id: int
     email: str
@@ -48,5 +53,6 @@ class UserProfile(BaseModel):
     role_name: str = ""
     organization_id: int
     status: str
+    permissions: list[PermissionEntry] = []
 
     model_config = {"from_attributes": True}

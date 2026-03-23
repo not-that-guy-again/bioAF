@@ -6,7 +6,8 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { InviteForm } from "@/components/auth/InviteForm";
-import { isAuthenticated, getCurrentUser } from "@/lib/auth";
+import { isAuthenticated } from "@/lib/auth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { api, ApiError } from "@/lib/api";
 import type { User, Role, RoleListResponse } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -14,6 +15,7 @@ import { DetailModal } from "@/components/shared/DetailModal";
 
 export default function UsersPage() {
   const router = useRouter();
+  const { canAccess, loading: permLoading } = usePermissions();
   const [users, setUsers] = useState<User[]>([]);
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,13 +25,13 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
-    const user = getCurrentUser();
-    if (user?.role_name !== "admin") { router.push("/"); return; }
+    if (permLoading) return;
+    if (!canAccess("users", "view")) { router.push("/dashboard"); return; }
     fetchUsers();
     api.get<RoleListResponse>("/api/roles")
       .then((data) => setRoles(data.roles))
       .catch(() => {});
-  }, [router]);
+  }, [router, permLoading, canAccess]);
 
   const fetchUsers = async () => {
     try {
