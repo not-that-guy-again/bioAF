@@ -9,7 +9,7 @@ import { InviteForm } from "@/components/auth/InviteForm";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api, ApiError } from "@/lib/api";
-import type { User } from "@/lib/types";
+import type { User, Role, RoleListResponse } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { DetailModal } from "@/components/shared/DetailModal";
 
@@ -46,12 +46,16 @@ export default function SettingsUsersPage() {
   const [showTempPasswordForm, setShowTempPasswordForm] = useState(false);
   const [tempPasswordUser, setTempPasswordUser] = useState<User | null>(null);
   const [smtpConfigured, setSmtpConfigured] = useState(false);
+  const [roles, setRoles] = useState<Role[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
     if (user?.role_name !== "admin") { router.push("/"); return; }
     fetchUsers();
+    api.get<RoleListResponse>("/api/roles")
+      .then((data) => setRoles(data.roles))
+      .catch(() => {});
     api.get<{ users: NeverLoggedInUser[] }>("/api/access-logs/never-logged-in")
       .then((data) => setNeverLoggedIn(data.users))
       .catch(() => {});
@@ -85,9 +89,12 @@ export default function SettingsUsersPage() {
           await api.post(`/api/users/${pendingAction.user.id}/lock`);
           setSuccess(`${pendingAction.user.email} locked`);
           break;
-        case "role_change":
-          await api.patch(`/api/users/${pendingAction.user.id}`, { role: pendingAction.newRole });
+        case "role_change": {
+          const targetRole = roles.find((r) => r.name === pendingAction.newRole);
+          if (!targetRole) { setError("Role not found"); break; }
+          await api.patch(`/api/users/${pendingAction.user.id}`, { role_id: targetRole.id });
           setSuccess(`${pendingAction.user.email} role changed to ${pendingAction.newRole}`);
+        }
           break;
         case "resend_invite":
           await api.post(`/api/users/${pendingAction.user.id}/resend-invite`);
@@ -127,17 +134,17 @@ export default function SettingsUsersPage() {
     if (!editingUser) return;
     clearMessages();
 
-    const updates: Record<string, string> = {};
+    const updates: Record<string, unknown> = {};
     if (editName !== (editingUser.name || "")) updates.name = editName;
-    if (editRole !== editingUser.role_name) updates.role = editRole;
+    const roleChanged = editRole !== editingUser.role_name;
 
-    if (Object.keys(updates).length === 0) {
+    if (!roleChanged && Object.keys(updates).length === 0) {
       setEditingUser(null);
       return;
     }
 
     // If role is changing, require confirmation
-    if (updates.role) {
+    if (roleChanged) {
       setPendingAction({ type: "role_change", user: editingUser, newRole: editRole });
       setEditingUser(null);
       return;
@@ -332,7 +339,7 @@ export default function SettingsUsersPage() {
           {showInvite && (
             <div className="bg-white rounded-lg shadow p-6 mb-6">
               <h2 className="text-lg font-semibold mb-4">Invite Users</h2>
-              <InviteForm />
+              <InviteForm roles={roles} />
             </div>
           )}
 
@@ -487,10 +494,9 @@ export default function SettingsUsersPage() {
                       onChange={(e) => setEditRole(e.target.value)}
                       className="w-full px-3 py-2 border rounded-md text-sm"
                     >
-                      <option value="admin">Admin</option>
-                      <option value="comp_bio">Comp Bio</option>
-                      <option value="bench">Bench</option>
-                      <option value="viewer">Viewer</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.name}>{r.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

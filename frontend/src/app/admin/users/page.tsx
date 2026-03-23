@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { InviteForm } from "@/components/auth/InviteForm";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api, ApiError } from "@/lib/api";
-import type { User } from "@/lib/types";
+import type { User, Role, RoleListResponse } from "@/lib/types";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { DetailModal } from "@/components/shared/DetailModal";
 
@@ -19,12 +19,16 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [error, setError] = useState("");
+  const [roles, setRoles] = useState<Role[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     const user = getCurrentUser();
     if (user?.role_name !== "admin") { router.push("/"); return; }
     fetchUsers();
+    api.get<RoleListResponse>("/api/roles")
+      .then((data) => setRoles(data.roles))
+      .catch(() => {});
   }, [router]);
 
   const fetchUsers = async () => {
@@ -46,9 +50,11 @@ export default function UsersPage() {
     }
   };
 
-  const handleRoleChange = async (userId: number, role: string) => {
+  const handleRoleChange = async (userId: number, roleName: string) => {
+    const targetRole = roles.find((r) => r.name === roleName);
+    if (!targetRole) return;
     try {
-      await api.patch(`/api/users/${userId}`, { role });
+      await api.patch(`/api/users/${userId}`, { role_id: targetRole.id });
       fetchUsers();
     } catch { /* handled */ }
   };
@@ -71,7 +77,7 @@ export default function UsersPage() {
           {showInvite && (
             <div className="bg-white rounded-lg shadow p-6 mb-6">
               <h2 className="text-lg font-semibold mb-4">Invite Users</h2>
-              <InviteForm />
+              <InviteForm roles={roles} />
             </div>
           )}
 
@@ -98,10 +104,9 @@ export default function UsersPage() {
                           onChange={(e) => handleRoleChange(user.id, e.target.value)}
                           className="text-sm border rounded px-2 py-1"
                         >
-                          <option value="admin">Admin</option>
-                          <option value="comp_bio">Comp Bio</option>
-                          <option value="bench">Bench</option>
-                          <option value="viewer">Viewer</option>
+                          {roles.map((r) => (
+                            <option key={r.id} value={r.name}>{r.name}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="px-6 py-4"><StatusBadge status={user.status} /></td>
