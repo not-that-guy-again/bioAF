@@ -62,8 +62,6 @@ BENCH_PERMISSIONS = {
 VIEWER_PERMISSIONS = {
     "experiments": ["view"],
     "samples": ["view"],
-    "pipelines": ["view"],
-    "notebooks": ["view"],
     "environments": ["view"],
     "files": ["view"],
     "projects": ["view"],

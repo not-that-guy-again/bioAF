@@ -60,8 +60,6 @@ BUILTIN_ROLES: dict[str, tuple[str, dict[str, list[str]]]] = {
         {
             "experiments": ["view"],
             "samples": ["view"],
-            "pipelines": ["view"],
-            "notebooks": ["view"],
             "environments": ["view"],
             "files": ["view"],
             "projects": ["view"],

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/gitops", tags=["gitops"])
 
 @router.get("/status", response_model=GitOpsRepoStatus)
 async def get_gitops_status(
-    current_user: dict = require_permission("pipelines", "view"),
+    current_user: dict = require_permission("experiments", "view"),
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
