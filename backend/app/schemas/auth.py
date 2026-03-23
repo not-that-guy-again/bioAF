@@ -44,7 +44,8 @@ class UserProfile(BaseModel):
     id: int
     email: str
     name: str | None
-    role: str
+    role_id: int
+    role_name: str = ""
     organization_id: int
     status: str
 

@@ -130,15 +130,16 @@ def upgrade() -> None:
                 ),
                 {"name": role_name, "description": description, "org_id": org_id},
             )
-            role_id = result.fetchone()[0]
+            row = result.fetchone()
+            assert row is not None
+            role_id = row[0]
             org_role_ids[role_name] = role_id
 
             perms = _flatten_perms(perm_map)
             for resource, action in perms:
                 conn.execute(
                     sa.text(
-                        "INSERT INTO role_permissions (role_id, resource, action) "
-                        "VALUES (:role_id, :resource, :action)"
+                        "INSERT INTO role_permissions (role_id, resource, action) VALUES (:role_id, :resource, :action)"
                     ),
                     {"role_id": role_id, "resource": resource, "action": action},
                 )
@@ -173,13 +174,7 @@ def downgrade() -> None:
 
     # Backfill role string from roles table
     conn = op.get_bind()
-    conn.execute(
-        sa.text(
-            "UPDATE users SET role = ("
-            "  SELECT r.name FROM roles r WHERE r.id = users.role_id"
-            ")"
-        )
-    )
+    conn.execute(sa.text("UPDATE users SET role = (  SELECT r.name FROM roles r WHERE r.id = users.role_id)"))
     op.alter_column("users", "role", nullable=False, server_default="viewer")
 
     # Drop role_id FK and column

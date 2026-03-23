@@ -396,6 +396,7 @@ export default function SettingsRolesPage() {
             {/* Delete confirm */}
             {deleteTarget && (
               <ConfirmDialog
+                open={true}
                 title="Delete Role"
                 message={`Are you sure you want to delete the role "${deleteTarget.name}"? This cannot be undone.`}
                 confirmLabel="Delete"

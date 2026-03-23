@@ -21,7 +21,7 @@ describe("GCP Configuration nav item", () => {
   });
 
   it("appears in Settings section for admin users", () => {
-    mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role: "admin", sub: "1" });
+    mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role_name: "admin", sub: "1" });
     render(<Sidebar />);
 
     // Expand Settings section
@@ -30,7 +30,7 @@ describe("GCP Configuration nav item", () => {
   });
 
   it("links to /settings/gcp", () => {
-    mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role: "admin", sub: "1" });
+    mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role_name: "admin", sub: "1" });
     render(<Sidebar />);
 
     fireEvent.click(screen.getByText("Settings"));
@@ -39,13 +39,13 @@ describe("GCP Configuration nav item", () => {
   });
 
   it("does not appear for non-admin users (Settings section hidden)", () => {
-    mockGetCurrentUser.mockReturnValue({ email: "bench@bioaf.org", role: "bench", sub: "2" });
+    mockGetCurrentUser.mockReturnValue({ email: "bench@bioaf.org", role_name: "bench", sub: "2" });
     render(<Sidebar />);
     expect(screen.queryByText("GCP Configuration")).not.toBeInTheDocument();
   });
 
   it("is positioned between Audit Log and Naming Profiles", () => {
-    mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role: "admin", sub: "1" });
+    mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role_name: "admin", sub: "1" });
     render(<Sidebar />);
 
     fireEvent.click(screen.getByText("Settings"));

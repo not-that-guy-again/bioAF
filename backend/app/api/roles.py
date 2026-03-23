@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission
@@ -51,10 +51,7 @@ async def permissions_catalog(
     current_user: dict = require_permission("roles", "view"),
 ):
     """Return the full catalog of available resource/action pairs."""
-    return {
-        resource: actions
-        for resource, actions in sorted(ALL_RESOURCES_ACTIONS.items())
-    }
+    return {resource: actions for resource, actions in sorted(ALL_RESOURCES_ACTIONS.items())}
 
 
 @router.get("/{role_id}", response_model=RoleResponse)
@@ -193,9 +190,7 @@ async def delete_role(
 
     from app.models.user import User
 
-    count_result = await session.execute(
-        select(func.count()).select_from(User).where(User.role_id == role_id)
-    )
+    count_result = await session.execute(select(func.count()).select_from(User).where(User.role_id == role_id))
     user_count = count_result.scalar_one()
     if user_count > 0:
         raise HTTPException(400, f"Cannot delete role with {user_count} assigned user(s)")

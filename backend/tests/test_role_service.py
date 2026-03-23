@@ -4,7 +4,6 @@ import pytest
 from httpx import AsyncClient
 
 from app.services import role_service
-from app.services.bootstrap_roles import seed_builtin_roles
 
 
 @pytest.mark.asyncio
@@ -93,9 +92,7 @@ async def test_create_custom_role(session, admin_user):
 async def test_set_permissions_replaces_existing(session, admin_user):
     """set_permissions replaces all permissions for a role."""
     org_id = admin_user.organization_id
-    role = await role_service.create_role(
-        session, org_id, name="temp_role", permissions=[("experiments", "view")]
-    )
+    role = await role_service.create_role(session, org_id, name="temp_role", permissions=[("experiments", "view")])
     await session.flush()
 
     await role_service.set_permissions(session, role.id, [("samples", "create"), ("files", "upload")])

@@ -18,7 +18,7 @@ describe("Sidebar", () => {
     mockPathname.mockReturnValue("/dashboard");
     mockGetCurrentUser.mockReturnValue({
       email: "test@bioaf.org",
-      role: "admin",
+      role_name: "admin",
       sub: "1",
     });
   });
@@ -51,7 +51,7 @@ describe("Sidebar", () => {
   it("hides Settings when user role is not admin", () => {
     mockGetCurrentUser.mockReturnValue({
       email: "bench@bioaf.org",
-      role: "bench",
+      role_name: "bench",
       sub: "2",
     });
     render(<Sidebar />);
