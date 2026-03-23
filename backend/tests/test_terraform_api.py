@@ -48,7 +48,7 @@ async def _seed_user_and_token(client, session, role_name="admin"):
     await session.flush()
     await session.commit()
 
-    token = AuthService.create_token(user.id, user.email, user.role_id, user.organization_id)
+    token = AuthService.create_token(user.id, user.email, user.role_id, user.organization_id, role_name=role_name)
     return user, token
 
 
