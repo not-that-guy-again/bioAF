@@ -31,6 +31,9 @@ class ExperimentService:
             expected_sample_count=data.expected_sample_count,
             owner_user_id=user_id,
             status="registered",
+            design_type=data.design_type,
+            protocol_version=data.protocol_version,
+            variables_json=data.variables_json,
         )
         session.add(experiment)
         await session.flush()
@@ -83,7 +86,16 @@ class ExperimentService:
 
         previous = {}
         updates = {}
-        for field in ["name", "hypothesis", "description", "start_date", "expected_sample_count"]:
+        for field in [
+            "name",
+            "hypothesis",
+            "description",
+            "start_date",
+            "expected_sample_count",
+            "design_type",
+            "protocol_version",
+            "variables_json",
+        ]:
             new_val = getattr(data, field, None)
             if new_val is not None:
                 old_val = getattr(experiment, field)
