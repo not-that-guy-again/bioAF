@@ -15,11 +15,13 @@ from app.schemas.experiment import ExperimentCreate, ExperimentUpdate
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
 from app.services.event_types import EXPERIMENT_STATUS_CHANGED
+from app.services.vocabulary_validator import VocabularyValidator
 
 
 class ExperimentService:
     @staticmethod
     async def create_experiment(session: AsyncSession, org_id: int, user_id: int, data: ExperimentCreate) -> Experiment:
+        await VocabularyValidator.validate_experiment_fields(session, {"design_type": data.design_type})
         experiment = Experiment(
             organization_id=org_id,
             project_id=data.project_id,

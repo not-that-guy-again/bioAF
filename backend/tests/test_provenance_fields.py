@@ -3,9 +3,31 @@ import pytest_asyncio
 from datetime import datetime, timezone
 from sqlalchemy import text
 
+from app.models.controlled_vocabulary import ControlledVocabulary
+
 
 @pytest_asyncio.fixture
-async def experiment(client, admin_token):
+async def seeded_design_types(session):
+    """Seed design_type vocabulary values for tests."""
+    for val in ("case-control", "cohort", "time-series", "dose-response", "other"):
+        session.add(
+            ControlledVocabulary(
+                field_name="design_type",
+                allowed_value=val,
+                display_order=0,
+                is_default=False,
+            )
+        )
+    await session.flush()
+    await session.commit()
+
+    from app.services.vocabulary_validator import invalidate_cache
+
+    invalidate_cache("design_type")
+
+
+@pytest_asyncio.fixture
+async def experiment(client, admin_token, seeded_design_types):
     response = await client.post(
         "/api/experiments",
         json={"name": "Provenance Test Experiment"},
@@ -16,7 +38,7 @@ async def experiment(client, admin_token):
 
 
 @pytest.mark.asyncio
-async def test_create_experiment_with_design_type(client, admin_token, session):
+async def test_create_experiment_with_design_type(client, admin_token, seeded_design_types, session):
     response = await client.post(
         "/api/experiments",
         json={
@@ -38,7 +60,20 @@ async def test_create_experiment_with_design_type(client, admin_token, session):
 
 
 @pytest.mark.asyncio
-async def test_create_experiment_without_new_fields(client, admin_token, session):
+async def test_create_experiment_invalid_design_type(client, admin_token, seeded_design_types, session):
+    response = await client.post(
+        "/api/experiments",
+        json={
+            "name": "Bad Design Type",
+            "design_type": "not-a-real-type",
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_experiment_without_new_fields(client, admin_token, seeded_design_types, session):
     response = await client.post(
         "/api/experiments",
         json={"name": "Plain Experiment"},
