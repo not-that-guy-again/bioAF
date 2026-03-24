@@ -56,6 +56,26 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified")
 
+    # Load persisted SMTP settings from database
+    async with engine.connect() as smtp_conn:
+        smtp_result = await smtp_conn.execute(
+            text(
+                "SELECT smtp_configured, smtp_host, smtp_port, smtp_username,"
+                " smtp_password, smtp_from_address, smtp_encryption"
+                " FROM organizations LIMIT 1"
+            )
+        )
+        smtp_row = smtp_result.mappings().first()
+        if smtp_row and smtp_row["smtp_configured"] and smtp_row["smtp_host"]:
+            settings.smtp_host = smtp_row["smtp_host"]
+            settings.smtp_port = smtp_row["smtp_port"]
+            settings.smtp_username = smtp_row["smtp_username"]
+            settings.smtp_password = smtp_row["smtp_password"]
+            settings.smtp_from_address = smtp_row["smtp_from_address"]
+            settings.smtp_encryption = smtp_row["smtp_encryption"]
+            settings.smtp_configured = True
+            logger.info("SMTP settings loaded from database")
+
     # Initialize notification system
     from app.database import async_session_factory as notif_session_factory
     from app.services.notification_router import NotificationRouter

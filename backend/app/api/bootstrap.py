@@ -7,7 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.component import VerificationCode
 from app.models.organization import Organization
-from app.schemas.bootstrap import BootstrapStatus, ConfigureOrgRequest, ConfigureSmtpRequest, CreateAdminRequest
+from app.schemas.bootstrap import (
+    BootstrapStatus,
+    ConfigureOrgRequest,
+    ConfigureSmtpRequest,
+    CreateAdminRequest,
+    SmtpSettingsResponse,
+    TestSmtpRequest,
+    TestSmtpResponse,
+)
 from app.services.audit_service import log_action
 from app.services.auth_service import AuthService
 from app.services.component_service import ComponentService
@@ -122,6 +130,42 @@ async def configure_org(body: ConfigureOrgRequest, request: Request, session: As
     return {"message": "Organization configured"}
 
 
+@router.get("/smtp-settings", response_model=SmtpSettingsResponse)
+async def get_smtp_settings(request: Request, session: AsyncSession = Depends(get_session)):
+    current_user = request.state.current_user
+    if not await role_service.has_permission(session, int(current_user["role_id"]), "infrastructure", "configure"):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    org = await _get_org(session)
+    if not org:
+        return SmtpSettingsResponse(
+            host="",
+            port=587,
+            username="",
+            password="",
+            from_address="",
+            encryption="starttls",
+            configured=False,
+        )
+
+    # Mask the password for display
+    masked_password = ""
+    if org.smtp_password:
+        masked_password = (
+            org.smtp_password[:2] + "***" + org.smtp_password[-2:] if len(org.smtp_password) > 4 else "***"
+        )
+
+    return SmtpSettingsResponse(
+        host=org.smtp_host,
+        port=org.smtp_port,
+        username=org.smtp_username,
+        password=masked_password,
+        from_address=org.smtp_from_address,
+        encryption=org.smtp_encryption,
+        configured=org.smtp_configured,
+    )
+
+
 @router.post("/configure-smtp")
 async def configure_smtp(body: ConfigureSmtpRequest, request: Request, session: AsyncSession = Depends(get_session)):
     current_user = request.state.current_user
@@ -132,7 +176,17 @@ async def configure_smtp(body: ConfigureSmtpRequest, request: Request, session: 
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    # In production, store in Secret Manager. For dev, update settings.
+    # Persist to database
+    org.smtp_host = body.host
+    org.smtp_port = body.port
+    org.smtp_username = body.username
+    org.smtp_password = body.password
+    org.smtp_from_address = body.from_address
+    org.smtp_encryption = body.encryption
+    org.smtp_configured = True
+    await session.flush()
+
+    # Also update in-memory settings for immediate use
     from app.config import settings
 
     settings.smtp_host = body.host
@@ -140,10 +194,8 @@ async def configure_smtp(body: ConfigureSmtpRequest, request: Request, session: 
     settings.smtp_username = body.username
     settings.smtp_password = body.password
     settings.smtp_from_address = body.from_address
+    settings.smtp_encryption = body.encryption
     settings.smtp_configured = True
-
-    org.smtp_configured = True
-    await session.flush()
 
     await log_action(
         session,
@@ -151,11 +203,39 @@ async def configure_smtp(body: ConfigureSmtpRequest, request: Request, session: 
         entity_type="organization",
         entity_id=org.id,
         action="configure_smtp",
-        details={"host": body.host, "port": body.port, "from_address": body.from_address},
+        details={
+            "host": body.host,
+            "port": body.port,
+            "from_address": body.from_address,
+            "encryption": body.encryption,
+        },
     )
     await session.commit()
 
     return {"message": "SMTP configured"}
+
+
+@router.post("/test-smtp", response_model=TestSmtpResponse)
+async def test_smtp(body: TestSmtpRequest, request: Request, session: AsyncSession = Depends(get_session)):
+    current_user = request.state.current_user
+    if not await role_service.has_permission(session, int(current_user["role_id"]), "infrastructure", "configure"):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    if not EmailService.is_configured():
+        return TestSmtpResponse(status="failed", to=body.to, detail="SMTP not configured")
+
+    subject = "bioAF - Test Email"
+    body_html = """
+    <div style="font-family: sans-serif; max-width: 600px;">
+        <h2>bioAF Test Email</h2>
+        <p>This is a test email from your bioAF platform.</p>
+        <p>If you received this, your SMTP settings are working correctly.</p>
+    </div>
+    """
+    success = EmailService.send_email(body.to, subject, body_html)
+    if success:
+        return TestSmtpResponse(status="sent", to=body.to, detail=f"Test email sent to {body.to}")
+    return TestSmtpResponse(status="failed", to=body.to, detail="Failed to send test email")
 
 
 @router.post("/complete")
