@@ -71,6 +71,39 @@ async def lifespan(app: FastAPI):
         await initialize_adapters(adapter_session, session_factory=notif_session_factory)
     logger.info("BAL adapters initialized")
 
+    # Sync built-in role permissions (backfill any new permissions added to bootstrap_roles)
+    from app.services.bootstrap_roles import BUILTIN_ROLES
+    from app.models.role import Role, RolePermission
+    from sqlalchemy import select as sa_select
+
+    async with notif_session_factory() as role_sync_session:
+        try:
+            for role_name, (_desc, perm_map) in BUILTIN_ROLES.items():
+                roles_result = await role_sync_session.execute(
+                    sa_select(Role).where(Role.name == role_name, Role.is_system == True)  # noqa: E712
+                )
+                for role in roles_result.scalars().all():
+                    existing_result = await role_sync_session.execute(
+                        sa_select(RolePermission.resource, RolePermission.action).where(
+                            RolePermission.role_id == role.id
+                        )
+                    )
+                    existing = {(r, a) for r, a in existing_result.fetchall()}
+                    expected = {(r, a) for r, actions in perm_map.items() for a in actions}
+                    missing = expected - existing
+                    for resource, action in missing:
+                        role_sync_session.add(RolePermission(role_id=role.id, resource=resource, action=action))
+                    if missing:
+                        logger.info(
+                            "Synced %d permissions to built-in role '%s' (org %d)",
+                            len(missing),
+                            role_name,
+                            role.organization_id,
+                        )
+            await role_sync_session.commit()
+        except Exception as e:
+            logger.warning("Built-in role permission sync failed: %s", e)
+
     logger.info("bioAF backend started successfully")
 
     # Start background tasks
