@@ -636,3 +636,116 @@ async def test_viewer_can_list_work_nodes(client, viewer_token, viewer_user):
     # from bootstrap_roles.py, only admin and comp_bio have work_nodes permissions
     # viewer role has no work_nodes permissions
     assert response.status_code == 403
+
+
+# -- Settings endpoints --
+
+
+@pytest.mark.asyncio
+async def test_get_work_node_settings_defaults(client, admin_token, admin_user):
+    """GET /api/v1/settings/work-nodes returns defaults when no config exists."""
+    response = await client.get(
+        "/api/v1/settings/work-nodes",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["max_nodes_per_user"] == 2
+    assert data["idle_timeout_hours"] == 24
+
+
+@pytest.mark.asyncio
+async def test_update_work_node_settings(client, session, admin_token, admin_user):
+    """PUT /api/v1/settings/work-nodes persists new values."""
+    response = await client.put(
+        "/api/v1/settings/work-nodes",
+        json={"max_nodes_per_user": 5, "idle_timeout_hours": 48},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+
+    # Verify values persisted
+    get_resp = await client.get(
+        "/api/v1/settings/work-nodes",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    data = get_resp.json()
+    assert data["max_nodes_per_user"] == 5
+    assert data["idle_timeout_hours"] == 48
+
+
+@pytest.mark.asyncio
+async def test_update_work_node_settings_validates_range(client, admin_token, admin_user):
+    """PUT /api/v1/settings/work-nodes rejects out-of-range values."""
+    response = await client.put(
+        "/api/v1/settings/work-nodes",
+        json={"max_nodes_per_user": 0, "idle_timeout_hours": 48},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_work_node_settings_denied_for_comp_bio(client, comp_bio_token, comp_bio_user):
+    """comp_bio users cannot update work node settings."""
+    response = await client.put(
+        "/api/v1/settings/work-nodes",
+        json={"max_nodes_per_user": 10, "idle_timeout_hours": 48},
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_work_node_settings_readable_by_comp_bio(client, comp_bio_token, comp_bio_user):
+    """comp_bio users can read work node settings (visible to all with work_nodes.view)."""
+    response = await client.get(
+        "/api/v1/settings/work-nodes",
+        headers={"Authorization": f"Bearer {comp_bio_token}"},
+    )
+    # Settings are always visible to those who can view work nodes
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_timeout_uses_configured_value(session, admin_user, seed_environment, seed_project):
+    """check_heartbeat_timeouts reads idle_timeout_hours from platform_config."""
+    from datetime import datetime, timezone, timedelta
+    from app.models.notebook_session import ComputeSession
+    from app.services.work_node_service import WorkNodeService
+
+    # Set timeout to 2 hours
+    await session.execute(
+        text(
+            "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+            "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+        ),
+        {"k": "work_node_idle_timeout_hours", "v": "2"},
+    )
+    await session.commit()
+
+    # Create a session with heartbeat 3 hours ago (should be timed out with 2h config)
+    stale_session = ComputeSession(
+        user_id=admin_user.id,
+        organization_id=admin_user.organization_id,
+        session_type="ssh",
+        resource_profile="custom",
+        cpu_cores=4,
+        memory_gb=16,
+        status="running",
+        heartbeat_at=datetime.now(timezone.utc) - timedelta(hours=3),
+        heartbeat_token="test-token",
+        environment_version_id=seed_environment["ready_version"].id,
+        machine_type="n2-standard-4",
+    )
+    session.add(stale_session)
+    await session.flush()
+    await session.commit()
+
+    await WorkNodeService.check_heartbeat_timeouts(session)
+
+    result = await session.execute(
+        text("SELECT status FROM compute_sessions WHERE id = :id"),
+        {"id": stale_session.id},
+    )
+    assert result.scalar() == "stopped"

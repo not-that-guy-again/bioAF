@@ -23,6 +23,7 @@ from app.adapters.registry import get_notebook_adapter
 logger = logging.getLogger("bioaf.work_nodes")
 
 DEFAULT_MAX_WORK_NODES_PER_USER = 2
+DEFAULT_IDLE_TIMEOUT_HOURS = 24
 
 
 class WorkNodeService:
@@ -316,10 +317,16 @@ class WorkNodeService:
     @staticmethod
     async def check_heartbeat_timeouts(
         session: AsyncSession,
-        idle_timeout_hours: int = 24,
+        idle_timeout_hours: int | None = None,
     ) -> None:
-        """Terminate SSH sessions with stale heartbeats."""
+        """Terminate SSH sessions with stale heartbeats.
+
+        Reads idle_timeout_hours from platform_config if not provided.
+        """
         try:
+            if idle_timeout_hours is None:
+                idle_timeout_hours = await WorkNodeService._get_idle_timeout(session)
+
             result = await session.execute(
                 select(ComputeSession).where(
                     ComputeSession.session_type == "ssh",
@@ -395,3 +402,16 @@ class WorkNodeService:
             except (ValueError, TypeError):
                 pass
         return DEFAULT_MAX_WORK_NODES_PER_USER
+
+    @staticmethod
+    async def _get_idle_timeout(session: AsyncSession) -> int:
+        result = await session.execute(
+            text("SELECT value FROM platform_config WHERE key = 'work_node_idle_timeout_hours'")
+        )
+        row = result.first()
+        if row:
+            try:
+                return int(row[0])
+            except (ValueError, TypeError):
+                pass
+        return DEFAULT_IDLE_TIMEOUT_HOURS

@@ -19,9 +19,12 @@ from app.schemas.work_node import (
     WorkNodeListResponse,
     MachineTypeResponse,
     UserSummary,
+    WorkNodeSettings,
 )
+from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/api/v1/work-nodes", tags=["work-nodes"])
+settings_router = APIRouter(prefix="/api/v1/settings", tags=["work-node-settings"])
 
 logger = __import__("logging").getLogger("bioaf.work_nodes.api")
 
@@ -241,3 +244,64 @@ async def list_data_mounts(
     ]
 
     return mounts
+
+
+# -- Settings endpoints --
+
+_SETTINGS_KEYS = {
+    "max_nodes_per_user": "work_node_max_per_user",
+    "idle_timeout_hours": "work_node_idle_timeout_hours",
+}
+
+_SETTINGS_DEFAULTS = {
+    "max_nodes_per_user": 2,
+    "idle_timeout_hours": 24,
+}
+
+
+@settings_router.get("/work-nodes")
+async def get_work_node_settings(
+    current_user: dict = require_permission("work_nodes", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    db_keys = list(_SETTINGS_KEYS.values())
+    result = await session.execute(
+        text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)"),
+        {"keys": db_keys},
+    )
+    rows = {r[0]: r[1] for r in result.fetchall()}
+
+    return {field: int(rows.get(db_key, _SETTINGS_DEFAULTS[field])) for field, db_key in _SETTINGS_KEYS.items()}
+
+
+@settings_router.put("/work-nodes")
+async def update_work_node_settings(
+    body: WorkNodeSettings,
+    current_user: dict = require_permission("work_nodes", "configure"),
+    session: AsyncSession = Depends(get_session),
+):
+    user_id = int(current_user["sub"])
+    updates = {
+        "work_node_max_per_user": str(body.max_nodes_per_user),
+        "work_node_idle_timeout_hours": str(body.idle_timeout_hours),
+    }
+
+    for key, value in updates.items():
+        await session.execute(
+            text(
+                "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+            ),
+            {"k": key, "v": value},
+        )
+
+    await log_action(
+        session,
+        user_id=user_id,
+        entity_type="platform_config",
+        entity_id=0,
+        action="update_work_node_settings",
+        details=updates,
+    )
+    await session.commit()
+    return {"status": "ok"}

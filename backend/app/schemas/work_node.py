@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class UserSummary(BaseModel):
@@ -53,3 +53,8 @@ class MachineTypeResponse(BaseModel):
     memory_gb: int
     gpu: str | None = None
     description: str
+
+
+class WorkNodeSettings(BaseModel):
+    max_nodes_per_user: int = Field(default=2, ge=1, le=50)
+    idle_timeout_hours: int = Field(default=24, ge=1, le=720)

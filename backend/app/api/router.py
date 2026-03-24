@@ -58,6 +58,7 @@ from app.api.billing_export import router as billing_export_router
 from app.api.orphaned_resources import router as orphaned_resources_router
 from app.api.roles import router as roles_router
 from app.api.work_nodes import router as work_nodes_router
+from app.api.work_nodes import settings_router as work_node_settings_router
 
 api_router = APIRouter()
 
@@ -119,3 +120,4 @@ api_router.include_router(billing_export_router)
 api_router.include_router(orphaned_resources_router)
 api_router.include_router(roles_router)
 api_router.include_router(work_nodes_router)
+api_router.include_router(work_node_settings_router)
