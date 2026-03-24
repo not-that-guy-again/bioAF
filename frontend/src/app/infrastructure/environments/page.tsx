@@ -1,9 +1,5 @@
-import { redirect } from "next/navigation";
-
 /**
- * Infrastructure environments page now redirects to the unified
- * environments page (ADR-033 versioned compute environments).
+ * Infrastructure environments path renders the unified environments page
+ * (ADR-033 versioned compute environments).
  */
-export default function InfrastructureEnvironmentsRedirect() {
-  redirect("/environments");
-}
+export { default } from "@/app/environments/page";

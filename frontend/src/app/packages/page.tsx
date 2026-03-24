@@ -1,9 +1,5 @@
-import { redirect } from "next/navigation";
-
 /**
- * Package management page now redirects to the unified
- * environments page (ADR-033 versioned compute environments).
+ * Packages path renders the unified environments page
+ * (ADR-033 versioned compute environments).
  */
-export default function PackagesRedirect() {
-  redirect("/environments");
-}
+export { default } from "@/app/environments/page";
