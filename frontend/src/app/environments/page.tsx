@@ -28,6 +28,7 @@ export default function EnvironmentsPage() {
 
   const [environments, setEnvironments] = useState<EnvironmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedEnv, setSelectedEnv] = useState<EnvironmentDetailResponse | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("versions");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -52,7 +53,10 @@ export default function EnvironmentsPage() {
     try {
       const data = await api.get<EnvironmentListResponse>("/api/v1/environments");
       setEnvironments(data.environments);
-    } catch {} finally { setLoading(false); }
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load environments");
+    } finally { setLoading(false); }
   }
 
   async function selectEnvironment(id: number) {
@@ -162,6 +166,12 @@ export default function EnvironmentsPage() {
             <ContentLoading />
           ) : (
           <>
+          {loadError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+              {loadError}
+              <button onClick={loadEnvironments} className="ml-2 underline">Retry</button>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold">Environments</h1>
             {canCreate && (

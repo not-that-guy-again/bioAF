@@ -14,5 +14,9 @@ export default function InfrastructureEnvironmentsRedirect() {
     router.replace("/environments");
   }, [router]);
 
-  return null;
+  return (
+    <div className="flex items-center justify-center h-screen text-gray-400 text-sm">
+      Redirecting to Environments...
+    </div>
+  );
 }
