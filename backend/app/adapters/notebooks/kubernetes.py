@@ -573,7 +573,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 from sqlalchemy import text
 
                 await db.execute(
-                    text("UPDATE notebook_sessions SET status = :status, access_url = :url WHERE id = :id"),
+                    text("UPDATE compute_sessions SET status = :status, access_url = :url WHERE id = :id"),
                     {"status": status, "url": access_url, "id": session_id},
                 )
                 await db.commit()
