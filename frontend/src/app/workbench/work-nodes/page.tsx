@@ -59,14 +59,6 @@ export default function WorkNodesPage() {
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
-  // Settings state
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsMaxNodes, setSettingsMaxNodes] = useState(2);
-  const [settingsIdleTimeout, setSettingsIdleTimeout] = useState(24);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [settingsSuccess, setSettingsSuccess] = useState(false);
-
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     if (permLoading) return;
@@ -173,39 +165,6 @@ export default function WorkNodesPage() {
     } catch {}
   }
 
-  async function loadSettings() {
-    try {
-      const data = await api.get<{ max_nodes_per_user: number; idle_timeout_hours: number }>(
-        "/api/v1/settings/work-nodes"
-      );
-      setSettingsMaxNodes(data.max_nodes_per_user);
-      setSettingsIdleTimeout(data.idle_timeout_hours);
-      setShowSettings(true);
-      setSettingsError(null);
-      setSettingsSuccess(false);
-    } catch {
-      setSettingsError("Failed to load settings");
-      setShowSettings(true);
-    }
-  }
-
-  async function saveSettings() {
-    setSettingsSaving(true);
-    setSettingsError(null);
-    setSettingsSuccess(false);
-    try {
-      await api.put("/api/v1/settings/work-nodes", {
-        max_nodes_per_user: settingsMaxNodes,
-        idle_timeout_hours: settingsIdleTimeout,
-      });
-      setSettingsSuccess(true);
-    } catch (err) {
-      setSettingsError(err instanceof ApiError ? err.message : "Failed to save settings");
-    } finally {
-      setSettingsSaving(false);
-    }
-  }
-
   function formatUptime(startedAt: string | null): string {
     if (!startedAt) return "-";
     const diff = Date.now() - new Date(startedAt).getTime();
@@ -242,24 +201,14 @@ export default function WorkNodesPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold text-gray-900">Work Nodes</h1>
-            <div className="flex gap-2">
-              {canAccess("work_nodes", "view") && (
-                <button
-                  onClick={loadSettings}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
-                >
-                  Settings
-                </button>
-              )}
-              {canAccess("work_nodes", "launch") && (
-                <button
-                  onClick={openLaunchDialog}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
-                >
-                  Launch Work Node
-                </button>
-              )}
-            </div>
+            {canAccess("work_nodes", "launch") && (
+              <button
+                onClick={openLaunchDialog}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+              >
+                Launch Work Node
+              </button>
+            )}
           </div>
 
           {/* Node list */}
@@ -607,70 +556,6 @@ export default function WorkNodesPage() {
                         {launching ? "Launching..." : "Launch Work Node"}
                       </button>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          {/* Settings modal */}
-          {showSettings && (
-            <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowSettings(false)}>
-              <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold">Work Node Settings</h2>
-                  <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-                </div>
-
-                {settingsError && (
-                  <div className="bg-red-50 border border-red-200 rounded p-3 mb-4 text-sm text-red-700">{settingsError}</div>
-                )}
-                {settingsSuccess && (
-                  <div className="bg-green-50 border border-green-200 rounded p-3 mb-4 text-sm text-green-700">Settings saved</div>
-                )}
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Max work nodes per user
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={settingsMaxNodes}
-                      onChange={(e) => setSettingsMaxNodes(Number(e.target.value))}
-                      disabled={!canAccess("work_nodes", "configure")}
-                      className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Maximum concurrent SSH sessions a single user can run</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Idle timeout (hours)
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={720}
-                      value={settingsIdleTimeout}
-                      onChange={(e) => setSettingsIdleTimeout(Number(e.target.value))}
-                      disabled={!canAccess("work_nodes", "configure")}
-                      className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-500"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Auto-stop nodes with no heartbeat after this many hours</p>
-                  </div>
-                </div>
-
-                {canAccess("work_nodes", "configure") && (
-                  <div className="mt-6">
-                    <button
-                      onClick={saveSettings}
-                      disabled={settingsSaving}
-                      className="w-full px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm disabled:opacity-50"
-                    >
-                      {settingsSaving ? "Saving..." : "Save Settings"}
-                    </button>
                   </div>
                 )}
               </div>
