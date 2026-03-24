@@ -66,6 +66,7 @@ Several fields referenced in the provenance specification do not exist in the cu
 Each provenance report contains the following sections, populated to the depth appropriate for the entity level:
 
 **Project-level report:**
+
 - Project metadata (ID, name, description, owner, timestamps, status)
 - Global configuration (default parameters, reference datasets, environment defaults)
 - Audit summary (users who accessed/modified, activity log)
@@ -73,6 +74,7 @@ Each provenance report contains the following sections, populated to the depth a
 - Full lineage DAG (same data as the provenance visualization, serialized)
 
 **Experiment-level report:**
+
 - Experiment metadata (ID, project, name, description, design, protocol, timestamps)
 - Sample index with metadata summary
 - Pipeline run summaries (IDs, tools, versions, statuses, timestamps)
@@ -80,6 +82,7 @@ Each provenance report contains the following sections, populated to the depth a
 - Audit trail for the experiment
 
 **Sample-level report:**
+
 - Sample metadata (ID, experiment, biological attributes, technical attributes)
 - Collection info (timestamp, method)
 - Parent/derived relationships
@@ -89,6 +92,7 @@ Each provenance report contains the following sections, populated to the depth a
 - Audit trail for the sample
 
 **Pipeline run report:**
+
 - Run metadata (ID, pipeline name/version, status, timestamps, cost)
 - Input lineage (files, samples, references)
 - Full parameter set (parameters_json with defaults vs. overrides annotated)
@@ -99,6 +103,7 @@ Each provenance report contains the following sections, populated to the depth a
 - Retry history
 
 **Artifact (file) report:**
+
 - File metadata (ID, filename, type, size, checksums, storage URI)
 - Source lineage (source_type, source_pipeline_run_id -> full run detail)
 - Parent sample (if linked via sample_files)
@@ -114,6 +119,7 @@ Each provenance report contains the following sections, populated to the depth a
 **PDF:** Formal document generated from the Markdown via `weasyprint`. Includes a cover page with entity name, report generation timestamp, and bioAF version. Styled with a clean, professional layout.
 
 **CSV:** Tabular summaries where applicable. One CSV per logical table:
+
 - `sample_manifest.csv` -- one row per sample with all metadata columns
 - `file_manifest.csv` -- one row per file with checksums, sizes, URIs
 - `pipeline_runs.csv` -- one row per run with key metrics
@@ -161,6 +167,7 @@ Provenance report generation requires the `files:download` permission (same as d
 ### Audit Logging
 
 Provenance report generation is logged:
+
 - Entity type and ID
 - Format requested
 - User who generated the report
