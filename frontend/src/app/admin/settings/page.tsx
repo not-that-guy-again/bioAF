@@ -56,12 +56,6 @@ export default function SettingsPage() {
   const [upgradeHistory, setUpgradeHistory] = useState<UpgradeHistoryItem[]>([]);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
-  // Work node settings
-  const [wnMaxNodes, setWnMaxNodes] = useState(2);
-  const [wnIdleTimeout, setWnIdleTimeout] = useState(24);
-  const [wnSaving, setWnSaving] = useState(false);
-  const [wnMessage, setWnMessage] = useState("");
-
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     if (permLoading) return;
@@ -69,17 +63,14 @@ export default function SettingsPage() {
 
     const load = async () => {
       try {
-        const [wh, version, history, wnSettings] = await Promise.all([
+        const [wh, version, history] = await Promise.all([
           api.get<SlackWebhook[]>("/api/notifications/slack-webhooks"),
           api.get<UpdateCheck>("/api/upgrades/check"),
           api.get<{ upgrades: UpgradeHistoryItem[] }>("/api/upgrades/history"),
-          api.get<{ max_nodes_per_user: number; idle_timeout_hours: number }>("/api/v1/settings/work-nodes"),
         ]);
         setWebhooks(wh);
         setUpdateCheck(version);
         setUpgradeHistory(history.upgrades);
-        setWnMaxNodes(wnSettings.max_nodes_per_user);
-        setWnIdleTimeout(wnSettings.idle_timeout_hours);
       } catch {
         // ignore
       }
@@ -149,22 +140,6 @@ export default function SettingsPage() {
       // ignore
     } finally {
       setCheckingUpdate(false);
-    }
-  };
-
-  const handleSaveWorkNodeSettings = async () => {
-    setWnSaving(true);
-    setWnMessage("");
-    try {
-      await api.put("/api/v1/settings/work-nodes", {
-        max_nodes_per_user: wnMaxNodes,
-        idle_timeout_hours: wnIdleTimeout,
-      });
-      setWnMessage("Work node settings saved");
-    } catch {
-      setError("Failed to save work node settings");
-    } finally {
-      setWnSaving(false);
     }
   };
 
@@ -282,45 +257,6 @@ export default function SettingsPage() {
                 Test Email
               </button>
             </div>
-          </div>
-
-          {/* Work Node Settings */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-4">Work Nodes</h2>
-            {wnMessage && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">{wnMessage}</div>}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Max work nodes per user</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={wnMaxNodes}
-                  onChange={(e) => setWnMaxNodes(Number(e.target.value))}
-                  className="w-full px-3 py-2 border rounded"
-                />
-                <p className="text-xs text-gray-500 mt-1">Maximum concurrent SSH sessions a single user can run</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Idle timeout (hours)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={720}
-                  value={wnIdleTimeout}
-                  onChange={(e) => setWnIdleTimeout(Number(e.target.value))}
-                  className="w-full px-3 py-2 border rounded"
-                />
-                <p className="text-xs text-gray-500 mt-1">Auto-stop nodes with no heartbeat after this many hours</p>
-              </div>
-            </div>
-            <button
-              onClick={handleSaveWorkNodeSettings}
-              disabled={wnSaving}
-              className="mt-4 px-4 py-2 bg-bioaf-600 text-white rounded hover:bg-bioaf-700 disabled:opacity-50"
-            >
-              {wnSaving ? "Saving..." : "Save Work Node Settings"}
-            </button>
           </div>
 
           {/* Platform Version & Upgrades */}
