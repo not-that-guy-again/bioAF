@@ -93,14 +93,10 @@ async def list_work_nodes(
 ):
     org_id = int(current_user["org_id"])
     user_id = int(current_user["sub"])
-    can_view_all = await role_service.has_permission(
-        session, int(current_user["role_id"]), "users", "deactivate"
-    )
+    can_view_all = await role_service.has_permission(session, int(current_user["role_id"]), "users", "deactivate")
     filter_user_id = None if can_view_all else user_id
 
-    sessions_list, total = await WorkNodeService.list_work_nodes(
-        session, org_id, user_id=filter_user_id, status=status
-    )
+    sessions_list, total = await WorkNodeService.list_work_nodes(session, org_id, user_id=filter_user_id, status=status)
 
     return WorkNodeListResponse(
         sessions=[_work_node_response(s) for s in sessions_list],
@@ -168,9 +164,7 @@ async def stop_work_node(
     if not compute_session:
         raise HTTPException(404, "Work node not found")
 
-    can_manage_all = await role_service.has_permission(
-        session, int(current_user["role_id"]), "users", "deactivate"
-    )
+    can_manage_all = await role_service.has_permission(session, int(current_user["role_id"]), "users", "deactivate")
     if not can_manage_all and compute_session.user_id != user_id:
         raise HTTPException(403, "Can only stop your own work nodes")
 
@@ -222,9 +216,7 @@ async def list_data_mounts(
     from app.models.project import Project
     from sqlalchemy import select
 
-    result = await session.execute(
-        select(Project).where(Project.id == project_id, Project.organization_id == org_id)
-    )
+    result = await session.execute(select(Project).where(Project.id == project_id, Project.organization_id == org_id))
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Project not found")

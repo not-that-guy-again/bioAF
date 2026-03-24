@@ -26,8 +26,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Skip auth for public endpoints
-        if path in PUBLIC_PATHS or path.startswith("/api/health") or (
-            path.startswith("/api/v1/work-nodes/sessions/") and path.endswith("/heartbeat")
+        if (
+            path in PUBLIC_PATHS
+            or path.startswith("/api/health")
+            or (path.startswith("/api/v1/work-nodes/sessions/") and path.endswith("/heartbeat"))
         ):
             return await call_next(request)
 

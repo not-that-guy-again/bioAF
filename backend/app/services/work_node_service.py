@@ -40,8 +40,7 @@ class WorkNodeService:
         mt = get_machine_type(machine_type)
         if not mt:
             raise ValueError(
-                f"Invalid machine type: {machine_type}. "
-                f"Valid types: {', '.join(sorted(MACHINE_TYPE_NAMES))}"
+                f"Invalid machine type: {machine_type}. Valid types: {', '.join(sorted(MACHINE_TYPE_NAMES))}"
             )
 
         # Validate environment version is ready
@@ -370,8 +369,7 @@ class WorkNodeService:
                                 "entity_id": node.id,
                                 "title": "Work node auto-stopped (no heartbeat)",
                                 "message": (
-                                    f"Work node {node.id} was stopped after "
-                                    f"{idle_hours:.1f}h without a heartbeat"
+                                    f"Work node {node.id} was stopped after {idle_hours:.1f}h without a heartbeat"
                                 ),
                                 "summary": f"Work node {node.id} heartbeat timeout",
                             },
@@ -389,9 +387,7 @@ class WorkNodeService:
 
     @staticmethod
     async def _get_max_nodes_per_user(session: AsyncSession) -> int:
-        result = await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'work_node_max_per_user'")
-        )
+        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'work_node_max_per_user'"))
         row = result.first()
         if row:
             try:

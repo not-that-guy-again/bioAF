@@ -426,23 +426,27 @@ class KubernetesNotebookProvider(NotebookProvider):
             data_mount_paths = session_spec.get("data_mount_paths", [])
             for i, mount_path in enumerate(data_mount_paths):
                 vol_name = f"data-{i}"
-                volume_mounts.append({
-                    "name": vol_name,
-                    "mountPath": f"/data/{mount_path.lstrip('/')}",
-                    "readOnly": True,
-                })
-                volumes.append({
-                    "name": vol_name,
-                    "csi": {
-                        "driver": "gcsfuse.csi.storage.gke.io",
+                volume_mounts.append(
+                    {
+                        "name": vol_name,
+                        "mountPath": f"/data/{mount_path.lstrip('/')}",
                         "readOnly": True,
-                        "volumeAttributes": {
-                            "bucketName": "bioaf-data",
-                            "mountOptions": "implicit-dirs,file-cache:max-size-mb:-1",
-                            "gcsfuseLoggingSeverity": "warning",
+                    }
+                )
+                volumes.append(
+                    {
+                        "name": vol_name,
+                        "csi": {
+                            "driver": "gcsfuse.csi.storage.gke.io",
+                            "readOnly": True,
+                            "volumeAttributes": {
+                                "bucketName": "bioaf-data",
+                                "mountOptions": "implicit-dirs,file-cache:max-size-mb:-1",
+                                "gcsfuseLoggingSeverity": "warning",
+                            },
                         },
-                    },
-                })
+                    }
+                )
 
         notebook_container: dict = {
             "name": "notebook",
