@@ -93,6 +93,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_session_monitor_loop()))
     background_tasks.append(asyncio.create_task(_notebook_image_build_loop()))
     background_tasks.append(asyncio.create_task(_environment_build_poll_loop()))
+    background_tasks.append(asyncio.create_task(_work_node_heartbeat_loop()))
     logger.info("Background tasks started")
 
     yield
@@ -453,6 +454,22 @@ async def _environment_build_poll_loop():
             break
         except Exception as e:
             logger.error("Environment build poll error: %s", e)
+
+
+async def _work_node_heartbeat_loop():
+    """Check work node heartbeat timeouts every 60 seconds."""
+    from app.database import async_session_factory
+    from app.services.work_node_service import WorkNodeService
+
+    while True:
+        try:
+            await asyncio.sleep(60)
+            async with async_session_factory() as session:
+                await WorkNodeService.check_heartbeat_timeouts(session)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Work node heartbeat check error: %s", e)
 
 
 app = FastAPI(
