@@ -10,7 +10,7 @@ A turnkey computational biology platform for small biotech companies (5-50 resea
 ## Features
 
 - **Experiment Tracking** - MINSEQE-compliant metadata, sample management, batch processing, project organization
-- **Compute Orchestration** - Kubernetes (GKE) or SLURM compute via the BioAF Adapter Layer, JupyterHub/RStudio notebooks, auto-scaling, Cloud Build image pipeline
+- **Compute Orchestration** - Kubernetes (GKE) or SLURM compute via the BioAF Adapter Layer, JupyterHub/RStudio notebooks, versioned compute environments, auto-scaling, Cloud Build image pipeline
 - **Pipeline Engine** - Nextflow and Snakemake integration, pipeline catalog, run monitoring, parameter management
 - **Data Management** - File upload/download, dataset browser, GCS storage integration, GEO export, SuperSeries cross-experiment packaging
 - **Results & Visualization** - QC dashboards, cellxgene single-cell viewer, plot archive, search
@@ -34,8 +34,8 @@ A turnkey computational biology platform for small biotech companies (5-50 resea
                     +----------------+-----------------+
                     |        Frontend (Next.js 14)     |
                     |                                  |
-                    |  Experiments  Pipelines  Results |
-                    |  Notebooks   Data       Compute  |
+                    |  Projects   Pipelines   Results  |
+                    |  Workbench  Data & Files  Infra  |
                     +-----------------+----------------+
                                       |
                     +-----------------+-----------------+

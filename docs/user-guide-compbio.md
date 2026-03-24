@@ -35,7 +35,7 @@ Monitor runs from **Pipeline Runs**:
 
 ## Notebook Sessions
 
-Navigate to **Compute** to manage notebook sessions:
+Navigate to **Workbench > Notebooks** to manage notebook sessions:
 
 1. Click **Launch Notebook**
 2. Select environment type: JupyterHub or RStudio
@@ -46,7 +46,7 @@ Sessions auto-stop after idle timeout (configurable). You'll receive a notificat
 
 ## Environments
 
-Navigate to **Environments** to manage versioned compute environments:
+Navigate to **Workbench > Environments** to manage versioned compute environments:
 
 - **Create** a named environment with a description and visibility (team or organization)
 - **Add versions** by uploading a Dockerfile or conda environment.yml definition
@@ -57,7 +57,7 @@ Each environment can have multiple versions, letting you iterate on dependencies
 
 ## Data Management
 
-Navigate to **Data** for file management:
+Navigate to **Data & Files** for file management:
 
 - Browse uploaded files and pipeline outputs
 - Download individual files or datasets
@@ -82,6 +82,6 @@ Access pre-configured analysis templates from **Templates**:
 
 ## Tips
 
-- Use the **Home** dashboard to see active pipeline runs and notebook sessions
+- Use the **Dashboard** to see active pipeline runs and notebook sessions
 - Check **Activity Feed** for team-wide events
 - Set notification preferences for pipeline completions and failures
