@@ -41,6 +41,7 @@ export default function SettingsPage() {
   const [smtpPort, setSmtpPort] = useState("587");
   const [smtpUsername, setSmtpUsername] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
+  const [hasExistingPassword, setHasExistingPassword] = useState(false);
   const [smtpFrom, setSmtpFrom] = useState("");
   const [smtpEncryption, setSmtpEncryption] = useState("starttls");
   const [testEmailTo, setTestEmailTo] = useState("");
@@ -69,7 +70,7 @@ export default function SettingsPage() {
           api.get<SlackWebhook[]>("/api/notifications/slack-webhooks"),
           api.get<UpdateCheck>("/api/upgrades/check"),
           api.get<{ upgrades: UpgradeHistoryItem[] }>("/api/upgrades/history"),
-          api.get<{ host: string; port: number; username: string; from_address: string; encryption: string }>("/api/bootstrap/smtp-settings"),
+          api.get<{ host: string; port: number; username: string; password?: string; from_address: string; encryption: string }>("/api/bootstrap/smtp-settings"),
         ]);
         setWebhooks(wh);
         setUpdateCheck(version);
@@ -80,6 +81,9 @@ export default function SettingsPage() {
           setSmtpUsername(smtp.username);
           setSmtpFrom(smtp.from_address);
           setSmtpEncryption(smtp.encryption);
+        }
+        if (smtp.password) {
+          setHasExistingPassword(true);
         }
       } catch {
         // ignore
@@ -183,7 +187,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} className="w-full px-3 py-2 border rounded" />
+                <input type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder={hasExistingPassword ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (saved)" : "Enter password"} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">From Address</label>

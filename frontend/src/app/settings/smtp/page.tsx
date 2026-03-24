@@ -20,6 +20,7 @@ export default function SettingsSmtpPage() {
   const [smtpPort, setSmtpPort] = useState("587");
   const [smtpUsername, setSmtpUsername] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
+  const [hasExistingPassword, setHasExistingPassword] = useState(false);
   const [smtpFrom, setSmtpFrom] = useState("");
   const [smtpEncryption, setSmtpEncryption] = useState("starttls");
   const [testEmailTo, setTestEmailTo] = useState("");
@@ -36,6 +37,7 @@ export default function SettingsSmtpPage() {
         setSmtpUsername(data.username);
         // Don't populate the masked password into the field
         setSmtpPassword("");
+        setHasExistingPassword(!!data.password);
         setSmtpFrom(data.from_address);
         setSmtpEncryption(data.encryption);
       } catch {
@@ -128,7 +130,7 @@ export default function SettingsSmtpPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="Enter new password" />
+                <input type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder={hasExistingPassword ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (saved)" : "Enter password"} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">From Address</label>
