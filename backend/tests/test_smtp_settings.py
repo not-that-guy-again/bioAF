@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 @pytest.mark.asyncio
@@ -136,10 +136,14 @@ async def test_test_email_sends_to_specified_address(client: AsyncClient, admin_
         headers=headers,
     )
 
-    # Send test email with destination
+    # Send test email with destination (mock the SMTP connection)
+    mock_server = MagicMock()
+    mock_server.__enter__ = MagicMock(return_value=mock_server)
+    mock_server.__exit__ = MagicMock(return_value=False)
+
     with (
         patch("app.services.email_service.EmailService.is_configured", return_value=True),
-        patch("app.services.email_service.EmailService.send_email", return_value=True) as mock_send,
+        patch("smtplib.SMTP", return_value=mock_server) as mock_smtp,
     ):
         resp = await client.post(
             "/api/bootstrap/test-smtp",
@@ -150,9 +154,11 @@ async def test_test_email_sends_to_specified_address(client: AsyncClient, admin_
         data = resp.json()
         assert data["status"] == "sent"
         assert data["to"] == "recipient@example.com"
-        mock_send.assert_called_once()
-        # Verify the destination address was passed
-        assert mock_send.call_args[0][0] == "recipient@example.com"
+        mock_smtp.assert_called_once()
+        mock_server.send_message.assert_called_once()
+        # Verify the destination address was in the message
+        sent_msg = mock_server.send_message.call_args[0][0]
+        assert sent_msg["To"] == "recipient@example.com"
 
 
 @pytest.mark.asyncio
@@ -168,3 +174,46 @@ async def test_test_email_fails_when_smtp_not_configured(client: AsyncClient, ad
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_test_email_surfaces_smtp_error_detail(client: AsyncClient, admin_token: str):
+    """SMTP errors should be returned with human-readable detail."""
+    import smtplib
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    await client.post(
+        "/api/bootstrap/configure-smtp",
+        json={
+            "host": "smtp.example.com",
+            "port": 587,
+            "username": "u",
+            "password": "p",
+            "from_address": "noreply@example.com",
+            "encryption": "starttls",
+        },
+        headers=headers,
+    )
+
+    mock_server = MagicMock()
+    mock_server.__enter__ = MagicMock(return_value=mock_server)
+    mock_server.__exit__ = MagicMock(return_value=False)
+    mock_server.send_message.side_effect = smtplib.SMTPSenderRefused(
+        550, b"Sender address rejected: not verified", "noreply@example.com"
+    )
+
+    with (
+        patch("app.services.email_service.EmailService.is_configured", return_value=True),
+        patch("smtplib.SMTP", return_value=mock_server),
+    ):
+        resp = await client.post(
+            "/api/bootstrap/test-smtp",
+            json={"to": "recipient@example.com"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "failed"
+        assert "rejected the From address" in data["detail"]
+        assert "not verified" in data["detail"]

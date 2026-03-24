@@ -224,6 +224,12 @@ async def test_smtp(body: TestSmtpRequest, request: Request, session: AsyncSessi
     if not EmailService.is_configured():
         return TestSmtpResponse(status="failed", to=body.to, detail="SMTP not configured")
 
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    from app.config import settings as smtp_settings
+
     subject = "bioAF - Test Email"
     body_html = """
     <div style="font-family: sans-serif; max-width: 600px;">
@@ -232,10 +238,75 @@ async def test_smtp(body: TestSmtpRequest, request: Request, session: AsyncSessi
         <p>If you received this, your SMTP settings are working correctly.</p>
     </div>
     """
-    success = EmailService.send_email(body.to, subject, body_html)
-    if success:
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = smtp_settings.smtp_from_address
+    msg["To"] = body.to
+    msg.attach(MIMEText(body_html, "html"))
+
+    try:
+        encryption = getattr(smtp_settings, "smtp_encryption", "starttls")
+        if encryption == "ssl":
+            with smtplib.SMTP_SSL(smtp_settings.smtp_host, smtp_settings.smtp_port, timeout=10) as server:
+                server.login(smtp_settings.smtp_username, smtp_settings.smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_settings.smtp_host, smtp_settings.smtp_port, timeout=10) as server:
+                if encryption == "starttls":
+                    server.starttls()
+                server.login(smtp_settings.smtp_username, smtp_settings.smtp_password)
+                server.send_message(msg)
         return TestSmtpResponse(status="sent", to=body.to, detail=f"Test email sent to {body.to}")
-    return TestSmtpResponse(status="failed", to=body.to, detail="Failed to send test email")
+    except smtplib.SMTPAuthenticationError as e:
+        raw = e.smtp_error.decode() if isinstance(e.smtp_error, bytes) else str(e.smtp_error)
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"Login rejected by the email provider. Check your username and password. (Server said: {raw})",
+        )
+    except smtplib.SMTPRecipientsRefused as e:
+        details = "; ".join(f"{addr}: {err[1].decode()}" for addr, err in e.recipients.items())
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"The email provider refused the recipient address. ({details})",
+        )
+    except smtplib.SMTPSenderRefused as e:
+        raw = e.smtp_error.decode() if isinstance(e.smtp_error, bytes) else str(e.smtp_error)
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"The email provider rejected the From address '{e.sender}'. "
+            f"You may need to verify this address with your provider. (Server said: {raw})",
+        )
+    except smtplib.SMTPResponseException as e:
+        raw = e.smtp_error.decode() if isinstance(e.smtp_error, bytes) else str(e.smtp_error)
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"The email provider returned an error. (Code {e.smtp_code}: {raw})",
+        )
+    except smtplib.SMTPConnectError:
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"Could not connect to {smtp_settings.smtp_host}:{smtp_settings.smtp_port}. "
+            "Check the host, port, and encryption settings.",
+        )
+    except (TimeoutError, OSError) as e:
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"Could not reach the email server at {smtp_settings.smtp_host}:{smtp_settings.smtp_port}. "
+            f"Check your host and port settings. ({e})",
+        )
+    except Exception as e:
+        return TestSmtpResponse(
+            status="failed",
+            to=body.to,
+            detail=f"Unexpected error: {e}",
+        )
 
 
 @router.post("/complete")
