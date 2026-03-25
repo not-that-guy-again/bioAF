@@ -53,11 +53,7 @@ async def _seed_experiment(session, org_id: int, owner_id: int) -> dict:
         ),
         {"org": org_id, "owner": owner_id, "params": json.dumps({"aligner": "star"})},
     )
-    await session.execute(
-        text(
-            "INSERT INTO pipeline_run_samples (id, pipeline_run_id, sample_id) VALUES (1, 1, 1)"
-        )
-    )
+    await session.execute(text("INSERT INTO pipeline_run_samples (id, pipeline_run_id, sample_id) VALUES (1, 1, 1)"))
     await session.commit()
     return {"project_id": 1, "experiment_id": 1, "sample_id": 1, "file_id": 1, "pipeline_run_id": 1}
 
