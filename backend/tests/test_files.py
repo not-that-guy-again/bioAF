@@ -239,6 +239,49 @@ async def test_link_file_to_experiment(client, admin_token, sample_file, sample_
 
 
 @pytest.mark.asyncio
+async def test_link_already_linked_file_does_not_move_gcs(client, admin_token, session, admin_user):
+    """Re-linking a file to the same experiment must not attempt a GCS move."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.experiment import Experiment
+    from app.models.file import File
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="Already Linked Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    # File already linked to the experiment (e.g. a pipeline output)
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri=f"gs://bioaf-results/experiments/{exp.id}/pipeline-runs/1/plot.png",
+        filename="plot.png",
+        size_bytes=1000,
+        file_type="png",
+        uploader_user_id=admin_user.id,
+        experiment_id=exp.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    mock_move = AsyncMock()
+    with patch("app.services.file_organization.GcsStorageService.move_file", mock_move):
+        resp = await client.post(
+            f"/api/files/{f.id}/link",
+            json={"experiment_id": exp.id, "sample_id": None},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert resp.status_code == 200
+    mock_move.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_link_file_moves_to_raw_bucket(client, admin_token, session, admin_user):
     """Linking a file should call FileOrganizationService to move it in GCS."""
     from unittest.mock import AsyncMock, patch

@@ -401,9 +401,10 @@ async def link_file(
         file.project_id = body.project_id
 
     if body.experiment_id is not None:
-        from app.services.file_organization import FileOrganizationService
+        if file.experiment_id != body.experiment_id:
+            from app.services.file_organization import FileOrganizationService
 
-        await FileOrganizationService.assign_file_to_experiment(session, file_id, body.experiment_id, user_id)
+            await FileOrganizationService.assign_file_to_experiment(session, file_id, body.experiment_id, user_id)
 
         # Auto-transition experiment status for FASTQ files
         if file.file_type == "fastq":
