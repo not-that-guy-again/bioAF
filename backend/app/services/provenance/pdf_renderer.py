@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import markdown as md_lib
-import weasyprint
-
 from app.services.provenance.markdown_renderer import MarkdownRenderer
 
 _CSS = """\
@@ -74,6 +71,9 @@ code { font-family: "Courier New", monospace; font-size: 10px; }
 class PdfRenderer:
     @staticmethod
     def render(entity_type: str, json_report: dict[str, Any]) -> bytes:
+        import markdown as md_lib
+        import weasyprint
+
         md_text = MarkdownRenderer.render(entity_type, json_report)
         html_body = md_lib.markdown(md_text, extensions=["tables"])
         full_html = f"""\
