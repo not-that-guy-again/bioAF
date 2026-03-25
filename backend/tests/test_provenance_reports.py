@@ -398,7 +398,6 @@ class TestIntegration:
         """gather_artifact should find downstream pipeline runs when input_files_json
         stores plain integer arrays (the format written by trigger_service)."""
         org_id = admin_user.organization_id
-        owner_id = admin_user.id
 
         # Raw input file
         await session.execute(

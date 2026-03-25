@@ -249,6 +249,7 @@ async def list_files(
     request: Request,
     file_type: str | None = None,
     experiment_id: int | None = None,
+    project_id: int | None = None,
     page: int = 1,
     page_size: int = 25,
     session: AsyncSession = Depends(get_session),
@@ -256,7 +257,7 @@ async def list_files(
     current_user = request.state.current_user
     org_id = int(current_user["org_id"])
 
-    files, total = await FileService.list_files(session, org_id, file_type, experiment_id, page, page_size)
+    files, total = await FileService.list_files(session, org_id, file_type, experiment_id, project_id, page, page_size)
     file_ids = [f.id for f in files]
     sample_ids_map = await FileService.get_sample_ids_for_files(session, file_ids)
     return FileListResponse(

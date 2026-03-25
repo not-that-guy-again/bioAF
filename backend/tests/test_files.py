@@ -832,6 +832,48 @@ async def test_link_file_to_experiment_inherits_project_id(client, admin_token, 
     assert data["project_id"] == project.id
 
 
+@pytest.mark.asyncio
+async def test_list_files_filter_by_project_id(client, admin_token, session, admin_user, sample_file):
+    """GET /api/files?project_id=N should return only files linked to that project."""
+    from app.models.project import Project
+
+    proj = Project(
+        organization_id=admin_user.organization_id,
+        name="Filter Project",
+        owner_user_id=admin_user.id,
+        created_by_user_id=admin_user.id,
+    )
+    session.add(proj)
+    await session.flush()
+
+    sample_file.project_id = proj.id
+    await session.commit()
+
+    # Create a second file NOT linked to the project
+    from app.models.file import File
+
+    other = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://test-bucket/other.csv",
+        filename="other.csv",
+        size_bytes=200,
+        file_type="csv",
+        uploader_user_id=admin_user.id,
+    )
+    session.add(other)
+    await session.commit()
+
+    resp = await client.get(
+        f"/api/files?project_id={proj.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["files"][0]["id"] == sample_file.id
+    assert data["files"][0]["project_id"] == proj.id
+
+
 def test_parse_illumina_filename():
     from app.services.upload_service import UploadService
 

@@ -68,6 +68,7 @@ class FileService:
         org_id: int,
         file_type: str | None = None,
         experiment_id: int | None = None,
+        project_id: int | None = None,
         page: int = 1,
         page_size: int = 25,
     ) -> tuple[list[File], int]:
@@ -81,6 +82,10 @@ class FileService:
         if experiment_id is not None:
             query = query.where(File.experiment_id == experiment_id)
             count_query = count_query.where(File.experiment_id == experiment_id)
+
+        if project_id is not None:
+            query = query.where(File.project_id == project_id)
+            count_query = count_query.where(File.project_id == project_id)
 
         total_result = await session.execute(count_query)
         total = total_result.scalar() or 0
