@@ -498,6 +498,164 @@ async def test_reconcile_requires_admin(client, viewer_token):
     assert resp.status_code == 403
 
 
+# --- Sample association tests ---
+
+
+@pytest.mark.asyncio
+async def test_link_file_to_sample_returns_sample_ids(client, admin_token, session, admin_user):
+    """After linking a file to a sample, GET /api/files/{id} should include that sample_id."""
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from app.models.sample import Sample
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="Sample Link Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    sample = Sample(
+        experiment_id=exp.id,
+        sample_id_external="SMP-001",
+    )
+    session.add(sample)
+    await session.flush()
+
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://test-bucket/reads.fastq.gz",
+        filename="reads.fastq.gz",
+        size_bytes=1000,
+        file_type="fastq",
+        uploader_user_id=admin_user.id,
+        experiment_id=exp.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    resp = await client.post(
+        f"/api/files/{f.id}/link",
+        json={"sample_id": sample.id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+
+    resp2 = await client.get(
+        f"/api/files/{f.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    data = resp2.json()
+    assert sample.id in data["sample_ids"]
+
+
+@pytest.mark.asyncio
+async def test_link_file_to_sample_idempotent(client, admin_token, session, admin_user):
+    """Linking the same file to the same sample twice should not create duplicates."""
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from app.models.sample import Sample
+    from sqlalchemy import text
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="Dedup Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    sample = Sample(
+        experiment_id=exp.id,
+        sample_id_external="SMP-002",
+    )
+    session.add(sample)
+    await session.flush()
+
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://test-bucket/reads2.fastq.gz",
+        filename="reads2.fastq.gz",
+        size_bytes=1000,
+        file_type="fastq",
+        uploader_user_id=admin_user.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    for _ in range(3):
+        await client.post(
+            f"/api/files/{f.id}/link",
+            json={"sample_id": sample.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    count = (
+        await session.execute(
+            text("SELECT COUNT(*) FROM sample_files WHERE file_id = :fid AND sample_id = :sid").bindparams(
+                fid=f.id, sid=sample.id
+            )
+        )
+    ).scalar_one()
+    assert count == 1, f"Expected 1 sample_files row, got {count}"
+
+
+@pytest.mark.asyncio
+async def test_list_files_includes_sample_ids(client, admin_token, session, admin_user):
+    """GET /api/files should include sample_ids for each file."""
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from app.models.sample import Sample
+    from sqlalchemy import text
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        name="List Sample Ids Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    sample = Sample(
+        experiment_id=exp.id,
+        sample_id_external="SMP-003",
+    )
+    session.add(sample)
+    await session.flush()
+
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://test-bucket/reads3.fastq.gz",
+        filename="reads3.fastq.gz",
+        size_bytes=1000,
+        file_type="fastq",
+        uploader_user_id=admin_user.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    await session.execute(
+        text("INSERT INTO sample_files (sample_id, file_id) VALUES (:sid, :fid)").bindparams(sid=sample.id, fid=f.id)
+    )
+    await session.commit()
+
+    resp = await client.get(
+        "/api/files",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    file_data = next((x for x in resp.json()["files"] if x["id"] == f.id), None)
+    assert file_data is not None
+    assert sample.id in file_data["sample_ids"]
+
+
 @pytest.mark.asyncio
 async def test_list_files_filter_by_experiment_id(client, admin_token, sample_file, sample_experiment, session):
     """GET /api/files?experiment_id=N should return only files for that experiment."""

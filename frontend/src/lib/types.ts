@@ -721,6 +721,7 @@ export interface FileResponse {
   uploader: UserSummary | null;
   project_id: number | null;
   experiment_id: number | null;
+  sample_ids: number[];
   source_type: string;
   source_pipeline_run_id: number | null;
   upload_timestamp: string;

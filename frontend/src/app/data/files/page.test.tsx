@@ -67,6 +67,7 @@ const makeFile = (overrides: Record<string, unknown> = {}) => ({
   uploader: { id: 1, name: "Maria", email: "maria@test.com" },
   project_id: null,
   experiment_id: null,
+  sample_ids: [],
   upload_timestamp: "2026-03-01T00:00:00Z",
   created_at: "2026-03-01T00:00:00Z",
   ...overrides,

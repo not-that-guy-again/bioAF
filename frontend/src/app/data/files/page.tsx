@@ -301,6 +301,13 @@ export default function DataFilesPage() {
     return null;
   };
 
+  const sampleLabel = (file: FileResponse) => {
+    if (!file.sample_ids || file.sample_ids.length === 0) return null;
+    return file.sample_ids.length === 1
+      ? `1 sample`
+      : `${file.sample_ids.length} samples`;
+  };
+
   const linkModalHasSelection = !!(linkProjectId || linkExperimentId || linkSampleId);
 
   return (
@@ -489,13 +496,20 @@ export default function DataFilesPage() {
                         </td>
                         <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
                           {associationLabel(file) ? (
-                            <span className="text-gray-700 flex items-center gap-1.5">
-                              {associationBadge(file) === "project" && (
-                                <span className="text-xs text-purple-600 font-medium bg-purple-50 px-1.5 py-0.5 rounded">
-                                  Project
+                            <span className="text-gray-700 flex flex-col gap-0.5">
+                              <span className="flex items-center gap-1.5">
+                                {associationBadge(file) === "project" && (
+                                  <span className="text-xs text-purple-600 font-medium bg-purple-50 px-1.5 py-0.5 rounded">
+                                    Project
+                                  </span>
+                                )}
+                                {associationLabel(file)}
+                              </span>
+                              {sampleLabel(file) && (
+                                <span className="text-xs text-teal-700 font-medium bg-teal-50 px-1.5 py-0.5 rounded w-fit">
+                                  {sampleLabel(file)}
                                 </span>
                               )}
-                              {associationLabel(file)}
                             </span>
                           ) : (
                             <span className="flex items-center gap-2">
@@ -647,6 +661,18 @@ export default function DataFilesPage() {
                     <dt className="text-xs font-medium text-gray-500 uppercase">Experiment</dt>
                     <dd className="mt-0.5 text-sm text-gray-900">
                       {viewingFile.experiment_id ? experimentName(viewingFile.experiment_id) : "---"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 uppercase">Sample</dt>
+                    <dd className="mt-0.5 text-sm text-gray-900">
+                      {viewingFile.sample_ids && viewingFile.sample_ids.length > 0
+                        ? viewingFile.sample_ids.map((id) => (
+                            <span key={id} className="inline-block mr-1 px-1.5 py-0.5 bg-teal-50 text-teal-700 text-xs rounded">
+                              #{id}
+                            </span>
+                          ))
+                        : "---"}
                     </dd>
                   </div>
                   <div>

@@ -30,6 +30,7 @@ class FileResponse(BaseModel):
     uploader: UserSummary | None = None
     project_id: int | None = None
     experiment_id: int | None = None
+    sample_ids: list[int] = []
     source_type: str = "upload"
     source_pipeline_run_id: int | None = None
     sha256_checksum: str | None = None
