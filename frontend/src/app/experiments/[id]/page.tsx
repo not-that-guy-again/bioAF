@@ -1065,16 +1065,16 @@ export default function ExperimentDetailPage() {
                 <h2 className="text-lg font-semibold">Audit Trail ({auditTotal} entries)</h2>
                 <div className="flex gap-2">
                   <button
-                    onClick={async () => {
-                      const blob = await api.post<Blob>(`/api/experiments/${id}/audit/export`, { format: "csv" });
+                    onClick={() => {
+                      api.download(`/api/experiments/${id}/audit/export`, "POST", { format: "csv" });
                     }}
                     className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50"
                   >
                     Export CSV
                   </button>
                   <button
-                    onClick={async () => {
-                      const blob = await api.post<Blob>(`/api/experiments/${id}/audit/export`, { format: "json" });
+                    onClick={() => {
+                      api.download(`/api/experiments/${id}/audit/export`, "POST", { format: "json" });
                     }}
                     className="border px-3 py-1.5 rounded text-sm hover:bg-gray-50"
                   >
