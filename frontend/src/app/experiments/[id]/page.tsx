@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import { ExperimentStatusBadge } from "@/components/experiments/ExperimentStatusBadge";
 import { SampleQCBadge } from "@/components/experiments/SampleQCBadge";
 import { GeoExportModal } from "@/components/experiments/GeoExportModal";
+import { DataExportModal } from "@/components/experiments/DataExportModal";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { PlotModal } from "@/components/shared/PlotModal";
 import { DetailModal } from "@/components/shared/DetailModal";
@@ -62,6 +63,7 @@ export default function ExperimentDetailPage() {
   const [notebookSessions, setNotebookSessions] = useState<NotebookSession[]>([]);
   const [pipelineRuns, setPipelineRuns] = useState<PipelineRun[]>([]);
   const [showGeoExport, setShowGeoExport] = useState(false);
+  const [showDataExport, setShowDataExport] = useState(false);
   const [editingOverview, setEditingOverview] = useState(false);
   const [overviewForm, setOverviewForm] = useState<ExperimentUpdateRequest>({});
   const [overviewError, setOverviewError] = useState("");
@@ -395,12 +397,20 @@ export default function ExperimentDetailPage() {
                 const user = getCurrentUser();
                 const role = (user?.role_name as string) || "viewer";
                 return ["admin", "comp_bio"].includes(role) ? (
-                  <button
-                    onClick={() => setShowGeoExport(true)}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700"
-                  >
-                    Export to GEO
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setShowDataExport(true)}
+                      className="bg-gray-100 text-gray-800 px-4 py-2 rounded-md text-sm hover:bg-gray-200"
+                    >
+                      Export Data
+                    </button>
+                    <button
+                      onClick={() => setShowGeoExport(true)}
+                      className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700"
+                    >
+                      Export to GEO
+                    </button>
+                  </>
                 ) : null;
               })()}
             </div>
@@ -1066,6 +1076,12 @@ export default function ExperimentDetailPage() {
               </div>
             </div>
           )}
+          <DataExportModal
+            experimentId={Number(id)}
+            experimentName={experiment?.name ?? ""}
+            isOpen={showDataExport}
+            onClose={() => setShowDataExport(false)}
+          />
           <GeoExportModal
             experimentId={Number(id)}
             isOpen={showGeoExport}
