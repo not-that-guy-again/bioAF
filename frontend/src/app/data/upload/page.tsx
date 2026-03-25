@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { api } from "@/lib/api";
+import { suggestFilename, todayDateStr } from "@/lib/fileNaming";
 import type {
   ExperimentListResponse,
   FileResponse,
@@ -14,11 +15,13 @@ import type {
 interface ProjectOption {
   id: number;
   name: string;
+  code: string | null;
 }
 
 interface ExperimentOption {
   id: number;
   name: string;
+  code: string | null;
   status: string;
 }
 
@@ -34,6 +37,9 @@ interface FileItem {
   status: FileStatus;
   progress: number;
   error?: string;
+  // rename suggestion state
+  suggestedName: string | null;
+  nameAccepted: boolean | null; // null = undecided
 }
 
 export default function DataUploadPage() {
@@ -54,7 +60,7 @@ export default function DataUploadPage() {
     api
       .get<ProjectListResponse>("/api/projects?page_size=100")
       .then((data) =>
-        setProjects(data.projects.map((p) => ({ id: p.id, name: p.name }))),
+        setProjects(data.projects.map((p) => ({ id: p.id, name: p.name, code: p.code ?? null }))),
       )
       .catch(() => setProjects([]));
   }, []);
@@ -69,7 +75,7 @@ export default function DataUploadPage() {
       .get<ExperimentListResponse>(`/api/experiments${qs}`)
       .then((data) =>
         setExperiments(
-          data.experiments.map((e) => ({ id: e.id, name: e.name, status: e.status })),
+          data.experiments.map((e) => ({ id: e.id, name: e.name, code: e.code ?? null, status: e.status })),
         ),
       )
       .catch(() => setExperiments([]));
@@ -95,6 +101,31 @@ export default function DataUploadPage() {
       .catch(() => setSamples([]));
   }, [experimentId]);
 
+  // Recompute suggested names whenever association changes
+  useEffect(() => {
+    const proj = projects.find((p) => String(p.id) === projectId);
+    const exp = experiments.find((e) => String(e.id) === experimentId);
+    const smp = sampleId
+      ? samples.find((s) => String(s.id) === sampleId)
+      : null;
+
+    const dateStr = todayDateStr();
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.status !== "queued") return item;
+        const suggested = suggestFilename(item.file.name, {
+          projectCode: proj?.code ?? null,
+          experimentCode: exp?.code ?? null,
+          sampleId: smp?.label ?? null,
+          dateStr,
+        });
+        // Reset decision when association changes (but only if not already uploaded)
+        return { ...item, suggestedName: suggested, nameAccepted: null };
+      }),
+    );
+  }, [projectId, experimentId, sampleId, projects, experiments, samples]);
+
   const addFiles = (incoming: File[]) => {
     const accepted = incoming.filter(
       (f) =>
@@ -106,16 +137,36 @@ export default function DataUploadPage() {
         f.name.endsWith(".csv") ||
         f.name.endsWith(".tsv"),
     );
+
+    const proj = projects.find((p) => String(p.id) === projectId);
+    const exp = experiments.find((e) => String(e.id) === experimentId);
+    const smp = sampleId ? samples.find((s) => String(s.id) === sampleId) : null;
+    const dateStr = todayDateStr();
+
     setItems((prev) => [
       ...prev,
-      ...accepted.map((f) => ({ file: f, status: "queued" as FileStatus, progress: 0 })),
+      ...accepted.map((f) => {
+        const suggested = suggestFilename(f.name, {
+          projectCode: proj?.code ?? null,
+          experimentCode: exp?.code ?? null,
+          sampleId: smp?.label ?? null,
+          dateStr,
+        });
+        return {
+          file: f,
+          status: "queued" as FileStatus,
+          progress: 0,
+          suggestedName: suggested,
+          nameAccepted: null as boolean | null,
+        };
+      }),
     ]);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     addFiles(Array.from(e.dataTransfer.files));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) addFiles(Array.from(e.target.files));
@@ -128,6 +179,9 @@ export default function DataUploadPage() {
   const setItemState = (idx: number, patch: Partial<FileItem>) => {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
   };
+
+  const acceptRename = (idx: number) => setItemState(idx, { nameAccepted: true });
+  const rejectRename = (idx: number) => setItemState(idx, { nameAccepted: false });
 
   const uploadAll = async () => {
     setUploading(true);
@@ -142,9 +196,17 @@ export default function DataUploadPage() {
 
       setItemState(i, { status: "uploading", progress: 0 });
 
+      const item = items[i];
+      // Use accepted suggested name; if undecided with a suggestion, accept by default
+      const useFilename =
+        item.nameAccepted === false
+          ? undefined // keep original (don't pass override)
+          : item.suggestedName ?? undefined;
+
       try {
-        await api.uploadSigned<FileResponse>(items[i].file, {
+        await api.uploadSigned<FileResponse>(item.file, {
           ...opts,
+          filename: useFilename,
           onProgress: (pct) => setItemState(i, { progress: pct }),
         });
         setItemState(i, { status: "complete", progress: 100 });
@@ -293,11 +355,13 @@ export default function DataUploadPage() {
             {items.length > 0 && (
               <div className="bg-white rounded-lg shadow p-4">
                 <h3 className="font-medium mb-3">Files ({items.length})</h3>
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                   {items.map((item, idx) => (
-                    <li key={`${item.file.name}-${idx}`} className="text-sm">
+                    <li key={`${item.file.name}-${idx}`} className="text-sm border-b last:border-0 pb-3 last:pb-0">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="truncate flex-1 mr-3">{item.file.name}</span>
+                        <span className="truncate flex-1 mr-3 font-mono text-xs">
+                          {item.file.name}
+                        </span>
                         <span className="text-gray-400 mr-3 shrink-0">
                           {(item.file.size / 1024 / 1024).toFixed(1)} MB
                         </span>
@@ -311,6 +375,47 @@ export default function DataUploadPage() {
                           </button>
                         )}
                       </div>
+
+                      {/* Advisory rename suggestion */}
+                      {item.status === "queued" && item.suggestedName && item.nameAccepted === null && (
+                        <div className="mt-1.5 flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 rounded px-2.5 py-2">
+                          <span className="text-amber-700 shrink-0 mt-0.5">Suggested name:</span>
+                          <span className="font-mono text-amber-900 flex-1 break-all">{item.suggestedName}</span>
+                          <div className="flex gap-1 shrink-0 ml-1">
+                            <button
+                              onClick={() => acceptRename(idx)}
+                              className="px-2 py-0.5 bg-amber-600 text-white rounded hover:bg-amber-700"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => rejectRename(idx)}
+                              className="px-2 py-0.5 border border-amber-400 text-amber-700 rounded hover:bg-amber-100"
+                            >
+                              Keep original
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {item.status === "queued" && item.suggestedName && item.nameAccepted === true && (
+                        <p className="mt-1 text-xs text-green-700 font-mono">
+                          Will upload as: {item.suggestedName}
+                        </p>
+                      )}
+
+                      {item.status === "queued" && item.suggestedName && item.nameAccepted === false && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          Keeping original name.{" "}
+                          <button
+                            className="underline text-gray-500 hover:text-gray-700"
+                            onClick={() => setItemState(idx, { nameAccepted: null })}
+                          >
+                            Reconsider
+                          </button>
+                        </p>
+                      )}
+
                       <ProgressBar item={item} />
                       {item.status === "error" && item.error && (
                         <p className="text-xs text-red-600 mt-1">{item.error}</p>
@@ -366,7 +471,7 @@ function ProgressBar({ item }: { item: FileItem }) {
         : "bg-blue-500";
 
   return (
-    <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+    <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden mt-1">
       <div
         className={`${barColor} h-1.5 rounded-full transition-all duration-300`}
         style={{ width: `${item.status === "error" ? 100 : item.progress}%` }}

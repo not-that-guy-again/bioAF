@@ -94,6 +94,7 @@ interface SignedUploadOptions {
   projectId?: number;
   experimentId?: number;
   sampleId?: number;
+  filename?: string;
   onProgress?: (pct: number) => void;
 }
 
@@ -106,7 +107,7 @@ async function uploadFileSigned<T>(
 ): Promise<T> {
   // Step 1: get a signed URL and upload_id from the backend
   const initiateBody: Record<string, unknown> = {
-    filename: file.name,
+    filename: options.filename ?? file.name,
     expected_size_bytes: file.size,
   };
   if (options.projectId != null) {

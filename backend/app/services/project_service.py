@@ -11,6 +11,7 @@ from app.models.project_sample import ProjectSample
 from app.models.sample import Sample
 from app.schemas.project import ProjectCreate, ProjectSamplesAdd, ProjectUpdate
 from app.services.audit_service import log_action
+from app.services.code_service import CodeService
 
 
 class ProjectService:
@@ -24,9 +25,12 @@ class ProjectService:
             if missing:
                 raise HTTPException(404, f"Samples not found: {sorted(missing)}")
 
+        code = await CodeService.next_project_code(session, org_id, data.name)
+
         project = Project(
             organization_id=org_id,
             name=data.name,
+            code=code,
             description=data.description,
             hypothesis=data.hypothesis,
             owner_user_id=user_id,

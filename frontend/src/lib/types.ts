@@ -124,6 +124,7 @@ export interface ProjectSummary {
 export interface Project {
   id: number;
   name: string;
+  code: string | null;
   description: string | null;
   hypothesis: string | null;
   status: string | null;
@@ -201,6 +202,7 @@ export interface ProvenanceDAG {
 export interface Experiment {
   id: number;
   name: string;
+  code: string | null;
   project: ProjectSummary | null;
   template_id: number | null;
   template_name: string | null;
