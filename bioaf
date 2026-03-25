@@ -13,6 +13,11 @@ ENV_FILE="$SCRIPT_DIR/docker/.env"
 
 DC="docker compose -f $COMPOSE_FILE --env-file $ENV_FILE"
 
+# --progress is a global docker compose flag; must precede the build subcommand.
+# Use the fancy TTY display when stdout is a real terminal, plain text otherwise.
+[ -t 1 ] && _progress="auto" || _progress="plain"
+DC_BUILD="docker compose --progress=$_progress -f $COMPOSE_FILE --env-file $ENV_FILE build"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -20,9 +25,6 @@ red()    { printf '\033[0;31m%s\033[0m\n' "$*"; }
 green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[0;33m%s\033[0m\n' "$*"; }
 bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
-
-# Use fancy BuildKit progress display when stdout is a real TTY; plain otherwise.
-[ -t 1 ] && DC_BUILD_PROGRESS="--progress=auto" || DC_BUILD_PROGRESS="$DC_BUILD_PROGRESS"
 
 wait_for_db() {
     echo "Waiting for database to be ready..."
@@ -135,7 +137,7 @@ for v in cfg.get('volumes', {}).values():
 
     # Build and start
     bold "Building and starting containers..."
-    $DC build $DC_BUILD_PROGRESS
+    $DC_BUILD
     $DC up -d
 
     # Wait for DB
@@ -269,7 +271,7 @@ cmd_update() {
     git -C "$SCRIPT_DIR" pull
 
     echo "Rebuilding containers..."
-    $DC build $DC_BUILD_PROGRESS
+    $DC_BUILD
     $DC up -d
 
     wait_for_db
@@ -284,11 +286,11 @@ cmd_build() {
     local service="${1:-}"
     if [ -n "$service" ]; then
         bold "=== Building $service ==="
-        $DC build $DC_BUILD_PROGRESS "$service"
+        $DC_BUILD "$service"
         green "$service built."
     else
         bold "=== Building All Services ==="
-        $DC build $DC_BUILD_PROGRESS
+        $DC_BUILD
         green "All services built."
     fi
 }
