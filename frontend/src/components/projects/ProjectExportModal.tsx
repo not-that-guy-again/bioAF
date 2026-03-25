@@ -222,7 +222,7 @@ export function ProjectExportModal({ projectId, projectName, isOpen, onClose }: 
             </div>
             {isLarge && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                This export is larger than 1 GB. We recommend using "Get Download Link" instead of downloading
+                This export is larger than 1 GB. We recommend using &ldquo;Get Download Link&rdquo; instead of downloading
                 directly.
               </p>
             )}
