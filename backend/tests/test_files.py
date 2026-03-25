@@ -772,6 +772,66 @@ async def test_file_response_includes_project_id(client, admin_token, sample_fil
 # --- Upload Service Unit Tests ---
 
 
+@pytest.mark.asyncio
+async def test_link_file_to_experiment_inherits_project_id(client, admin_token, session, admin_user):
+    """Linking a file to an experiment should set project_id from the experiment's project."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.models.experiment import Experiment
+    from app.models.file import File
+    from app.models.project import Project
+
+    project = Project(
+        organization_id=admin_user.organization_id,
+        name="Inherit Project",
+        status="active",
+        owner_user_id=admin_user.id,
+    )
+    session.add(project)
+    await session.flush()
+
+    exp = Experiment(
+        organization_id=admin_user.organization_id,
+        project_id=project.id,
+        name="Inherit Exp",
+        owner_user_id=admin_user.id,
+        status="registered",
+    )
+    session.add(exp)
+    await session.flush()
+
+    f = File(
+        organization_id=admin_user.organization_id,
+        gcs_uri="gs://test-bucket/inherit.fastq.gz",
+        filename="inherit.fastq.gz",
+        size_bytes=1000,
+        file_type="fastq",
+        uploader_user_id=admin_user.id,
+    )
+    session.add(f)
+    await session.flush()
+    await session.commit()
+
+    with patch(
+        "app.services.file_organization.GcsStorageService.move_file",
+        new_callable=AsyncMock,
+        return_value=f"gs://test-bucket/experiments/{exp.id}/inherit.fastq.gz",
+    ):
+        resp = await client.post(
+            f"/api/files/{f.id}/link",
+            json={"experiment_id": exp.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert resp.status_code == 200
+
+    resp2 = await client.get(
+        f"/api/files/{f.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    data = resp2.json()
+    assert data["project_id"] == project.id
+
+
 def test_parse_illumina_filename():
     from app.services.upload_service import UploadService
 
