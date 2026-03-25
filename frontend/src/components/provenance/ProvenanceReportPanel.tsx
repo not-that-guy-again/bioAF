@@ -74,23 +74,48 @@ export function ProvenanceReportPanel({ entityType, entityId, entityName }: Prov
 
       const entity = report.entity as Record<string, unknown> | undefined;
       if (entity) {
-        lines.push("## Entity Details");
+        // Separate scalar fields from nested collections
+        const scalarLines: string[] = [];
+        const collectionLines: string[] = [];
+
         for (const [key, val] of Object.entries(entity)) {
-          if (val != null && val !== "") {
-            lines.push(`- **${key}:** ${String(val)}`);
+          if (val == null || val === "") continue;
+
+          if (Array.isArray(val)) {
+            const label = key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+            collectionLines.push(`- **${label}:** ${val.length} item${val.length !== 1 ? "s" : ""}`);
+          } else if (typeof val === "object") {
+            // Objects: user refs show name/email, nested file groups show counts
+            const obj = val as Record<string, unknown>;
+            if (obj.email) {
+              scalarLines.push(`- **${key}:** ${obj.name || obj.email}`);
+            } else if (obj.raw !== undefined || obj.results !== undefined) {
+              const rawCount = Array.isArray(obj.raw) ? obj.raw.length : 0;
+              const resCount = Array.isArray(obj.results) ? obj.results.length : 0;
+              collectionLines.push(`- **Files:** ${rawCount} raw, ${resCount} results`);
+            } else if (obj.files !== undefined || obj.samples !== undefined) {
+              // inputs/outputs groupings
+              for (const [subKey, subVal] of Object.entries(obj)) {
+                if (Array.isArray(subVal)) {
+                  const label = subKey.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                  collectionLines.push(`- **${label}:** ${subVal.length}`);
+                }
+              }
+            }
+          } else {
+            scalarLines.push(`- **${key}:** ${String(val)}`);
           }
         }
-        lines.push("");
-      }
 
-      const lineage = report.lineage as Record<string, unknown[]> | undefined;
-      if (lineage) {
-        for (const [section, items] of Object.entries(lineage)) {
-          if (Array.isArray(items) && items.length > 0) {
-            lines.push(`## ${section.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}`);
-            lines.push(`${items.length} item${items.length !== 1 ? "s" : ""}`);
-            lines.push("");
-          }
+        if (scalarLines.length > 0) {
+          lines.push("## Entity Details");
+          lines.push(...scalarLines);
+          lines.push("");
+        }
+        if (collectionLines.length > 0) {
+          lines.push("## Related Data");
+          lines.push(...collectionLines);
+          lines.push("");
         }
       }
 
