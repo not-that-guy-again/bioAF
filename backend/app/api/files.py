@@ -54,6 +54,7 @@ async def initiate_upload(
             filename=body.filename,
             expected_size=body.expected_size_bytes,
             expected_md5=body.expected_md5,
+            project_id=body.project_id,
             experiment_id=body.experiment_id,
             sample_ids=body.sample_ids,
         )
@@ -395,6 +396,9 @@ async def link_file(
     file = await FileService.get_file(session, file_id, org_id)
     if not file:
         raise HTTPException(404, "File not found")
+
+    if body.project_id is not None:
+        file.project_id = body.project_id
 
     if body.experiment_id is not None:
         from app.services.file_organization import FileOrganizationService

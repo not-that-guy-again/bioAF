@@ -717,6 +717,7 @@ export interface FileResponse {
   file_type: string;
   tags: string[];
   uploader: UserSummary | null;
+  project_id: number | null;
   experiment_id: number | null;
   source_type: string;
   source_pipeline_run_id: number | null;

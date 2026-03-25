@@ -91,7 +91,9 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
 }
 
 interface SignedUploadOptions {
+  projectId?: number;
   experimentId?: number;
+  sampleId?: number;
   onProgress?: (pct: number) => void;
 }
 
@@ -107,8 +109,14 @@ async function uploadFileSigned<T>(
     filename: file.name,
     expected_size_bytes: file.size,
   };
+  if (options.projectId != null) {
+    initiateBody.project_id = options.projectId;
+  }
   if (options.experimentId != null) {
     initiateBody.experiment_id = options.experimentId;
+  }
+  if (options.sampleId != null) {
+    initiateBody.sample_ids = [options.sampleId];
   }
   const { upload_id, signed_url } = await fetchApi<{
     upload_id: string;

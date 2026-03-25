@@ -527,6 +527,47 @@ async def test_get_experiment_files_not_found(client, admin_token):
     assert resp.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_link_file_to_project(client, admin_token, session, admin_user, sample_file):
+    """Linking a file to a project should set project_id on the file record."""
+    from app.models.project import Project
+    from sqlalchemy import text
+
+    proj = Project(
+        organization_id=admin_user.organization_id,
+        name="Link Test Project",
+        owner_user_id=admin_user.id,
+    )
+    session.add(proj)
+    await session.flush()
+    await session.commit()
+
+    resp = await client.post(
+        f"/api/files/{sample_file.id}/link",
+        json={"project_id": proj.id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+
+    row = (
+        await session.execute(text("SELECT project_id FROM files WHERE id = :fid").bindparams(fid=sample_file.id))
+    ).fetchone()
+    assert row[0] == proj.id
+
+
+@pytest.mark.asyncio
+async def test_file_response_includes_project_id(client, admin_token, sample_file):
+    """FileResponse must include a project_id field (null when not linked)."""
+    resp = await client.get(
+        f"/api/files/{sample_file.id}",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "project_id" in data
+    assert data["project_id"] is None
+
+
 # --- Upload Service Unit Tests ---
 
 

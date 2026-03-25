@@ -4,12 +4,27 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { api } from "@/lib/api";
-import type { ExperimentListResponse, FileResponse } from "@/lib/types";
+import type {
+  ExperimentListResponse,
+  FileResponse,
+  ProjectListResponse,
+  SampleBrief,
+} from "@/lib/types";
+
+interface ProjectOption {
+  id: number;
+  name: string;
+}
 
 interface ExperimentOption {
   id: number;
   name: string;
   status: string;
+}
+
+interface SampleOption {
+  id: number;
+  label: string;
 }
 
 type FileStatus = "queued" | "uploading" | "complete" | "error";
@@ -23,21 +38,62 @@ interface FileItem {
 
 export default function DataUploadPage() {
   const [items, setItems] = useState<FileItem[]>([]);
-  const [experimentId, setExperimentId] = useState("");
-  const [experiments, setExperiments] = useState<ExperimentOption[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [experiments, setExperiments] = useState<ExperimentOption[]>([]);
+  const [samples, setSamples] = useState<SampleOption[]>([]);
+
+  const [projectId, setProjectId] = useState("");
+  const [experimentId, setExperimentId] = useState("");
+  const [sampleId, setSampleId] = useState("");
+
+  // Load projects on mount
   useEffect(() => {
     api
-      .get<ExperimentListResponse>("/api/experiments?page_size=100")
+      .get<ProjectListResponse>("/api/projects?page_size=100")
+      .then((data) =>
+        setProjects(data.projects.map((p) => ({ id: p.id, name: p.name }))),
+      )
+      .catch(() => setProjects([]));
+  }, []);
+
+  // Reload experiments when project changes
+  useEffect(() => {
+    setExperimentId("");
+    setSampleId("");
+    setSamples([]);
+    const qs = projectId ? `?project_id=${projectId}&page_size=100` : "?page_size=100";
+    api
+      .get<ExperimentListResponse>(`/api/experiments${qs}`)
       .then((data) =>
         setExperiments(
           data.experiments.map((e) => ({ id: e.id, name: e.name, status: e.status })),
         ),
       )
       .catch(() => setExperiments([]));
-  }, []);
+  }, [projectId]);
+
+  // Load samples when experiment changes
+  useEffect(() => {
+    setSampleId("");
+    if (!experimentId) {
+      setSamples([]);
+      return;
+    }
+    api
+      .get<SampleBrief[]>(`/api/experiments/${experimentId}/samples`)
+      .then((data) =>
+        setSamples(
+          data.map((s) => ({
+            id: s.id,
+            label: s.sample_id_external ?? `Sample #${s.id}`,
+          })),
+        ),
+      )
+      .catch(() => setSamples([]));
+  }, [experimentId]);
 
   const addFiles = (incoming: File[]) => {
     const accepted = incoming.filter(
@@ -75,7 +131,11 @@ export default function DataUploadPage() {
 
   const uploadAll = async () => {
     setUploading(true);
-    const expId = experimentId ? parseInt(experimentId, 10) : undefined;
+    const opts = {
+      projectId: projectId ? parseInt(projectId, 10) : undefined,
+      experimentId: experimentId ? parseInt(experimentId, 10) : undefined,
+      sampleId: sampleId ? parseInt(sampleId, 10) : undefined,
+    };
 
     for (let i = 0; i < items.length; i++) {
       if (items[i].status === "complete") continue;
@@ -84,7 +144,7 @@ export default function DataUploadPage() {
 
       try {
         await api.uploadSigned<FileResponse>(items[i].file, {
-          experimentId: expId,
+          ...opts,
           onProgress: (pct) => setItemState(i, { progress: pct }),
         });
         setItemState(i, { status: "complete", progress: 100 });
@@ -100,6 +160,23 @@ export default function DataUploadPage() {
   };
 
   const pendingCount = items.filter((i) => i.status !== "complete").length;
+
+  const associationSummary = () => {
+    if (sampleId) {
+      const s = samples.find((s) => String(s.id) === sampleId);
+      const e = experiments.find((e) => String(e.id) === experimentId);
+      return `Sample: ${s?.label ?? sampleId} (${e?.name ?? experimentId})`;
+    }
+    if (experimentId) {
+      const e = experiments.find((e) => String(e.id) === experimentId);
+      return `Experiment: ${e?.name ?? experimentId}`;
+    }
+    if (projectId) {
+      const p = projects.find((p) => String(p.id) === projectId);
+      return `Project: ${p?.name ?? projectId}`;
+    }
+    return null;
+  };
 
   return (
     <div className="flex h-screen">
@@ -131,24 +208,85 @@ export default function DataUploadPage() {
               />
             </div>
 
-            {/* Experiment linkage */}
-            <div>
-              <label htmlFor="experiment-select" className="block text-sm font-medium text-gray-700 mb-1">
-                Link to Experiment (optional)
-              </label>
-              <select
-                id="experiment-select"
-                value={experimentId}
-                onChange={(e) => setExperimentId(e.target.value)}
-                className="w-80 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
-              >
-                <option value="">No experiment selected</option>
-                {experiments.map((exp) => (
-                  <option key={exp.id} value={String(exp.id)}>
-                    {exp.name}
-                  </option>
-                ))}
-              </select>
+            {/* Association selectors */}
+            <div className="bg-white rounded-lg shadow p-4 space-y-4">
+              <h3 className="font-medium text-gray-700">Association (optional)</h3>
+              <p className="text-xs text-gray-500">
+                Link files to a project, experiment, or specific sample. Select the most
+                specific level that applies.
+              </p>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {/* Project */}
+                <div>
+                  <label htmlFor="upload-project-select" className="block text-xs font-medium text-gray-600 mb-1">
+                    Project
+                  </label>
+                  <select
+                    id="upload-project-select"
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  >
+                    <option value="">No project</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Experiment */}
+                <div>
+                  <label htmlFor="upload-experiment-select" className="block text-xs font-medium text-gray-600 mb-1">
+                    Experiment
+                  </label>
+                  <select
+                    id="upload-experiment-select"
+                    value={experimentId}
+                    onChange={(e) => setExperimentId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white"
+                  >
+                    <option value="">No experiment</option>
+                    {experiments.map((exp) => (
+                      <option key={exp.id} value={String(exp.id)}>
+                        {exp.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sample */}
+                <div>
+                  <label htmlFor="upload-sample-select" className="block text-xs font-medium text-gray-600 mb-1">
+                    Sample
+                  </label>
+                  <select
+                    id="upload-sample-select"
+                    value={sampleId}
+                    onChange={(e) => setSampleId(e.target.value)}
+                    disabled={!experimentId}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">No sample</option>
+                    {samples.map((s) => (
+                      <option key={s.id} value={String(s.id)}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  {!experimentId && (
+                    <p className="text-xs text-gray-400 mt-1">Select an experiment first</p>
+                  )}
+                </div>
+              </div>
+
+              {associationSummary() && (
+                <p className="text-xs text-blue-700 bg-blue-50 rounded px-3 py-1.5">
+                  Files will be associated with: {associationSummary()}
+                </p>
+              )}
             </div>
 
             {/* File list */}
