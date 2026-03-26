@@ -17,6 +17,7 @@ interface TerraformProgressModalProps {
   sseUrl: string;
   onComplete: () => void;
   onClose: () => void;
+  onCancel?: () => void;
   mode?: "deploy" | "teardown";
   /** When set, poll this run ID for progress instead of opening an SSE stream. */
   pollRunId?: number | null;
@@ -171,6 +172,7 @@ export function TerraformProgressModal({
   sseUrl,
   onComplete,
   onClose,
+  onCancel,
   mode = "deploy",
   pollRunId = null,
   dismissable = false,
@@ -257,49 +259,9 @@ export function TerraformProgressModal({
     };
   }, [activePollId]);
 
-  // Background deploy mode: POST to the background endpoint, then poll
-  useEffect(() => {
-    if (!dismissable || activePollId) return; // Already polling or reconnecting
-
-    async function startBackgroundDeploy() {
-      const token = getToken();
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
-      try {
-        const resp = await fetch(`${API_URL}${sseUrl}-background`, {
-          method: "POST",
-          headers,
-        });
-        if (!resp.ok) {
-          const body = await resp.text().catch(() => "");
-          let detail = `Server error (${resp.status})`;
-          try {
-            const parsed = JSON.parse(body);
-            if (parsed.detail) detail = parsed.detail;
-          } catch {
-            // use default
-          }
-          setStatus("error");
-          setErrorMessage(detail);
-          return;
-        }
-        // Deploy started -- begin polling for progress
-        setActivePollId(Date.now()); // Trigger the poll effect
-      } catch {
-        setStatus("error");
-        setErrorMessage("Failed to start deployment");
-      }
-    }
-
-    startBackgroundDeploy();
-  }, [dismissable, sseUrl, activePollId]);
-
   // SSE mode: stream events from a deployment (non-dismissable only)
   useEffect(() => {
-    if (dismissable || activePollId) return; // Use polling instead
+    if (activePollId) return; // Use polling instead
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -643,15 +605,26 @@ export function TerraformProgressModal({
           {(status === "connecting" || status === "running") && (
             <div className="flex items-center gap-3">
               {dismissable && (
-                <span className="text-xs text-gray-400">
-                  Deployment continues in the background
-                </span>
+                <>
+                  <span className="text-xs text-gray-400">
+                    Deployment continues in the background
+                  </span>
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+                  >
+                    Minimize
+                  </button>
+                </>
               )}
               <button
-                onClick={onClose}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+                onClick={() => {
+                  if (onCancel) onCancel();
+                  onClose();
+                }}
+                className="px-4 py-2 text-red-600 hover:text-red-800 text-sm font-medium"
               >
-                {dismissable ? "Minimize" : "Cancel"}
+                Cancel
               </button>
             </div>
           )}

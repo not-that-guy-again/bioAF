@@ -287,6 +287,7 @@ export default function InfraComponentsPage() {
 
   async function handleStartDeploy() {
     setDeployStarting(true);
+    setShowDeployModal(true);
     try {
       await api.post("/api/v1/infrastructure/stack/deploy-background", { stack_type: "kubernetes" });
       // Give the backend a moment to create the run record, then detect it
@@ -475,10 +476,18 @@ export default function InfraComponentsPage() {
                   </p>
                   {(activeDeployRunId || deployStarting) ? (
                     <div className="bg-amber-50 border border-amber-200 rounded p-3 mt-2">
-                      <p className="text-xs font-medium text-amber-800 flex items-center gap-2">
-                        <span className="inline-block h-2 w-2 bg-amber-500 rounded-full animate-pulse" />
-                        Deploying infrastructure...
-                      </p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-amber-800 flex items-center gap-2">
+                          <span className="inline-block h-2 w-2 bg-amber-500 rounded-full animate-pulse" />
+                          Deploying infrastructure...
+                        </p>
+                        <button
+                          onClick={() => setShowDeployModal(true)}
+                          className="text-xs text-amber-700 underline hover:text-amber-900"
+                        >
+                          View progress
+                        </button>
+                      </div>
                       {deployProgress && deployProgress.resources_planned && (
                         <div className="mt-2">
                           <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
@@ -991,8 +1000,22 @@ export default function InfraComponentsPage() {
         />
       )}
 
-      {/* Deploy modal removed -- deploy now uses inline progress panel
-          with background endpoint, matching the image build pattern */}
+      {/* Deploy Stack Modal -- polls for progress, safe to dismiss */}
+      {showDeployModal && (
+        <TerraformProgressModal
+          title="Deploy Compute Stack"
+          sseUrl="/api/v1/infrastructure/stack/deploy"
+          onComplete={handleDeployComplete}
+          onClose={() => setShowDeployModal(false)}
+          onCancel={() => {
+            handleAbandonRun();
+            setActiveDeployRunId(null);
+            setDeployProgress(null);
+          }}
+          dismissable
+          pollRunId={activeDeployRunId || -1}
+        />
+      )}
 
       {/* Teardown Confirmation Modal */}
       {showTeardownModal && (
