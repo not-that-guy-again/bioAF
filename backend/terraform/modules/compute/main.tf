@@ -14,7 +14,7 @@ terraform {
 resource "google_container_cluster" "bioaf" {
   name     = "bioaf-${var.org_slug}-${var.stack_uid}"
   project  = var.project_id
-  location = var.zone # Zonal cluster (cheaper than regional for POC)
+  location = var.zone
 
   # Terraform-managed lifecycle -- teardown handles deletion
   deletion_protection      = false
@@ -40,14 +40,16 @@ resource "google_container_cluster" "bioaf" {
 # --- Pipeline Node Pool ---
 
 resource "google_container_node_pool" "pipelines" {
-  name     = "bioaf-pipelines"
-  cluster  = google_container_cluster.bioaf.id
-  project  = var.project_id
-  location = var.zone
+  name           = "bioaf-pipelines"
+  cluster        = google_container_cluster.bioaf.id
+  project        = var.project_id
+  location       = var.zone
+  node_locations = var.k8s_node_zones
 
   autoscaling {
-    min_node_count = 0
-    max_node_count = var.k8s_pipeline_max_nodes
+    min_node_count  = 0
+    max_node_count  = var.k8s_pipeline_max_nodes
+    location_policy = "ANY"
   }
 
   node_config {
@@ -73,14 +75,16 @@ resource "google_container_node_pool" "pipelines" {
 # --- Interactive Node Pool ---
 
 resource "google_container_node_pool" "interactive" {
-  name     = "bioaf-interactive"
-  cluster  = google_container_cluster.bioaf.id
-  project  = var.project_id
-  location = var.zone
+  name           = "bioaf-interactive"
+  cluster        = google_container_cluster.bioaf.id
+  project        = var.project_id
+  location       = var.zone
+  node_locations = var.k8s_node_zones
 
   autoscaling {
-    min_node_count = 0
-    max_node_count = var.k8s_interactive_max_nodes
+    min_node_count  = 0
+    max_node_count  = var.k8s_interactive_max_nodes
+    location_policy = "ANY"
   }
 
   node_config {
@@ -112,5 +116,11 @@ data "google_project" "current" {
 resource "google_project_iam_member" "gke_storage_access" {
   project = var.project_id
   role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "gke_default_node_sa" {
+  project = var.project_id
+  role    = "roles/container.defaultNodeServiceAccount"
   member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }
