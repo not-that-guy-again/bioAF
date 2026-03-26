@@ -140,6 +140,7 @@ export default function InfraComponentsPage() {
   } | null>(null);
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [abandonLoading, setAbandonLoading] = useState(false);
+  const [activeDeployRunId, setActiveDeployRunId] = useState<number | null>(null);
 
   const DESTROY_STORAGE_PHRASE = "delete my data";
 
@@ -155,6 +156,12 @@ export default function InfraComponentsPage() {
     try {
       const status = await api.get<TerraformStatus>("/api/v1/infrastructure/terraform/status");
       setTfStatus(status);
+      // Track active deploy/apply runs so the user can re-open progress
+      if (status.active_run_id && status.active_run_status === "applying") {
+        setActiveDeployRunId(status.active_run_id);
+      } else {
+        setActiveDeployRunId(null);
+      }
       const runsData = await api.get<{ runs: TerraformRun[] }>("/api/v1/infrastructure/terraform/runs");
       setRuns(runsData.runs);
     } catch {
@@ -228,6 +235,7 @@ export default function InfraComponentsPage() {
 
   function handleDeployComplete() {
     setShowDeployModal(false);
+    setActiveDeployRunId(null);
     setRefreshKey((k) => k + 1);
   }
 
@@ -396,12 +404,22 @@ export default function InfraComponentsPage() {
                   <p className="text-xs text-gray-500 mb-4">
                     $0 when idle. Scales automatically with your workloads.
                   </p>
-                  <button
-                    onClick={() => setShowDeployModal(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
-                  >
-                    Deploy
-                  </button>
+                  {activeDeployRunId ? (
+                    <button
+                      onClick={() => setShowDeployModal(true)}
+                      className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 font-medium flex items-center gap-2"
+                    >
+                      <span className="inline-block h-2 w-2 bg-white rounded-full animate-pulse" />
+                      View progress
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowDeployModal(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                    >
+                      Deploy
+                    </button>
+                  )}
                 </div>
 
                 {/* SLURM + NFS card (coming soon) */}
@@ -883,6 +901,8 @@ export default function InfraComponentsPage() {
           sseUrl="/api/v1/infrastructure/stack/deploy"
           onComplete={handleDeployComplete}
           onClose={() => setShowDeployModal(false)}
+          dismissable
+          pollRunId={activeDeployRunId}
         />
       )}
 
