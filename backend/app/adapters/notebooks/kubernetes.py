@@ -324,7 +324,8 @@ class KubernetesNotebookProvider(NotebookProvider):
 
         pod_name = f"bioaf-notebook-{session_id}"
         service_name = f"bioaf-notebook-svc-{session_id}"
-        gcs_home_prefix = f"gs://bioaf-working/notebooks/{user_id}/"
+        working_bucket = session_spec.get("working_bucket", "bioaf-working")
+        gcs_home_prefix = f"gs://{working_bucket}/notebooks/{user_id}/"
 
         # Determine container command based on session type
         if session_type == "jupyter":
@@ -397,7 +398,7 @@ class KubernetesNotebookProvider(NotebookProvider):
             session_creds = session_spec.get("session_credentials", {})
             cred_username = session_creds.get("username", "bioaf")
             home_dir = f"/home/{cred_username}"
-            gcs_home_prefix = f"gs://bioaf-working/home/{user_id}/"
+            gcs_home_prefix = f"gs://{working_bucket}/home/{user_id}/"
         else:
             home_dir = HOME_DIR
 
@@ -808,7 +809,7 @@ class KubernetesNotebookProvider(NotebookProvider):
             "namespace": "bioaf-interactive",
             "node_pool": session_spec.get("node_pool", "bioaf-interactive"),
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "gcs_home_prefix": f"gs://bioaf-working/home/{session_spec.get('user_id', 0)}/",
+            "gcs_home_prefix": f"gs://{session_spec.get('working_bucket', 'bioaf-working')}/home/{session_spec.get('user_id', 0)}/",
         }
         _local_sessions[session_id] = session_data
         logger.info("Local mode: launched session %s (%s)", session_id, session_type)

@@ -78,6 +78,16 @@ class NotebookService:
             if image:
                 spec["image"] = image
 
+            # Pass working bucket name so the adapter uses the correct GCS path
+            from sqlalchemy import text as sa_text
+
+            bucket_row = await session.execute(
+                sa_text("SELECT value FROM platform_config WHERE key = 'working_bucket_name'")
+            )
+            bucket_name = (bucket_row.scalar_one_or_none() or "").strip()
+            if bucket_name and bucket_name != "null":
+                spec["working_bucket"] = bucket_name
+
             # RStudio requires session credentials for PAM auth
             if session_type == "rstudio":
                 from app.services.session_credential_service import SessionCredentialService
