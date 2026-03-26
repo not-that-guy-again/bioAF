@@ -287,16 +287,20 @@ export default function InfraComponentsPage() {
 
   async function handleStartDeploy() {
     setDeployStarting(true);
+    // Use -1 as a sentinel to start the modal polling immediately.
+    // The poll effect will wait for the real run to appear.
+    setActiveDeployRunId(-1);
     setShowDeployModal(true);
     try {
       await api.post("/api/v1/infrastructure/stack/deploy-background", { stack_type: "kubernetes" });
-      // Give the backend a moment to create the run record, then detect it
+      // Give the backend a moment to create the run record, then refresh
       setTimeout(() => {
         setRefreshKey((k) => k + 1);
         setDeployStarting(false);
-      }, 2000);
+      }, 3000);
     } catch (e: unknown) {
       setDeployStarting(false);
+      setActiveDeployRunId(null);
       const msg = e instanceof Error ? e.message : "Failed to start deployment";
       setDeployProgress({ resources_completed: 0, resources_planned: null, status: "failed", error_message: msg });
     }

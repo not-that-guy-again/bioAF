@@ -197,10 +197,15 @@ export function TerraformProgressModal({
   // run or when dismissable mode starts a background deploy.
   const [activePollId, setActivePollId] = useState<number | null>(pollRunId ?? null);
 
+  // Track whether we have ever seen an active run. The background deploy
+  // takes a moment to create the run record, so we should not assume
+  // "no active run" means "complete" until we have seen one start.
+  const [hasSeenActiveRun, setHasSeenActiveRun] = useState(false);
+
   useEffect(() => {
     if (!activePollId) return;
 
-    setStatus("running");
+    setStatus((prev) => (prev === "complete" || prev === "error" ? prev : "running"));
 
     const controller = new AbortController();
     async function poll() {
@@ -209,7 +214,6 @@ export function TerraformProgressModal({
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        // Poll terraform status to find the active run ID if we don't have one
         const statusResp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/status`, {
           headers,
           signal: controller.signal,
@@ -219,10 +223,15 @@ export function TerraformProgressModal({
 
         const runId = tfStatus.active_run_id;
         if (!runId) {
-          // No active run -- check if it just completed
-          setStatus("complete");
+          if (hasSeenActiveRun) {
+            // Run finished since last poll
+            setStatus("complete");
+          }
+          // Otherwise keep waiting for the run to appear
           return;
         }
+
+        setHasSeenActiveRun(true);
 
         const resp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/runs/${runId}`, {
           headers,
@@ -232,9 +241,9 @@ export function TerraformProgressModal({
         const run = await resp.json();
 
         if (run.resources_planned) setResourcesTotal(run.resources_planned);
-        if (run.resources_completed) setResourcesCompleted(run.resources_completed);
+        if (run.resources_completed !== undefined) setResourcesCompleted(run.resources_completed);
 
-        // Detect compute phase from resource counts (storage has fewer resources)
+        // Detect compute phase from resource counts
         if (run.resources_completed > 0) {
           setComputePhaseStarted(true);
           setPhase("compute");
@@ -252,12 +261,12 @@ export function TerraformProgressModal({
     }
 
     poll();
-    const interval = setInterval(poll, 5000);
+    const interval = setInterval(poll, 3000);
     return () => {
       controller.abort();
       clearInterval(interval);
     };
-  }, [activePollId]);
+  }, [activePollId, hasSeenActiveRun]);
 
   // SSE mode: stream events from a deployment (non-dismissable only)
   useEffect(() => {
