@@ -20,7 +20,9 @@ interface TerraformProgressModalProps {
   mode?: "deploy" | "teardown";
   /** When set, poll this run ID for progress instead of opening an SSE stream. */
   pollRunId?: number | null;
-  /** Allow minimizing the modal while the operation runs in the background. */
+  /** Allow minimizing the modal while the operation runs in the background.
+   *  When true, uses the background deploy endpoint + polling instead of SSE
+   *  so closing the modal does not kill the Terraform process. */
   dismissable?: boolean;
 }
 
@@ -189,13 +191,14 @@ export function TerraformProgressModal({
   const abortRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Poll mode: reconnect to an in-progress run by polling the run endpoint
+  // Poll-based progress tracking: used when reconnecting to an in-progress
+  // run or when dismissable mode starts a background deploy.
+  const [activePollId, setActivePollId] = useState<number | null>(pollRunId ?? null);
+
   useEffect(() => {
-    if (!pollRunId) return;
+    if (!activePollId) return;
 
     setStatus("running");
-    setPhase("compute");
-    setComputePhaseStarted(true);
 
     const controller = new AbortController();
     async function poll() {
@@ -204,7 +207,22 @@ export function TerraformProgressModal({
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        const resp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/runs/${pollRunId}`, {
+        // Poll terraform status to find the active run ID if we don't have one
+        const statusResp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/status`, {
+          headers,
+          signal: controller.signal,
+        });
+        if (!statusResp.ok) return;
+        const tfStatus = await statusResp.json();
+
+        const runId = tfStatus.active_run_id;
+        if (!runId) {
+          // No active run -- check if it just completed
+          setStatus("complete");
+          return;
+        }
+
+        const resp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/runs/${runId}`, {
           headers,
           signal: controller.signal,
         });
@@ -213,6 +231,12 @@ export function TerraformProgressModal({
 
         if (run.resources_planned) setResourcesTotal(run.resources_planned);
         if (run.resources_completed) setResourcesCompleted(run.resources_completed);
+
+        // Detect compute phase from resource counts (storage has fewer resources)
+        if (run.resources_completed > 0) {
+          setComputePhaseStarted(true);
+          setPhase("compute");
+        }
 
         if (run.status === "completed") {
           setStatus("complete");
@@ -231,11 +255,51 @@ export function TerraformProgressModal({
       controller.abort();
       clearInterval(interval);
     };
-  }, [pollRunId]);
+  }, [activePollId]);
 
-  // SSE mode: stream events from a new deployment
+  // Background deploy mode: POST to the background endpoint, then poll
   useEffect(() => {
-    if (pollRunId) return; // Skip SSE when polling
+    if (!dismissable || activePollId) return; // Already polling or reconnecting
+
+    async function startBackgroundDeploy() {
+      const token = getToken();
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      try {
+        const resp = await fetch(`${API_URL}${sseUrl}-background`, {
+          method: "POST",
+          headers,
+        });
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => "");
+          let detail = `Server error (${resp.status})`;
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed.detail) detail = parsed.detail;
+          } catch {
+            // use default
+          }
+          setStatus("error");
+          setErrorMessage(detail);
+          return;
+        }
+        // Deploy started -- begin polling for progress
+        setActivePollId(Date.now()); // Trigger the poll effect
+      } catch {
+        setStatus("error");
+        setErrorMessage("Failed to start deployment");
+      }
+    }
+
+    startBackgroundDeploy();
+  }, [dismissable, sseUrl, activePollId]);
+
+  // SSE mode: stream events from a deployment (non-dismissable only)
+  useEffect(() => {
+    if (dismissable || activePollId) return; // Use polling instead
 
     const controller = new AbortController();
     abortRef.current = controller;

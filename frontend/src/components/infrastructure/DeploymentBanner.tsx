@@ -42,9 +42,16 @@ export function DeploymentBanner() {
   }, [previouslyDeploying]);
 
   useEffect(() => {
+    // Check immediately, then poll at regular intervals.
+    // Use a short initial delay so the banner appears quickly after
+    // the user minimizes the deploy modal.
     checkStatus();
+    const quickPoll = setTimeout(checkStatus, 2000);
     const interval = setInterval(checkStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(quickPoll);
+      clearInterval(interval);
+    };
   }, [checkStatus]);
 
   return (
