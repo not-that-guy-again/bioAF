@@ -81,12 +81,21 @@ class NotebookService:
             # Pass working bucket name so the adapter uses the correct GCS path
             from sqlalchemy import text as sa_text
 
-            bucket_row = await session.execute(
-                sa_text("SELECT value FROM platform_config WHERE key = 'working_bucket_name'")
+            config_rows = await session.execute(
+                sa_text(
+                    "SELECT key, value FROM platform_config "
+                    "WHERE key IN ('working_bucket_name', 'notebook_runner_sa_email')"
+                )
             )
-            bucket_name = (bucket_row.scalar_one_or_none() or "").strip()
+            config_map = {row[0]: row[1] for row in config_rows.all()}
+
+            bucket_name = (config_map.get("working_bucket_name") or "").strip()
             if bucket_name and bucket_name != "null":
                 spec["working_bucket"] = bucket_name
+
+            sa_email = (config_map.get("notebook_runner_sa_email") or "").strip()
+            if sa_email and sa_email != "null":
+                spec["notebook_runner_sa_email"] = sa_email
 
             # RStudio requires session credentials for PAM auth
             if session_type == "rstudio":

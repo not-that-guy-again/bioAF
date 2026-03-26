@@ -124,3 +124,29 @@ resource "google_project_iam_member" "gke_default_node_sa" {
   role    = "roles/container.defaultNodeServiceAccount"
   member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
 }
+
+# --- Workload Identity for notebook pods ---
+#
+# With Workload Identity enabled, pods cannot use the node's default SA.
+# Create a dedicated GCP SA for notebook workloads, grant it GCS access,
+# and bind it to the bioaf-notebook-runner K8s SA so pods get credentials
+# via the metadata server.
+
+resource "google_service_account" "notebook_runner" {
+  project      = var.project_id
+  account_id   = "bioaf-notebook-runner"
+  display_name = "bioAF Notebook Runner"
+  description  = "GCP service account for notebook session pods (Workload Identity)"
+}
+
+resource "google_project_iam_member" "notebook_runner_storage" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = "serviceAccount:${google_service_account.notebook_runner.email}"
+}
+
+resource "google_service_account_iam_member" "notebook_runner_workload_identity" {
+  service_account_id = google_service_account.notebook_runner.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[bioaf-notebooks/bioaf-notebook-runner]"
+}
