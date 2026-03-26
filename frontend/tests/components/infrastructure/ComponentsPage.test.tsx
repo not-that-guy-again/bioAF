@@ -203,7 +203,7 @@ describe("InfraComponentsPage", () => {
     fireEvent.click(deployButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Deploy Compute Stack/i)).toBeInTheDocument();
+      expect(screen.getByText(/Deploying infrastructure/i)).toBeInTheDocument();
     });
   });
 

@@ -141,6 +141,13 @@ export default function InfraComponentsPage() {
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [abandonLoading, setAbandonLoading] = useState(false);
   const [activeDeployRunId, setActiveDeployRunId] = useState<number | null>(null);
+  const [deployProgress, setDeployProgress] = useState<{
+    resources_completed: number;
+    resources_planned: number | null;
+    status: string;
+    error_message: string | null;
+  } | null>(null);
+  const [deployStarting, setDeployStarting] = useState(false);
 
   const DESTROY_STORAGE_PHRASE = "delete my data";
 
@@ -233,9 +240,71 @@ export default function InfraComponentsPage() {
     };
   }, [hasBuildRelated, componentsData]);
 
+  // Poll deploy progress when an active deploy run is detected
+  useEffect(() => {
+    if (!activeDeployRunId) {
+      setDeployProgress(null);
+      return;
+    }
+    let cancelled = false;
+    async function pollDeploy() {
+      try {
+        // Check terraform status for the active run
+        const tfSt = await api.get<TerraformStatus>("/api/v1/infrastructure/terraform/status");
+        if (!tfSt.active_run_id) {
+          // Deploy finished -- refresh everything
+          if (!cancelled) {
+            setActiveDeployRunId(null);
+            setDeployProgress(null);
+            setRefreshKey((k) => k + 1);
+          }
+          return;
+        }
+        const run = await api.get<TerraformRun>(`/api/v1/infrastructure/terraform/runs/${tfSt.active_run_id}`);
+        if (!cancelled) {
+          setDeployProgress({
+            resources_completed: run.resources_completed,
+            resources_planned: run.resources_planned,
+            status: run.status,
+            error_message: run.error_message,
+          });
+          if (run.status === "completed" || run.status === "failed") {
+            setActiveDeployRunId(null);
+            setRefreshKey((k) => k + 1);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    pollDeploy();
+    const interval = setInterval(pollDeploy, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeDeployRunId]);
+
+  async function handleStartDeploy() {
+    setDeployStarting(true);
+    try {
+      await api.post("/api/v1/infrastructure/stack/deploy-background", { stack_type: "kubernetes" });
+      // Give the backend a moment to create the run record, then detect it
+      setTimeout(() => {
+        setRefreshKey((k) => k + 1);
+        setDeployStarting(false);
+      }, 2000);
+    } catch (e: unknown) {
+      setDeployStarting(false);
+      const msg = e instanceof Error ? e.message : "Failed to start deployment";
+      setDeployProgress({ resources_completed: 0, resources_planned: null, status: "failed", error_message: msg });
+    }
+  }
+
   function handleDeployComplete() {
     setShowDeployModal(false);
     setActiveDeployRunId(null);
+    setDeployProgress(null);
     setRefreshKey((k) => k + 1);
   }
 
@@ -404,18 +473,46 @@ export default function InfraComponentsPage() {
                   <p className="text-xs text-gray-500 mb-4">
                     $0 when idle. Scales automatically with your workloads.
                   </p>
-                  {activeDeployRunId ? (
-                    <button
-                      onClick={() => setShowDeployModal(true)}
-                      className="px-4 py-2 bg-amber-500 text-white rounded hover:bg-amber-600 font-medium flex items-center gap-2"
-                    >
-                      <span className="inline-block h-2 w-2 bg-white rounded-full animate-pulse" />
-                      View progress
-                    </button>
+                  {(activeDeployRunId || deployStarting) ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3 mt-2">
+                      <p className="text-xs font-medium text-amber-800 flex items-center gap-2">
+                        <span className="inline-block h-2 w-2 bg-amber-500 rounded-full animate-pulse" />
+                        Deploying infrastructure...
+                      </p>
+                      {deployProgress && deployProgress.resources_planned && (
+                        <div className="mt-2">
+                          <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.round((deployProgress.resources_completed / deployProgress.resources_planned) * 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-amber-600 mt-1">
+                            {deployProgress.resources_completed} of {deployProgress.resources_planned} components
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-xs text-amber-500 mt-1">
+                        This may take 5-15 minutes. You can leave this page.
+                      </p>
+                    </div>
+                  ) : deployProgress?.status === "failed" ? (
+                    <div className="bg-red-50 border border-red-200 rounded p-3 mt-2">
+                      <p className="text-xs font-medium text-red-800">
+                        Deployment failed: {deployProgress.error_message}
+                      </p>
+                      <button
+                        onClick={handleStartDeploy}
+                        className="mt-2 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
+                      >
+                        Retry
+                      </button>
+                    </div>
                   ) : (
                     <button
-                      onClick={() => setShowDeployModal(true)}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                      onClick={handleStartDeploy}
+                      disabled={deployStarting}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50"
                     >
                       Deploy
                     </button>
@@ -894,17 +991,8 @@ export default function InfraComponentsPage() {
         />
       )}
 
-      {/* Deploy Stack Modal */}
-      {showDeployModal && (
-        <TerraformProgressModal
-          title="Deploy Compute Stack"
-          sseUrl="/api/v1/infrastructure/stack/deploy"
-          onComplete={handleDeployComplete}
-          onClose={() => setShowDeployModal(false)}
-          dismissable
-          pollRunId={activeDeployRunId}
-        />
-      )}
+      {/* Deploy modal removed -- deploy now uses inline progress panel
+          with background endpoint, matching the image build pattern */}
 
       {/* Teardown Confirmation Modal */}
       {showTeardownModal && (
