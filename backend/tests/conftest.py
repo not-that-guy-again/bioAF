@@ -51,9 +51,7 @@ async def db_engine(worker_id):
     else:
         # Drop each table individually in its own transaction to avoid FK deadlocks
         async with engine.begin() as conn:
-            rows = await conn.execute(
-                sa_text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-            )
+            rows = await conn.execute(sa_text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
             tables = [row[0] for row in rows.fetchall()]
         for table in tables:
             async with engine.begin() as conn:
@@ -78,9 +76,7 @@ async def db_engine(worker_id):
             await conn.execute(sa_text(f"DROP SCHEMA {schema} CASCADE"))
     else:
         async with engine.begin() as conn:
-            rows = await conn.execute(
-                sa_text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-            )
+            rows = await conn.execute(sa_text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
             tables = [row[0] for row in rows.fetchall()]
         for table in tables:
             async with engine.begin() as conn:
