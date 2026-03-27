@@ -68,7 +68,7 @@ export function DeploymentBanner() {
             </span>
           </div>
           <Link
-            href="/infrastructure/components"
+            href="/infrastructure/components?showProgress=1"
             className="text-sm text-amber-700 underline hover:text-amber-900"
           >
             View progress

@@ -151,6 +151,13 @@ export default function InfraComponentsPage() {
 
   const DESTROY_STORAGE_PHRASE = "delete my data";
 
+  // Auto-open the deploy modal when arriving via "View progress" link
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("showProgress") && activeDeployRunId) {
+      setShowDeployModal(true);
+    }
+  }, [activeDeployRunId]);
+
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push("/login");

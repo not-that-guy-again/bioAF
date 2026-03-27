@@ -243,10 +243,34 @@ export function TerraformProgressModal({
         if (run.resources_planned) setResourcesTotal(run.resources_planned);
         if (run.resources_completed !== undefined) setResourcesCompleted(run.resources_completed);
 
-        // Detect compute phase from resource counts
-        if (run.resources_completed > 0) {
+        // Parse completed resources from apply_log (JSON lines)
+        if (run.apply_log) {
+          const parsed: TrackedResource[] = [];
+          for (const line of (run.apply_log as string).split("\n")) {
+            try {
+              const entry = JSON.parse(line);
+              const addr = entry?.hook?.resource?.addr;
+              if (!addr || addr.startsWith("data.")) continue;
+              if (entry.type === "apply_complete") {
+                parsed.push({ address: addr, label: friendlyLabel(addr), status: "complete" });
+              } else if (entry.type === "apply_start") {
+                if (!parsed.find((r) => r.address === addr)) {
+                  parsed.push({ address: addr, label: friendlyLabel(addr), status: "in_progress" });
+                }
+              }
+            } catch {
+              continue;
+            }
+          }
+          if (parsed.length > 0) setResources(parsed);
+        }
+
+        // Detect phase from resource addresses or message content
+        if (run.apply_log?.includes("container_cluster") || run.apply_log?.includes("container_node_pool")) {
           setComputePhaseStarted(true);
           setPhase("compute");
+        } else if (run.resources_completed > 0) {
+          setPhase("storage");
         }
 
         if (run.status === "completed") {
