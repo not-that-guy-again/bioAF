@@ -54,7 +54,6 @@ class TerraformRunDetail(BaseModel):
     completed_at: datetime | None = None
     error_message: str | None = None
     terraform_state_url: str | None = None
-    apply_log: str | None = None
 
     model_config = {"from_attributes": True}
 

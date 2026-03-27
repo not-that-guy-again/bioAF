@@ -83,7 +83,7 @@ describe("DeploymentBanner", () => {
 
     await waitFor(() => {
       const link = screen.getByText("View progress");
-      expect(link).toHaveAttribute("href", "/infrastructure/components?showProgress=1");
+      expect(link).toHaveAttribute("href", "/infrastructure/components");
     });
   });
 

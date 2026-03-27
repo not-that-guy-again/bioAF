@@ -140,26 +140,8 @@ export default function InfraComponentsPage() {
   } | null>(null);
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [abandonLoading, setAbandonLoading] = useState(false);
-  const [activeDeployRunId, setActiveDeployRunId] = useState<number | null>(null);
-  const [deployProgress, setDeployProgress] = useState<{
-    resources_completed: number;
-    resources_planned: number | null;
-    status: string;
-    error_message: string | null;
-  } | null>(null);
-  const [deployStarting, setDeployStarting] = useState(false);
 
   const DESTROY_STORAGE_PHRASE = "delete my data";
-
-  // Auto-open the deploy modal when arriving via "View progress" link
-  const hasShowProgress = typeof window !== "undefined" && window.location.search.includes("showProgress");
-  useEffect(() => {
-    const runId = activeDeployRunId || tfStatus?.active_run_id;
-    if (hasShowProgress && runId) {
-      if (!activeDeployRunId) setActiveDeployRunId(runId);
-      setShowDeployModal(true);
-    }
-  }, [activeDeployRunId, tfStatus, hasShowProgress]);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -173,15 +155,6 @@ export default function InfraComponentsPage() {
     try {
       const status = await api.get<TerraformStatus>("/api/v1/infrastructure/terraform/status");
       setTfStatus(status);
-      // Track active deploy runs (any non-terminal status) so the user
-      // can re-open the progress modal after minimizing.
-      const activeStatuses = ["planning", "awaiting_confirmation", "applying"];
-      if (status.active_run_id && activeStatuses.includes(status.active_run_status ?? "")) {
-        setActiveDeployRunId(status.active_run_id);
-      } else if (!deployStarting) {
-        // Only clear if we didn't just kick off a deploy
-        setActiveDeployRunId((prev) => (prev === -1 ? prev : null));
-      }
       const runsData = await api.get<{ runs: TerraformRun[] }>("/api/v1/infrastructure/terraform/runs");
       setRuns(runsData.runs);
     } catch {
@@ -253,76 +226,8 @@ export default function InfraComponentsPage() {
     };
   }, [hasBuildRelated, componentsData]);
 
-  // Poll deploy progress when an active deploy run is detected
-  useEffect(() => {
-    if (!activeDeployRunId) {
-      setDeployProgress(null);
-      return;
-    }
-    let cancelled = false;
-    async function pollDeploy() {
-      try {
-        // Check terraform status for the active run
-        const tfSt = await api.get<TerraformStatus>("/api/v1/infrastructure/terraform/status");
-        if (!tfSt.active_run_id) {
-          // Deploy finished -- refresh everything
-          if (!cancelled) {
-            setActiveDeployRunId(null);
-            setDeployProgress(null);
-            setRefreshKey((k) => k + 1);
-          }
-          return;
-        }
-        const run = await api.get<TerraformRun>(`/api/v1/infrastructure/terraform/runs/${tfSt.active_run_id}`);
-        if (!cancelled) {
-          setDeployProgress({
-            resources_completed: run.resources_completed,
-            resources_planned: run.resources_planned,
-            status: run.status,
-            error_message: run.error_message,
-          });
-          if (run.status === "completed" || run.status === "failed") {
-            setActiveDeployRunId(null);
-            setRefreshKey((k) => k + 1);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    pollDeploy();
-    const interval = setInterval(pollDeploy, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeDeployRunId]);
-
-  async function handleStartDeploy() {
-    setDeployStarting(true);
-    // Use -1 as a sentinel to start the modal polling immediately.
-    // The poll effect will wait for the real run to appear.
-    setActiveDeployRunId(-1);
-    setShowDeployModal(true);
-    try {
-      await api.post("/api/v1/infrastructure/stack/deploy-background", { stack_type: "kubernetes" });
-      // Give the backend a moment to create the run record, then refresh
-      setTimeout(() => {
-        setRefreshKey((k) => k + 1);
-        setDeployStarting(false);
-      }, 3000);
-    } catch (e: unknown) {
-      setDeployStarting(false);
-      setActiveDeployRunId(null);
-      const msg = e instanceof Error ? e.message : "Failed to start deployment";
-      setDeployProgress({ resources_completed: 0, resources_planned: null, status: "failed", error_message: msg });
-    }
-  }
-
   function handleDeployComplete() {
     setShowDeployModal(false);
-    setActiveDeployRunId(null);
-    setDeployProgress(null);
     setRefreshKey((k) => k + 1);
   }
 
@@ -491,58 +396,12 @@ export default function InfraComponentsPage() {
                   <p className="text-xs text-gray-500 mb-4">
                     $0 when idle. Scales automatically with your workloads.
                   </p>
-                  {(activeDeployRunId || deployStarting || tfStatus?.active_run_id) ? (
-                    <div className="bg-amber-50 border border-amber-200 rounded p-3 mt-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-amber-800 flex items-center gap-2">
-                          <span className="inline-block h-2 w-2 bg-amber-500 rounded-full animate-pulse" />
-                          Deploying infrastructure...
-                        </p>
-                        <button
-                          onClick={() => setShowDeployModal(true)}
-                          className="text-xs text-amber-700 underline hover:text-amber-900"
-                        >
-                          View progress
-                        </button>
-                      </div>
-                      {deployProgress && deployProgress.resources_planned && (
-                        <div className="mt-2">
-                          <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.round((deployProgress.resources_completed / deployProgress.resources_planned) * 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-xs text-amber-600 mt-1">
-                            {deployProgress.resources_completed} of {deployProgress.resources_planned} components
-                          </p>
-                        </div>
-                      )}
-                      <p className="text-xs text-amber-500 mt-1">
-                        This may take 5-15 minutes. You can leave this page.
-                      </p>
-                    </div>
-                  ) : deployProgress?.status === "failed" ? (
-                    <div className="bg-red-50 border border-red-200 rounded p-3 mt-2">
-                      <p className="text-xs font-medium text-red-800">
-                        Deployment failed: {deployProgress.error_message}
-                      </p>
-                      <button
-                        onClick={handleStartDeploy}
-                        className="mt-2 px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handleStartDeploy}
-                      disabled={deployStarting}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50"
-                    >
-                      Deploy
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setShowDeployModal(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                  >
+                    Deploy
+                  </button>
                 </div>
 
                 {/* SLURM + NFS card (coming soon) */}
@@ -1017,20 +876,13 @@ export default function InfraComponentsPage() {
         />
       )}
 
-      {/* Deploy Stack Modal -- polls for progress, safe to dismiss */}
+      {/* Deploy Stack Modal */}
       {showDeployModal && (
         <TerraformProgressModal
           title="Deploy Compute Stack"
           sseUrl="/api/v1/infrastructure/stack/deploy"
           onComplete={handleDeployComplete}
           onClose={() => setShowDeployModal(false)}
-          onCancel={() => {
-            handleAbandonRun();
-            setActiveDeployRunId(null);
-            setDeployProgress(null);
-          }}
-          dismissable
-          pollRunId={activeDeployRunId || -1}
         />
       )}
 

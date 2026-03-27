@@ -544,8 +544,8 @@ async def test_deploy_stack_generates_stack_uid(session):
 
 
 @pytest.mark.asyncio
-async def test_deploy_stack_generates_unique_uid_per_deploy(session):
-    """Each compute deploy gets a fresh stack_uid even if one already exists."""
+async def test_deploy_stack_reuses_existing_stack_uid(session):
+    """deploy_stack does not overwrite an existing stack_uid."""
     from app.services.stack_deployment import deploy_stack
 
     _, user_id = await _seed_org_and_user(session)
@@ -577,75 +577,7 @@ async def test_deploy_stack_generates_unique_uid_per_deploy(session):
     await session.commit()
 
     uid = await _get_config(session, "stack_uid")
-    assert uid != "abc123"
-    assert len(uid) == 6
-
-
-@pytest.mark.asyncio
-async def test_deploy_stack_rejects_when_already_deployed(session):
-    """Cannot deploy a second stack when one is already deployed."""
-    from app.services.stack_deployment import deploy_stack
-
-    await _set_config(session, "gcp_credentials_configured", "true")
-    await _set_config(session, "terraform_initialized", "true")
-    await _set_config(session, "compute_deployed", "true")
-    await session.commit()
-
-    with pytest.raises(ValueError, match="already deployed"):
-        async for _ in deploy_stack(session, "kubernetes", user_id=1):
-            pass
-
-
-@pytest.mark.asyncio
-async def test_consecutive_deploys_get_different_uids(session):
-    """Two consecutive deploy cycles produce different stack_uids."""
-    from app.services.stack_deployment import deploy_stack
-
-    _, user_id = await _seed_org_and_user(session)
-
-    await _set_config(session, "gcp_credentials_configured", "true")
-    await _set_config(session, "terraform_initialized", "true")
-    await _set_config(session, "compute_deployed", "false")
-    await _set_config(session, "storage_deployed", "true")
-    await session.commit()
-
-    captured_uids = []
-
-    async def mock_run_module(sess, uid, module_name):
-        # Capture the uid that was set before the module ran
-        uid_val = await _get_config(sess, "stack_uid")
-        captured_uids.append(uid_val)
-        yield _make_progress_event(
-            "apply_complete",
-            "done",
-            extra={
-                "outputs": {
-                    "cluster_name": {"value": "bioaf-test"},
-                    "cluster_endpoint": {"value": "https://1.2.3.4"},
-                    "cluster_ca_cert": {"value": "Y2VydA=="},
-                }
-            },
-        )
-
-    # First deploy
-    with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
-        async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
-            pass
-    await session.commit()
-
-    # Reset for second deploy
-    await _set_config(session, "compute_deployed", "false")
-    await session.commit()
-
-    # Second deploy
-    with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
-        async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
-            pass
-    await session.commit()
-
-    # The compute module uid from each deploy should be different
-    compute_uids = [captured_uids[i] for i in range(len(captured_uids)) if i % 1 == 0]
-    assert len(set(compute_uids)) >= 2
+    assert uid == "abc123"
 
 
 # -----------------------------------------------------------------------
@@ -1033,17 +965,14 @@ async def test_deploy_stack_logs_orphan_on_compute_failure(session):
 
     assert any(e.event_type == "stack_error" for e in events)
 
-    # The uid was re-seeded before deploy, so the orphan uses the new uid
-    current_uid = await _get_config(session, "stack_uid")
-
-    # Verify orphaned resource was logged with the re-seeded uid
+    # Verify orphaned resource was logged
     row = (
         await session.execute(text("SELECT resource_type, resource_name, stack_uid FROM orphaned_resources LIMIT 1"))
     ).fetchone()
     assert row is not None
     assert row[0] == "gke_cluster"
-    assert row[1] == f"bioaf-demo-{current_uid}"
-    assert row[2] == current_uid
+    assert row[1] == "bioaf-demo-abc123"
+    assert row[2] == "abc123"
 
 
 @pytest.mark.asyncio

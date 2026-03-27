@@ -952,7 +952,7 @@ class TerraformExecutor:
         state_bucket = config.get("terraform_state_bucket", "")
         if state_bucket:
             lock_path = f"{module_name}/default.tflock"
-            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path, config)
+            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
 
     @staticmethod
     async def _recover_stale_runs(session: AsyncSession) -> None:
@@ -976,7 +976,7 @@ class TerraformExecutor:
                 for _run_id, module_name in stale_runs:
                     if module_name:
                         lock_path = f"{module_name}/default.tflock"
-                        await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path, config)
+                        await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
 
             await session.execute(
                 text("""
@@ -1018,7 +1018,7 @@ class TerraformExecutor:
         lock_path = f"{module_name}/default.tflock"
 
         if state_bucket:
-            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path, config)
+            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
 
         run.status = "cancelled"
         run.error_message = "Abandoned by user"
@@ -1037,24 +1037,15 @@ class TerraformExecutor:
         return run
 
     @staticmethod
-    async def _delete_gcs_lock_file(bucket_name: str, lock_path: str, config: dict | None = None) -> None:
+    async def _delete_gcs_lock_file(bucket_name: str, lock_path: str) -> None:
         """Delete a Terraform lock file from a GCS bucket.
 
-        Uses google-cloud-storage Python client with SA credentials from
-        config when available. Failures are logged but not raised since
-        the run is already marked cancelled.
+        Uses google-cloud-storage Python client. Failures are logged but not
+        raised since the run is already marked cancelled.
         """
 
         def _delete() -> None:
-            creds = None
-            if config and config.get("gcp_service_account_key"):
-                import json as _json
-
-                from google.oauth2 import service_account
-
-                key_data = _json.loads(config["gcp_service_account_key"])
-                creds = service_account.Credentials.from_service_account_info(key_data)
-            client = storage.Client(credentials=creds) if creds else storage.Client()
+            client = storage.Client()
             bucket = client.bucket(bucket_name)
             blob = bucket.blob(lock_path)
             blob.delete()

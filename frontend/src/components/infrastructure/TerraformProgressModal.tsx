@@ -17,14 +17,7 @@ interface TerraformProgressModalProps {
   sseUrl: string;
   onComplete: () => void;
   onClose: () => void;
-  onCancel?: () => void;
   mode?: "deploy" | "teardown";
-  /** When set, poll this run ID for progress instead of opening an SSE stream. */
-  pollRunId?: number | null;
-  /** Allow minimizing the modal while the operation runs in the background.
-   *  When true, uses the background deploy endpoint + polling instead of SSE
-   *  so closing the modal does not kill the Terraform process. */
-  dismissable?: boolean;
 }
 
 type ModalStatus = "connecting" | "running" | "complete" | "error";
@@ -61,7 +54,6 @@ const FRIENDLY_NAMES: Record<string, string> = {
     "Cluster storage permissions",
   "google_project_iam_member.gke_default_node_sa":
     "Node service account permissions",
-  // Workload Identity for notebook sessions
   "google_service_account.notebook_runner":
     "Notebook service account",
   "google_project_iam_member.notebook_runner_storage":
@@ -181,10 +173,7 @@ export function TerraformProgressModal({
   sseUrl,
   onComplete,
   onClose,
-  onCancel,
   mode = "deploy",
-  pollRunId = null,
-  dismissable = false,
 }: TerraformProgressModalProps) {
   const [status, setStatus] = useState<ModalStatus>("connecting");
   const [events, setEvents] = useState<TerraformEvent[]>([]);
@@ -202,119 +191,7 @@ export function TerraformProgressModal({
   const abortRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Poll-based progress tracking: used when reconnecting to an in-progress
-  // run or when dismissable mode starts a background deploy.
-  const [activePollId, setActivePollId] = useState<number | null>(pollRunId ?? null);
-
-  // In poll/dismissable mode, assume compute phase from the start
-  // so the timing warning and patience messages show immediately.
   useEffect(() => {
-    if (dismissable && activePollId) {
-      setComputePhaseStarted(true);
-      setPhase("compute");
-      setStatus("running");
-    }
-  }, [dismissable, activePollId]);
-
-  // Track whether we have ever seen an active run. The background deploy
-  // takes a moment to create the run record, so we should not assume
-  // "no active run" means "complete" until we have seen one start.
-  const [hasSeenActiveRun, setHasSeenActiveRun] = useState(false);
-
-  useEffect(() => {
-    if (!activePollId) return;
-
-    setStatus((prev) => (prev === "complete" || prev === "error" ? prev : "running"));
-
-    const controller = new AbortController();
-    async function poll() {
-      try {
-        const token = getToken();
-        const headers: Record<string, string> = {};
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-
-        const statusResp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/status`, {
-          headers,
-          signal: controller.signal,
-        });
-        if (!statusResp.ok) return;
-        const tfStatus = await statusResp.json();
-
-        const runId = tfStatus.active_run_id;
-        if (!runId) {
-          if (hasSeenActiveRun) {
-            // Run finished since last poll
-            setStatus("complete");
-          }
-          // Otherwise keep waiting for the run to appear
-          return;
-        }
-
-        setHasSeenActiveRun(true);
-
-        const resp = await fetch(`${API_URL}/api/v1/infrastructure/terraform/runs/${runId}`, {
-          headers,
-          signal: controller.signal,
-        });
-        if (!resp.ok) return;
-        const run = await resp.json();
-
-        if (run.resources_planned) setResourcesTotal(run.resources_planned);
-        if (run.resources_completed !== undefined) setResourcesCompleted(run.resources_completed);
-
-        // Parse completed resources from apply_log (JSON lines)
-        if (run.apply_log) {
-          const parsed: TrackedResource[] = [];
-          for (const line of (run.apply_log as string).split("\n")) {
-            try {
-              const entry = JSON.parse(line);
-              const addr = entry?.hook?.resource?.addr;
-              if (!addr || addr.startsWith("data.")) continue;
-              if (entry.type === "apply_complete") {
-                parsed.push({ address: addr, label: friendlyLabel(addr), status: "complete" });
-              } else if (entry.type === "apply_start") {
-                if (!parsed.find((r) => r.address === addr)) {
-                  parsed.push({ address: addr, label: friendlyLabel(addr), status: "in_progress" });
-                }
-              }
-            } catch {
-              continue;
-            }
-          }
-          if (parsed.length > 0) setResources(parsed);
-        }
-
-        // Detect phase from resource addresses or message content
-        if (run.apply_log?.includes("container_cluster") || run.apply_log?.includes("container_node_pool")) {
-          setComputePhaseStarted(true);
-          setPhase("compute");
-        } else if (run.resources_completed > 0) {
-          setPhase("storage");
-        }
-
-        if (run.status === "completed") {
-          setStatus("complete");
-        } else if (run.status === "failed") {
-          setStatus("error");
-          setErrorMessage(run.error_message || "Operation failed");
-        }
-      } catch {
-        // Ignore fetch errors from abort
-      }
-    }
-
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
-  }, [activePollId, hasSeenActiveRun]);
-
-  // SSE mode: stream events from a deployment (non-dismissable only)
-  useEffect(() => {
-    if (activePollId) return; // Use polling instead
-
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -633,7 +510,7 @@ export function TerraformProgressModal({
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex justify-end gap-2">
           {status === "complete" && (
             <button
               data-testid="tf-modal-done-btn"
@@ -655,30 +532,12 @@ export function TerraformProgressModal({
             </button>
           )}
           {(status === "connecting" || status === "running") && (
-            <div className="flex items-center gap-3">
-              {dismissable && (
-                <>
-                  <span className="text-xs text-gray-400">
-                    Deployment continues in the background
-                  </span>
-                  <button
-                    onClick={onClose}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
-                  >
-                    Minimize
-                  </button>
-                </>
-              )}
-              <button
-                onClick={() => {
-                  if (onCancel) onCancel();
-                  onClose();
-                }}
-                className="px-4 py-2 text-red-600 hover:text-red-800 text-sm font-medium"
-              >
-                Cancel
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
+            >
+              Cancel
+            </button>
           )}
         </div>
       </div>

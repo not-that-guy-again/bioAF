@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from google.cloud import storage
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.orphaned_resource import OrphanedResource
@@ -87,8 +87,6 @@ class OrphanedResourceService:
         try:
             if resource.resource_type == "gke_cluster":
                 await OrphanedResourceService._cleanup_gke_cluster(session, resource)
-                # Reset compute state so the UI allows a fresh deploy
-                await session.execute(text("UPDATE platform_config SET value = 'false' WHERE key = 'compute_deployed'"))
             elif resource.resource_type == "gcs_bucket":
                 await OrphanedResourceService._cleanup_gcs_bucket(session, resource)
             else:
@@ -116,12 +114,7 @@ class OrphanedResourceService:
         session: AsyncSession,
         resource: OrphanedResource,
     ) -> None:
-        """Delete a GKE cluster using the SA credentials.
-
-        Treats 404 as success -- the cluster is already gone.
-        """
-        from google.api_core.exceptions import NotFound
-
+        """Delete a GKE cluster using the SA credentials."""
         from app.services.stack_deployment import _get_gke_client, _get_gke_credentials
 
         credentials = await _get_gke_credentials(session)
@@ -129,22 +122,14 @@ class OrphanedResourceService:
         cluster_path = (
             f"projects/{resource.gcp_project_id}/locations/{resource.gcp_zone}/clusters/{resource.resource_name}"
         )
-        try:
-            client.delete_cluster(name=cluster_path)
-        except NotFound:
-            logger.info("Cluster %s already deleted", resource.resource_name)
+        client.delete_cluster(name=cluster_path)
 
     @staticmethod
     async def _cleanup_gcs_bucket(
         session: AsyncSession,
         resource: OrphanedResource,
     ) -> None:
-        """Delete a GCS bucket using the SA credentials.
-
-        Treats 404 as success -- the bucket is already gone.
-        """
-        from google.api_core.exceptions import NotFound
-
+        """Delete a GCS bucket using the SA credentials."""
         from app.services.stack_deployment import _get_gke_credentials
 
         credentials = await _get_gke_credentials(session)
@@ -153,10 +138,7 @@ class OrphanedResourceService:
         else:
             client = storage.Client(project=resource.gcp_project_id)
         bucket = client.bucket(resource.resource_name)
-        try:
-            bucket.delete(force=True)
-        except NotFound:
-            logger.info("Bucket %s already deleted", resource.resource_name)
+        bucket.delete(force=True)
 
     @staticmethod
     async def dismiss_resource(
