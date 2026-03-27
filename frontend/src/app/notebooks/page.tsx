@@ -20,8 +20,12 @@ import type {
   EnvironmentResponse,
   EnvironmentListResponse,
   EnvironmentDetailResponse,
+  FileResponse,
+  FileListResponse,
+  Sample,
 } from "@/lib/types";
 import { RESOURCE_PROFILES } from "@/lib/types";
+import { FileTreeSelector } from "@/components/notebooks/FileTreeSelector";
 
 const SESSION_STATUS_COLORS: Record<string, string> = {
   pending: "bg-gray-100 text-gray-800",
@@ -55,6 +59,11 @@ export default function NotebooksPage() {
   const [selectedEnvDetail, setSelectedEnvDetail] = useState<EnvironmentDetailResponse | null>(null);
   const [selectedVersionImageUri, setSelectedVersionImageUri] = useState<string | null>(null);
 
+  // File selection state
+  const [experimentFiles, setExperimentFiles] = useState<FileResponse[]>([]);
+  const [sampleNames, setSampleNames] = useState<Record<number, string>>({});
+  const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
+
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push("/login");
@@ -65,6 +74,51 @@ export default function NotebooksPage() {
     loadBuildStatus();
     loadEnvironments();
   }, [router]);
+
+  // Load experiment files when experiment selection changes
+  useEffect(() => {
+    if (!selectedExperiment) {
+      setExperimentFiles([]);
+      setSampleNames({});
+      setSelectedFileIds([]);
+      return;
+    }
+    loadExperimentFiles(selectedExperiment);
+  }, [selectedExperiment]);
+
+  async function loadExperimentFiles(experimentId: number) {
+    try {
+      const data = await api.get<FileListResponse>(
+        `/api/experiments/${experimentId}/files?page_size=500`
+      );
+      setExperimentFiles(data.files);
+      setSelectedFileIds([]);
+
+      // Load sample names for grouping
+      const sampleIds = new Set<number>();
+      for (const file of data.files) {
+        for (const sid of file.sample_ids || []) {
+          sampleIds.add(sid);
+        }
+      }
+      if (sampleIds.size > 0) {
+        try {
+          const samplesData = await api.get<{ samples: Sample[] }>(
+            `/api/experiments/${experimentId}/samples?page_size=500`
+          );
+          const names: Record<number, string> = {};
+          for (const s of samplesData.samples) {
+            names[s.id] = s.sample_id_external || `Sample ${s.id}`;
+          }
+          setSampleNames(names);
+        } catch {
+          setSampleNames({});
+        }
+      }
+    } catch {
+      setExperimentFiles([]);
+    }
+  }
 
   // Auto-refresh while any session is starting (waiting for pod + LB IP)
   useEffect(() => {
@@ -146,6 +200,7 @@ export default function NotebooksPage() {
         resource_profile: selectedProfile,
         experiment_id: selectedExperiment,
         image_uri: selectedVersionImageUri,
+        input_file_ids: selectedFileIds.length > 0 ? selectedFileIds : undefined,
       };
       await api.post("/api/v1/notebooks/sessions", req);
       loadSessions();
@@ -298,6 +353,18 @@ export default function NotebooksPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Input File Selection */}
+              {selectedExperiment && experimentFiles.length > 0 && (
+                <div>
+                  <label className="text-sm text-gray-500 mb-2 block">Input Files (optional)</label>
+                  <FileTreeSelector
+                    files={experimentFiles}
+                    sampleNames={sampleNames}
+                    onSelectionChange={setSelectedFileIds}
+                  />
+                </div>
+              )}
 
               {/* Launch Buttons */}
               <div className="flex gap-3">

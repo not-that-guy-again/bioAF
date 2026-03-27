@@ -556,6 +556,7 @@ export interface SessionLaunchRequest {
   resource_profile: ResourceProfile;
   experiment_id?: number | null;
   image_uri?: string | null;
+  input_file_ids?: number[];
 }
 
 export interface UserQuota {
