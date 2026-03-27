@@ -23,6 +23,122 @@ from app.services.terraform_executor import TerraformExecutor, TerraformProgress
 logger = logging.getLogger("bioaf.stack_deployment")
 
 
+async def _reconcile_compute_state(session: AsyncSession) -> None:
+    """Reconcile compute Terraform state with actual GCP resources.
+
+    If compute_deployed is false but the state file has resources,
+    check whether the GKE cluster actually exists. If it does, set
+    compute_deployed back to true. If it does not, clear the state
+    file so the next deploy starts clean.
+    """
+    import json as _json
+
+    from google.cloud import storage as gcs_storage
+
+    compute_deployed = await _read_config(session, "compute_deployed")
+    if compute_deployed == "true":
+        return  # Nothing to reconcile
+
+    state_bucket = await _read_config(session, "terraform_state_bucket")
+    if state_bucket == "null" or not state_bucket:
+        return
+
+    # Read the compute state file from GCS
+    try:
+        credentials = await _get_gke_credentials(session)
+        if credentials:
+            client = gcs_storage.Client(credentials=credentials)
+        else:
+            client = gcs_storage.Client()
+        bucket = client.bucket(state_bucket)
+        blob = bucket.blob("compute/default.tfstate")
+        if not blob.exists():
+            return
+        state = _json.loads(blob.download_as_text())
+    except Exception as exc:
+        logger.warning("Could not read compute state for reconciliation: %s", exc)
+        return
+
+    resources = state.get("resources", [])
+    if not resources:
+        return  # State is already clean
+
+    # Check if the GKE cluster actually exists
+    cluster_resource = next(
+        (r for r in resources if r.get("type") == "google_container_cluster"),
+        None,
+    )
+    if not cluster_resource:
+        # No cluster in state but other resources exist -- clear state
+        logger.info("Compute state has %d resources but no cluster, clearing", len(resources))
+        _write_empty_state(blob, state.get("serial", 0))
+        return
+
+    # Extract the cluster name from the state resource instances
+    instances = cluster_resource.get("instances", [])
+    cluster_name = None
+    for inst in instances:
+        attrs = inst.get("attributes", {})
+        cluster_name = attrs.get("name")
+        if cluster_name:
+            break
+
+    if not cluster_name:
+        logger.info("Could not determine cluster name from state, clearing")
+        _write_empty_state(blob, state.get("serial", 0))
+        return
+
+    # Query GKE to see if the cluster exists
+    project_id = await _read_config(session, "gcp_project_id")
+    zone = await _read_config(session, "gcp_zone")
+    try:
+        gke_client = _get_gke_client(credentials)
+        cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+        # Cluster exists -- correct compute_deployed
+        if cluster.status in (cluster.Status.RUNNING, cluster.Status.PROVISIONING, cluster.Status.RECONCILING):
+            logger.warning(
+                "Cluster %s exists (status %s) but compute_deployed=false, correcting",
+                cluster_name,
+                cluster.status,
+            )
+            await _set_config(session, "compute_deployed", "true")
+            await _set_config(session, "gke_cluster_name", cluster_name)
+            await session.flush()
+        elif cluster.status == cluster.Status.STOPPING:
+            # Cluster is being deleted -- wait, then clear state
+            logger.info("Cluster %s is STOPPING, will clear state after deletion", cluster_name)
+            for _ in range(60):
+                await asyncio.sleep(5)
+                try:
+                    c = gke_client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+                    if c.status != c.Status.STOPPING:
+                        break
+                except Exception:
+                    break  # Cluster gone
+            _write_empty_state(blob, state.get("serial", 0))
+    except Exception:
+        # Cluster not found -- clear the stale state
+        logger.info("Cluster %s not found in GCP, clearing stale compute state", cluster_name)
+        _write_empty_state(blob, state.get("serial", 0))
+
+
+def _write_empty_state(blob, serial: int) -> None:
+    """Write an empty Terraform state to a GCS blob."""
+    import json as _json
+
+    empty = {
+        "version": 4,
+        "terraform_version": "1.7.5",
+        "serial": serial + 1,
+        "lineage": "",
+        "outputs": {},
+        "resources": [],
+        "check_results": None,
+    }
+    blob.upload_from_string(_json.dumps(empty), content_type="application/json")
+    logger.info("Cleared compute Terraform state (new serial: %d)", serial + 1)
+
+
 # -----------------------------------------------------------------------
 # Pydantic models for cluster status
 # -----------------------------------------------------------------------
@@ -409,6 +525,14 @@ async def deploy_stack(
                 message="Stack deployment failed during storage module",
             )
             return
+
+    # Reconcile compute state before deploying. If a previous deploy
+    # failed or was torn down, the state file may have stale resources.
+    yield TerraformProgressEvent(
+        event_type="progress",
+        message="Checking infrastructure state...",
+    )
+    await _reconcile_compute_state(session)
 
     # Step 2: Deploy compute
     yield TerraformProgressEvent(
