@@ -195,6 +195,22 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
 
     except Exception as exc:
         logger.error("Failed to query GKE cluster status: %s", exc)
+
+        # If the cluster is genuinely gone (404), auto-correct the stale
+        # config so the UI shows the deploy button instead of a broken
+        # "deployed" state. Users cannot fix this themselves.
+        exc_str = str(exc)
+        if "404" in exc_str or "Not found" in exc_str or "NotFound" in exc_str:
+            logger.warning("Cluster %s not found, resetting compute_deployed to false", cluster_name)
+            await _set_config(session, "compute_deployed", "false")
+            await session.flush()
+            return StackStatus(
+                compute_stack=stack,
+                compute_deployed=False,
+                storage_deployed=storage,
+                cluster=None,
+            )
+
         return StackStatus(
             compute_stack=stack,
             compute_deployed=True,
