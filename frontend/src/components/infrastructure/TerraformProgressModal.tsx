@@ -59,6 +59,15 @@ const FRIENDLY_NAMES: Record<string, string> = {
   "google_container_node_pool.interactive": "Interactive session nodes",
   "google_project_iam_member.gke_storage_access":
     "Cluster storage permissions",
+  "google_project_iam_member.gke_default_node_sa":
+    "Node service account permissions",
+  // Workload Identity for notebook sessions
+  "google_service_account.notebook_runner":
+    "Notebook service account",
+  "google_project_iam_member.notebook_runner_storage":
+    "Notebook storage permissions",
+  "google_service_account_iam_member.notebook_runner_workload_identity":
+    "Notebook identity binding",
 };
 
 // Rotating messages shown during long compute provisioning.
@@ -196,6 +205,16 @@ export function TerraformProgressModal({
   // Poll-based progress tracking: used when reconnecting to an in-progress
   // run or when dismissable mode starts a background deploy.
   const [activePollId, setActivePollId] = useState<number | null>(pollRunId ?? null);
+
+  // In poll/dismissable mode, assume compute phase from the start
+  // so the timing warning and patience messages show immediately.
+  useEffect(() => {
+    if (dismissable && activePollId) {
+      setComputePhaseStarted(true);
+      setPhase("compute");
+      setStatus("running");
+    }
+  }, [dismissable, activePollId]);
 
   // Track whether we have ever seen an active run. The background deploy
   // takes a moment to create the run record, so we should not assume
