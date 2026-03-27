@@ -67,7 +67,7 @@ The `notebook_session_files` junction table with `access_type='input'` stores th
 
 ### Get Reproduction Config
 
-```
+```text
 GET /api/v1/notebooks/sessions/{session_id}/reproduce-config
 ```
 
@@ -91,12 +91,11 @@ Returns the original session's configuration formatted for the launch modal:
 
 Uses the existing launch endpoint with additional fields:
 
-```
-POST /api/v1/notebooks/sessions
+```json
 {
   "session_type": "rstudio",
-  "resource_profile": "large",          // user changed from medium
-  "environment_version_id": 4,          // user changed from v3
+  "resource_profile": "large",
+  "environment_version_id": 4,
   "experiment_id": 1,
   "input_file_ids": [5, 12, 18],
   "reproduce_from_session_id": 42,
@@ -105,6 +104,7 @@ POST /api/v1/notebooks/sessions
 ```
 
 The backend:
+
 1. Creates the session with `reproduced_from_session_id = 42`
 2. Passes the git commit hash to the adapter
 3. Adapter clones the repo, checks out the commit, creates a new branch from it
@@ -133,10 +133,12 @@ The existing launch modal is extended:
 ### Session Detail Additions
 
 For reproduced sessions, the detail view shows:
+
 - "Reproduced from: Session #{id}" with a link to the original
 - The git commit that was checked out
 
 For sessions that have been reproduced:
+
 - "Reproduced by: Session #{id1}, #{id2}" with links
 
 ---
@@ -156,7 +158,7 @@ When reproducing session 42 as session 55:
 
 The git history naturally shows the fork point:
 
-```
+```text
 main
   |
   +-- session/42-bmills-2026-03-27 (original)

@@ -82,7 +82,8 @@ The notebook launch modal gains a file selection step after choosing session typ
 
 - **Scope selector:** Radio buttons for "Project" or "Experiment" scope. Selecting Project shows all experiments in the project.
 - **File tree:** Collapsible tree structure:
-  ```
+
+  ```text
   [v] Experiment: EXP-001 - scRNA-seq Treatment Study
       [v] Sample: SAMP-001 - Control Day 0
           [ ] filtered_matrix.h5ad (450 MB)
@@ -93,6 +94,7 @@ The notebook launch modal gains a file selection step after choosing session typ
   [ ] Experiment: EXP-002 - Spatial Transcriptomics
       ...
   ```
+
 - **FASTQ/BAM toggle:** Checkbox at the top: "Include FASTQ and BAM files" -- unchecked by default. When unchecked, FASTQ/BAM/CRAM files are hidden from the tree.
 - **Select all:** Clicking an experiment checkbox selects all files under it. Clicking a sample checkbox selects all files under that sample.
 - **Size estimate:** Total selected file size shown at the bottom. Warning if > 10 GB.
@@ -167,6 +169,7 @@ A lightweight sidecar container (or cron job in the main container) runs every 1
 3. If no changes, do nothing
 
 Implementation options:
+
 - **Sidecar container:** Runs a simple shell loop. Shares the home volume with the main container. Cleanest separation.
 - **Cron in main container:** Add a crontab entry in the startup script. Simpler but couples git logic to the notebook image.
 
@@ -199,6 +202,7 @@ On session stop, before the home directory sync-out:
 ### What Gets Registered
 
 On session stop (and during periodic auto-commits), the system scans for files that:
+
 - Are in the home directory but NOT in `/data/` (inputs are read-only, not outputs)
 - Are not in `.gitignore` patterns
 - Are not system files (`.bash_history`, `.Rhistory`, `__pycache__/`, `.ipynb_checkpoints/`)
@@ -242,6 +246,7 @@ When a user launches a session for an experiment/project that already has open b
 ### Session Detail
 
 The session detail view shows:
+
 - Git branch name
 - Last commit hash and message
 - Link to the branch on GitHub
@@ -253,6 +258,7 @@ The session detail view shows:
 ### Dockerfile.bioaf-scrna
 
 Add to the system dependencies install:
+
 ```dockerfile
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git openssh-client \
