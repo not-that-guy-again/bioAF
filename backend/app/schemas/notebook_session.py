@@ -23,6 +23,7 @@ class SessionLaunchRequest(BaseModel):
     session_type: Literal["jupyter", "rstudio"]
     resource_profile: Literal["small", "medium", "large"]
     experiment_id: int | None = None
+    input_file_ids: list[int] = []
 
 
 class SessionResponse(BaseModel):

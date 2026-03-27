@@ -31,6 +31,7 @@ class NotebookLaunchRequest(BaseModel):
     session_type: str
     resource_profile: str = "small"
     experiment_id: int | None = None
+    input_file_ids: list[int] = []
 
 
 class NotebookSettings(BaseModel):
@@ -258,6 +259,7 @@ async def launch_session(
             resource_profile=body.resource_profile,
             experiment_id=body.experiment_id,
             image=scrna_image,
+            input_file_ids=body.input_file_ids or None,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
