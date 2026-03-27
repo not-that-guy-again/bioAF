@@ -429,7 +429,7 @@ export function TerraformProgressModal({
               <div className="mt-2">
                 {((computePhaseStarted && mode === "deploy") || mode === "teardown") && (
                   <p className="text-xs text-gray-400">
-                    This may take 5–15 minutes.
+                    This can take 10-30 minutes based on Google Cloud traffic.
                   </p>
                 )}
                 <p className="text-xs text-gray-300 mt-1">
