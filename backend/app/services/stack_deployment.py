@@ -307,6 +307,34 @@ async def deploy_stack(
     if stack_type != "kubernetes":
         raise ValueError(f"Unsupported stack type: {stack_type}")
 
+    # Wait for any cluster that is still being deleted before proceeding.
+    # GKE rejects create requests while a same-named cluster is STOPPING.
+    project_id = await _read_config(session, "gcp_project_id")
+    zone = await _read_config(session, "gcp_zone")
+    org_slug = await _read_config(session, "org_slug")
+    stack_uid = await _read_config(session, "stack_uid")
+    if stack_uid != "null":
+        expected_name = f"bioaf-{org_slug}-{stack_uid}"
+        try:
+            credentials = await _get_gke_credentials(session)
+            gke_client = _get_gke_client(credentials)
+            cluster_path = f"projects/{project_id}/locations/{zone}/clusters/{expected_name}"
+            for _attempt in range(60):  # Up to 5 minutes
+                try:
+                    cluster = gke_client.get_cluster(name=cluster_path)
+                    if cluster.status == cluster.Status.STOPPING:
+                        yield TerraformProgressEvent(
+                            event_type="progress",
+                            message="Waiting for previous cluster to finish deleting...",
+                        )
+                        await asyncio.sleep(5)
+                        continue
+                    break
+                except Exception:
+                    break  # Cluster not found -- good to proceed
+        except Exception:
+            pass  # Can't check -- proceed anyway
+
     storage_deployed = await _read_config(session, "storage_deployed")
     storage_failed = False
     compute_failed = False
