@@ -64,6 +64,9 @@ export default function NotebooksPage() {
   const [sampleNames, setSampleNames] = useState<Record<number, string>>({});
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
 
+  // Branch conflict warning
+  const [activeBranchCount, setActiveBranchCount] = useState(0);
+
   useEffect(() => {
     if (!isAuthenticated()) {
       router.push("/login");
@@ -81,10 +84,20 @@ export default function NotebooksPage() {
       setExperimentFiles([]);
       setSampleNames({});
       setSelectedFileIds([]);
+      setActiveBranchCount(0);
       return;
     }
     loadExperimentFiles(selectedExperiment);
-  }, [selectedExperiment]);
+
+    // Check for active branches from other sessions on this experiment
+    const activeBranches = sessions.filter(
+      (s) =>
+        s.experiment?.id === selectedExperiment &&
+        ["running", "starting", "idle"].includes(s.status) &&
+        s.git_branch_name
+    );
+    setActiveBranchCount(activeBranches.length);
+  }, [selectedExperiment, sessions]);
 
   async function loadExperimentFiles(experimentId: number) {
     try {
@@ -366,6 +379,17 @@ export default function NotebooksPage() {
                 </div>
               )}
 
+              {/* Branch Conflict Warning */}
+              {activeBranchCount > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-800">
+                    There {activeBranchCount === 1 ? "is" : "are"} {activeBranchCount} active notebook{" "}
+                    {activeBranchCount === 1 ? "branch" : "branches"} for this experiment.
+                    You may need to merge changes on GitHub after your session.
+                  </p>
+                </div>
+              )}
+
               {/* Launch Buttons */}
               <div className="flex gap-3">
                 <button
@@ -519,6 +543,8 @@ export default function NotebooksPage() {
                 { label: "Started", value: viewingSession.started_at ? new Date(viewingSession.started_at).toLocaleString() : null },
                 { label: "Access URL", value: viewingSession.proxy_url || null },
                 { label: "Idle Since", value: viewingSession.idle_since ? new Date(viewingSession.idle_since).toLocaleString() : null },
+                { label: "Git Branch", value: viewingSession.git_branch_name || null },
+                { label: "Git Commit", value: viewingSession.git_commit_hash || null },
               ]}
               actions={
                 <>

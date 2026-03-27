@@ -40,6 +40,8 @@ class SessionResponse(BaseModel):
     started_at: datetime | None = None
     stopped_at: datetime | None = None
     created_at: datetime
+    git_branch_name: str | None = None
+    git_commit_hash: str | None = None
 
     model_config = {"from_attributes": True}
 

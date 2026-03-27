@@ -544,6 +544,8 @@ export interface NotebookSession {
   started_at: string | null;
   stopped_at: string | null;
   created_at: string;
+  git_branch_name: string | null;
+  git_commit_hash: string | null;
 }
 
 export interface SessionListResponse {
