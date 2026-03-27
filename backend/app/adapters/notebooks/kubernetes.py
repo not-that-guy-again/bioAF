@@ -456,12 +456,14 @@ class KubernetesNotebookProvider(NotebookProvider):
             inventory_content = "\\n".join(inventory_lines)
             copy_cmds.append(f'printf "{inventory_content}" > /data/FILE_INVENTORY.md')
             data_sync_cmd = " && ".join(copy_cmds)
-            init_containers.append({
-                "name": "gcs-data-sync",
-                "image": "google/cloud-sdk:slim",
-                "command": ["/bin/sh", "-c", data_sync_cmd],
-                "volumeMounts": [{"name": "data", "mountPath": "/data"}],
-            })
+            init_containers.append(
+                {
+                    "name": "gcs-data-sync",
+                    "image": "google/cloud-sdk:slim",
+                    "command": ["/bin/sh", "-c", data_sync_cmd],
+                    "volumeMounts": [{"name": "data", "mountPath": "/data"}],
+                }
+            )
             volumes.append({"name": "data", "emptyDir": {"sizeLimit": "50Gi"}})
             volume_mounts.append({"name": "data", "mountPath": "/data", "readOnly": True})
 
@@ -538,18 +540,20 @@ class KubernetesNotebookProvider(NotebookProvider):
                 "  sleep 60; "
                 "  NOW=$(date +%s); "
                 "  DIFF=$((NOW - LAST_COMMIT)); "
-                "  if [ $DIFF -ge 900 ] && [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then "
-                f"    git add -A && git commit -m \"Auto-save: $(date -u +%Y-%m-%dT%H:%M:%SZ)\" && git push origin {git_branch} && "
+                '  if [ $DIFF -ge 900 ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then '
+                f'    git add -A && git commit -m "Auto-save: $(date -u +%Y-%m-%dT%H:%M:%SZ)" && git push origin {git_branch} && '
                 "    LAST_COMMIT=$(date +%s); "
                 "  fi; "
                 "done"
             )
-            containers.append({
-                "name": "git-autocommit",
-                "image": "alpine/git",
-                "command": ["/bin/sh", "-c", autocommit_script],
-                "volumeMounts": [{"name": "home", "mountPath": home_dir}],
-            })
+            containers.append(
+                {
+                    "name": "git-autocommit",
+                    "image": "alpine/git",
+                    "command": ["/bin/sh", "-c", autocommit_script],
+                    "volumeMounts": [{"name": "home", "mountPath": home_dir}],
+                }
+            )
 
         # Pod manifest
         pod_manifest = {
@@ -753,7 +757,8 @@ class KubernetesNotebookProvider(NotebookProvider):
         if pod_name:
             try:
                 git_cmd = [
-                    "/bin/sh", "-c",
+                    "/bin/sh",
+                    "-c",
                     "cd /home/jovyan && "
                     "if [ -d .git ]; then "
                     "  git add -A && "
@@ -761,8 +766,8 @@ class KubernetesNotebookProvider(NotebookProvider):
                     "  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null); "
                     "  HASH=$(git rev-parse --short HEAD 2>/dev/null); "
                     "  git push origin $BRANCH 2>/dev/null; "
-                    "  echo \"GIT_BRANCH=$BRANCH\"; "
-                    "  echo \"GIT_HASH=$HASH\"; "
+                    '  echo "GIT_BRANCH=$BRANCH"; '
+                    '  echo "GIT_HASH=$HASH"; '
                     "fi",
                 ]
                 result = stream(

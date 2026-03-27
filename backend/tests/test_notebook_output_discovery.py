@@ -4,17 +4,13 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.services.auth_service import AuthService
 
 
 @pytest_asyncio.fixture
 async def session_with_experiment(session, admin_user):
     """Create a compute session linked to an experiment."""
     await session.execute(
-        text(
-            "INSERT INTO experiments (id, organization_id, name, status) "
-            "VALUES (:id, :org_id, :name, :status)"
-        ),
+        text("INSERT INTO experiments (id, organization_id, name, status) VALUES (:id, :org_id, :name, :status)"),
         {"id": 800, "org_id": admin_user.organization_id, "name": "Output Test Exp", "status": "registered"},
     )
 
@@ -49,7 +45,11 @@ class TestOutputRegistration:
             f"/api/v1/notebooks/sessions/{cs.id}/register-outputs",
             json={
                 "outputs": [
-                    {"filename": "analysis.h5ad", "size_bytes": 500_000_000, "gcs_uri": "gs://bucket/outputs/analysis.h5ad"},
+                    {
+                        "filename": "analysis.h5ad",
+                        "size_bytes": 500_000_000,
+                        "gcs_uri": "gs://bucket/outputs/analysis.h5ad",
+                    },
                     {"filename": "figure.png", "size_bytes": 2_000_000, "gcs_uri": "gs://bucket/outputs/figure.png"},
                 ],
             },
@@ -90,10 +90,7 @@ class TestOutputRegistration:
         )
 
         result = await session.execute(
-            text(
-                "SELECT access_type FROM notebook_session_files "
-                "WHERE session_id = :sid"
-            ),
+            text("SELECT access_type FROM notebook_session_files WHERE session_id = :sid"),
             {"sid": cs.id},
         )
         rows = result.fetchall()
@@ -131,7 +128,11 @@ class TestOutputRegistration:
             f"/api/v1/notebooks/sessions/{cs.id}/register-outputs",
             json={
                 "outputs": [
-                    {"filename": "data/input_file.h5ad", "size_bytes": 500_000, "gcs_uri": "gs://bucket/data/input.h5ad"},
+                    {
+                        "filename": "data/input_file.h5ad",
+                        "size_bytes": 500_000,
+                        "gcs_uri": "gs://bucket/data/input.h5ad",
+                    },
                     {"filename": "notebook_output.ipynb", "size_bytes": 10_000, "gcs_uri": "gs://bucket/output.ipynb"},
                 ],
             },
@@ -142,9 +143,7 @@ class TestOutputRegistration:
         assert data["registered_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_register_outputs_session_not_found(
-        self, client, admin_token
-    ):
+    async def test_register_outputs_session_not_found(self, client, admin_token):
         """Registering outputs for a nonexistent session returns 404."""
         response = await client.post(
             "/api/v1/notebooks/sessions/99999/register-outputs",

@@ -118,20 +118,20 @@ class NotebookService:
             if input_file_ids:
                 from app.models.file import File
 
-                file_results = await session.execute(
-                    select(File).where(File.id.in_(input_file_ids))
-                )
+                file_results = await session.execute(select(File).where(File.id.in_(input_file_ids)))
                 found_files = {f.id: f for f in file_results.scalars().all()}
 
                 for fid in input_file_ids:
                     f = found_files.get(fid)
                     if not f or f.organization_id != org_id:
                         raise ValueError(f"File {fid} not found or not accessible")
-                    input_files_spec.append({
-                        "file_id": f.id,
-                        "gcs_uri": f.gcs_uri,
-                        "relative_path": f.filename,
-                    })
+                    input_files_spec.append(
+                        {
+                            "file_id": f.id,
+                            "gcs_uri": f.gcs_uri,
+                            "relative_path": f.filename,
+                        }
+                    )
 
                 spec["input_files"] = input_files_spec
 
@@ -156,11 +156,13 @@ class NotebookService:
                 from app.models.notebook_session_file import NotebookSessionFile
 
                 for fid in input_file_ids:
-                    session.add(NotebookSessionFile(
-                        session_id=notebook_session.id,
-                        file_id=fid,
-                        access_type="input",
-                    ))
+                    session.add(
+                        NotebookSessionFile(
+                            session_id=notebook_session.id,
+                            file_id=fid,
+                            access_type="input",
+                        )
+                    )
 
         except Exception as e:
             notebook_session.status = "failed"

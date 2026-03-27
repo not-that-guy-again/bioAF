@@ -341,8 +341,16 @@ async def sync_session(
 
 # System files and directories to exclude from output registration
 _EXCLUDED_FILENAMES = {
-    ".bash_history", ".Rhistory", ".bash_logout", ".bashrc", ".profile",
-    ".gitconfig", ".ssh", ".local", ".cache", ".ipython",
+    ".bash_history",
+    ".Rhistory",
+    ".bash_logout",
+    ".bashrc",
+    ".profile",
+    ".gitconfig",
+    ".ssh",
+    ".local",
+    ".cache",
+    ".ipython",
 }
 _EXCLUDED_PREFIXES = ("data/", ".git/", "__pycache__/", ".ipynb_checkpoints/")
 
@@ -411,11 +419,13 @@ async def register_outputs(
         session.add(file_record)
         await session.flush()
 
-        session.add(NotebookSessionFile(
-            session_id=session_id,
-            file_id=file_record.id,
-            access_type="output",
-        ))
+        session.add(
+            NotebookSessionFile(
+                session_id=session_id,
+                file_id=file_record.id,
+                access_type="output",
+            )
+        )
         registered += 1
 
     await session.commit()

@@ -1,9 +1,7 @@
 """Tests for git integration in notebook pod adapter."""
 
 import pytest
-import pytest_asyncio
 from unittest.mock import MagicMock, patch
-from sqlalchemy import text
 
 from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
 

@@ -2,10 +2,9 @@
 
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch
 from sqlalchemy import text
 
-from app.services.auth_service import AuthService
 
 
 @pytest_asyncio.fixture
@@ -13,17 +12,12 @@ async def experiment_with_files(session, admin_user):
     """Create an experiment with files for testing."""
     # Create experiment
     await session.execute(
-        text(
-            "INSERT INTO experiments (id, organization_id, name, status) "
-            "VALUES (:id, :org_id, :name, :status)"
-        ),
+        text("INSERT INTO experiments (id, organization_id, name, status) VALUES (:id, :org_id, :name, :status)"),
         {"id": 500, "org_id": admin_user.organization_id, "name": "Test Exp", "status": "registered"},
     )
 
     # Create files
-    for i, (filename, size) in enumerate(
-        [("matrix.h5ad", 450_000_000), ("counts.csv", 12_000_000)], start=1
-    ):
+    for i, (filename, size) in enumerate([("matrix.h5ad", 450_000_000), ("counts.csv", 12_000_000)], start=1):
         await session.execute(
             text(
                 "INSERT INTO files (id, organization_id, gcs_uri, filename, size_bytes, file_type, experiment_id, source_type) "
@@ -75,10 +69,7 @@ class TestInputFileMounting:
         await session.commit()
 
         result = await session.execute(
-            text(
-                "SELECT file_id, access_type FROM notebook_session_files "
-                "WHERE session_id = :sid ORDER BY file_id"
-            ),
+            text("SELECT file_id, access_type FROM notebook_session_files WHERE session_id = :sid ORDER BY file_id"),
             {"sid": ns.id},
         )
         rows = result.fetchall()
@@ -112,9 +103,7 @@ class TestInputFileMounting:
         assert result.scalar() == 0
 
     @pytest.mark.asyncio
-    async def test_adapter_spec_includes_input_files(
-        self, session, admin_user, experiment_with_files
-    ):
+    async def test_adapter_spec_includes_input_files(self, session, admin_user, experiment_with_files):
         """The adapter spec should include input_files with GCS URIs."""
         from app.services.notebook_service import NotebookService
         from app.adapters.registry import get_notebook_adapter
@@ -144,9 +133,7 @@ class TestInputFileMounting:
         assert "gs://" in captured_spec["input_files"][0]["gcs_uri"]
 
     @pytest.mark.asyncio
-    async def test_org_isolation_rejects_other_org_files(
-        self, session, admin_user, experiment_with_files
-    ):
+    async def test_org_isolation_rejects_other_org_files(self, session, admin_user, experiment_with_files):
         """Cannot mount files from another organization."""
         from app.services.notebook_service import NotebookService
 
@@ -202,9 +189,5 @@ class TestInputFileMountingAPI:
         assert response.status_code == 200
 
         # Verify NotebookSessionFile rows were created
-        result = await session.execute(
-            text(
-                "SELECT COUNT(*) FROM notebook_session_files WHERE access_type = 'input'"
-            )
-        )
+        result = await session.execute(text("SELECT COUNT(*) FROM notebook_session_files WHERE access_type = 'input'"))
         assert result.scalar() >= 2

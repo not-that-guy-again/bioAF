@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient
 from sqlalchemy import text
 
-from app.services.auth_service import AuthService
 
 
 @pytest_asyncio.fixture
@@ -42,14 +41,10 @@ class TestGitHubServiceConnect:
         )
         await session.commit()
 
-        result = await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'github_app_id'")
-        )
+        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'github_app_id'"))
         assert result.scalar() == "12345"
 
-        result = await session.execute(
-            text("SELECT value FROM platform_config WHERE key = 'github_org_name'")
-        )
+        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'github_org_name'"))
         assert result.scalar() == "test-org"
 
     @pytest.mark.asyncio

@@ -1,7 +1,6 @@
 """Tests for GitHub-related database columns on experiments, projects, and compute_sessions."""
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import text
 
 
