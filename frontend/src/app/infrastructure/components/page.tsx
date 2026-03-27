@@ -152,11 +152,14 @@ export default function InfraComponentsPage() {
   const DESTROY_STORAGE_PHRASE = "delete my data";
 
   // Auto-open the deploy modal when arriving via "View progress" link
+  const hasShowProgress = typeof window !== "undefined" && window.location.search.includes("showProgress");
   useEffect(() => {
-    if (typeof window !== "undefined" && window.location.search.includes("showProgress") && activeDeployRunId) {
+    const runId = activeDeployRunId || tfStatus?.active_run_id;
+    if (hasShowProgress && runId) {
+      if (!activeDeployRunId) setActiveDeployRunId(runId);
       setShowDeployModal(true);
     }
-  }, [activeDeployRunId]);
+  }, [activeDeployRunId, tfStatus, hasShowProgress]);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -170,11 +173,14 @@ export default function InfraComponentsPage() {
     try {
       const status = await api.get<TerraformStatus>("/api/v1/infrastructure/terraform/status");
       setTfStatus(status);
-      // Track active deploy/apply runs so the user can re-open progress
-      if (status.active_run_id && status.active_run_status === "applying") {
+      // Track active deploy runs (any non-terminal status) so the user
+      // can re-open the progress modal after minimizing.
+      const activeStatuses = ["planning", "awaiting_confirmation", "applying"];
+      if (status.active_run_id && activeStatuses.includes(status.active_run_status ?? "")) {
         setActiveDeployRunId(status.active_run_id);
-      } else {
-        setActiveDeployRunId(null);
+      } else if (!deployStarting) {
+        // Only clear if we didn't just kick off a deploy
+        setActiveDeployRunId((prev) => (prev === -1 ? prev : null));
       }
       const runsData = await api.get<{ runs: TerraformRun[] }>("/api/v1/infrastructure/terraform/runs");
       setRuns(runsData.runs);
@@ -485,7 +491,7 @@ export default function InfraComponentsPage() {
                   <p className="text-xs text-gray-500 mb-4">
                     $0 when idle. Scales automatically with your workloads.
                   </p>
-                  {(activeDeployRunId || deployStarting) ? (
+                  {(activeDeployRunId || deployStarting || tfStatus?.active_run_id) ? (
                     <div className="bg-amber-50 border border-amber-200 rounded p-3 mt-2">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-medium text-amber-800 flex items-center gap-2">
