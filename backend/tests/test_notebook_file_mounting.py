@@ -6,7 +6,6 @@ from unittest.mock import patch
 from sqlalchemy import text
 
 
-
 @pytest_asyncio.fixture
 async def experiment_with_files(session, admin_user):
     """Create an experiment with files for testing."""

@@ -5,7 +5,6 @@ import pytest_asyncio
 from sqlalchemy import text
 
 
-
 @pytest_asyncio.fixture
 async def session_with_experiment(session, admin_user):
     """Create a compute session linked to an experiment."""

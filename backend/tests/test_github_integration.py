@@ -7,7 +7,6 @@ from httpx import AsyncClient
 from sqlalchemy import text
 
 
-
 @pytest_asyncio.fixture
 async def github_credentials(session, admin_user):
     """Seed platform_config with GitHub App credentials for testing."""
