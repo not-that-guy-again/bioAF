@@ -3,6 +3,7 @@
 ## Context
 
 Read the following files before starting:
+
 - `documentation/spec-session-reproduction.md` -- the full spec for this change
 - `documentation/spec-notebook-file-io-git-history.md` -- the Phase 1 spec this depends on
 - `backend/app/models/notebook_session.py` -- ComputeSession model (should now have git_branch_name, git_commit_hash from Phase 1)

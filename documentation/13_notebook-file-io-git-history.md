@@ -3,6 +3,7 @@
 ## Context
 
 Read the following files before starting:
+
 - `documentation/spec-notebook-file-io-git-history.md` -- the full spec for this change
 - `decisions/ADR-039-notebook-output-provenance.md` -- the provenance ADR this builds on
 - `backend/app/models/notebook_session_file.py` -- the NotebookSessionFile model (already exists)
