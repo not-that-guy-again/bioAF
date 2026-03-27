@@ -450,19 +450,6 @@ async def deploy_stack(
             new_uid,
         )
 
-    # Always re-seed the stack_uid when compute is not deployed. This
-    # ensures every compute deploy gets a unique cluster name, avoiding
-    # collisions with GKE clusters that are still in STOPPING state.
-    # Storage buckets are unaffected because the storage step is skipped
-    # when already deployed, and the storage module reads its own copy
-    # of the uid from state.
-    compute_deployed_val = await _read_config(session, "compute_deployed")
-    if compute_deployed_val != "true":
-        fresh_uid = secrets.token_hex(3)
-        await _set_config(session, "stack_uid", fresh_uid)
-        await session.flush()
-        logger.info("Re-seeded stack_uid to %s for fresh compute deploy", fresh_uid)
-
     # Step 1: Deploy storage if needed
     if storage_deployed != "true":
         yield TerraformProgressEvent(
@@ -533,6 +520,20 @@ async def deploy_stack(
         message="Checking infrastructure state...",
     )
     await _reconcile_compute_state(session)
+
+    # Re-check compute_deployed after reconciliation -- it may have been
+    # corrected to true if a cluster was found in GCP.
+    compute_deployed_recheck = await _read_config(session, "compute_deployed")
+    if compute_deployed_recheck == "true":
+        raise ValueError("Compute stack is already deployed. Teardown first.")
+
+    # Re-seed stack_uid for a unique cluster name on every fresh deploy.
+    # This must happen AFTER reconciliation so we don't generate a new uid
+    # while the reconciliation is checking the old one.
+    fresh_uid = secrets.token_hex(3)
+    await _set_config(session, "stack_uid", fresh_uid)
+    await session.flush()
+    logger.info("Re-seeded stack_uid to %s for fresh compute deploy", fresh_uid)
 
     # Step 2: Deploy compute
     yield TerraformProgressEvent(
