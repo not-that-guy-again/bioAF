@@ -235,7 +235,7 @@ export default function SettingsGitHubPage() {
                     <CopyField label="Homepage URL" value={baseUrl} mono />
                     <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
                       <span className="text-xs text-amber-700 block">Webhook</span>
-                      <span className="text-sm text-amber-800">Uncheck "Active" (webhooks are not needed)</span>
+                      <span className="text-sm text-amber-800">Uncheck &ldquo;Active&rdquo; (webhooks are not needed)</span>
                     </div>
                   </div>
 
@@ -253,16 +253,16 @@ export default function SettingsGitHubPage() {
                   <div className="mb-5">
                     <h3 className="text-sm font-medium mb-2">Installation scope:</h3>
                     <div className="text-sm bg-gray-50 rounded p-3">
-                      <p>Select: <strong>"Only on this account"</strong></p>
+                      <p>Select: <strong>&ldquo;Only on this account&rdquo;</strong></p>
                     </div>
                   </div>
 
                   <p className="text-sm text-gray-600 mb-3">
-                    After clicking <strong>"Create GitHub App"</strong>, GitHub will show you the App ID and prompt you to generate a private key.
+                    After clicking <strong>&ldquo;Create GitHub App&rdquo;</strong>, GitHub will show you the App ID and prompt you to generate a private key.
                     Download the private key file (.pem) -- you will upload it in the next step.
                   </p>
                   <p className="text-sm text-gray-600 mb-4">
-                    Then click <strong>"Install App"</strong> in the left sidebar and install it on your <strong>{orgName}</strong> organization.
+                    Then click <strong>&ldquo;Install App&rdquo;</strong> in the left sidebar and install it on your <strong>{orgName}</strong> organization.
                     The installation ID will appear in the URL after installation (the number at the end).
                   </p>
 
@@ -300,7 +300,7 @@ export default function SettingsGitHubPage() {
                         className="w-full px-3 py-2 border rounded text-sm font-mono"
                       />
                       <p className="text-xs text-gray-400 mt-1">
-                        Found at the top of your app's settings page on GitHub
+                        Found at the top of your app&apos;s settings page on GitHub
                       </p>
                     </div>
 
