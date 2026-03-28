@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -20,7 +20,6 @@ export default function SettingsGitHubPage() {
   const [error, setError] = useState("");
   const [orgName, setOrgName] = useState("");
   const [redirecting, setRedirecting] = useState(false);
-  const callbackHandled = useRef(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -34,28 +33,16 @@ export default function SettingsGitHubPage() {
   }, []);
 
   useEffect(() => {
-    // Check for GitHub callback code in URL
+    // Check for result params from the server-side callback redirect
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    if (code && !callbackHandled.current) {
-      callbackHandled.current = true;
-      setLoading(true);
-      setError("");
-      api.post("/api/v1/settings/github/callback", { code })
-        .then(() => {
-          setMessage("GitHub App connected successfully");
-          return loadStatus();
-        })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : "Failed to complete GitHub setup");
-          setLoading(false);
-        })
-        .finally(() => {
-          window.history.replaceState({}, "", "/settings/github");
-        });
-    } else {
-      loadStatus();
+    if (params.get("connected") === "true") {
+      setMessage("GitHub App connected successfully");
+      window.history.replaceState({}, "", "/settings/github");
+    } else if (params.get("error")) {
+      setError(`GitHub setup failed: ${params.get("error")?.replace(/_/g, " ")}`);
+      window.history.replaceState({}, "", "/settings/github");
     }
+    loadStatus();
   }, [loadStatus]);
 
   const handleInstall = async () => {
@@ -67,13 +54,13 @@ export default function SettingsGitHubPage() {
     setRedirecting(true);
 
     try {
-      const callbackUrl = `${window.location.origin}/settings/github`;
+      const baseUrl = window.location.origin;
       const data = await api.post<{ manifest: object; redirect_url: string }>(
         "/api/v1/settings/github/manifest",
-        { org_name: orgName.trim(), callback_url: callbackUrl }
+        { org_name: orgName.trim(), base_url: baseUrl }
       );
 
-      // Create a form and POST the manifest to GitHub
+      // POST the manifest to GitHub via a hidden form
       const form = document.createElement("form");
       form.method = "POST";
       form.action = data.redirect_url;
