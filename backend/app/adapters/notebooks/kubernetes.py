@@ -411,10 +411,35 @@ class KubernetesNotebookProvider(NotebookProvider):
             else:
                 chpasswd_cmd = f"echo '{cred_username}:{cred_password}' | chpasswd"
 
+            # Build git setup commands if git_config is provided
+            git_setup = ""
+            git_config = session_spec.get("git_config")
+            if git_config:
+                repo_url = git_config["repo_url"]
+                branch = git_config["branch"]
+                git_user_name = git_config.get("user_name", "bioaf")
+                git_user_email = git_config.get("user_email", "bioaf@localhost")
+                git_setup = (
+                    f"git config --global user.name '{git_user_name}' && "
+                    f"git config --global user.email '{git_user_email}' && "
+                    f"git config --global init.defaultBranch main && "
+                    f"cd {HOME_DIR} && "
+                    f"git clone {repo_url} notebooks 2>/dev/null || "
+                    f"(mkdir -p notebooks && cd notebooks && git init && "
+                    f"git remote add origin {repo_url} && "
+                    f"echo '# Notebook workspace' > README.md && "
+                    f"git add -A && git commit -m 'Initial commit' && "
+                    f"git push -u origin main 2>/dev/null) && "
+                    f"cd {HOME_DIR}/notebooks && "
+                    f"git checkout -b {branch} && "
+                    f"chown -R {cred_username}:{cred_username} {HOME_DIR}/notebooks && "
+                )
+
             startup_script = (
                 f"useradd -m -d {HOME_DIR} -s /bin/bash {cred_username} || true && "
                 f"{chpasswd_cmd} && "
                 f"chown -R {cred_username}:{cred_username} {HOME_DIR} && "
+                f"{git_setup}"
                 f"exec /usr/lib/rstudio-server/bin/rserver "
                 f"--www-address=0.0.0.0 --www-port={container_port} --server-daemonize=0"
             )
@@ -533,11 +558,16 @@ class KubernetesNotebookProvider(NotebookProvider):
         git_config = session_spec.get("git_config")
         if git_config:
             git_branch = git_config.get("branch", f"session/{session_id}")
+            git_user_name = git_config.get("user_name", "bioaf")
+            git_user_email = git_config.get("user_email", "bioaf@localhost")
+            notebooks_dir = f"{home_dir}/notebooks"
             autocommit_script = (
-                "cd /home/jovyan && "
+                f"git config --global user.name '{git_user_name}' && "
+                f"git config --global user.email '{git_user_email}' && "
                 "LAST_COMMIT=$(date +%s) && "
                 "while true; do "
                 "  sleep 60; "
+                f"  cd {notebooks_dir} 2>/dev/null || continue; "
                 "  NOW=$(date +%s); "
                 "  DIFF=$((NOW - LAST_COMMIT)); "
                 '  if [ $DIFF -ge 900 ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then '
@@ -759,7 +789,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 git_cmd = [
                     "/bin/sh",
                     "-c",
-                    "cd /home/jovyan && "
+                    "cd /home/jovyan/notebooks 2>/dev/null || cd /home/jovyan && "
                     "if [ -d .git ]; then "
                     "  git add -A && "
                     f"  git commit -m 'Session {session_id} stopped: '$(date -u +%Y-%m-%dT%H:%M:%SZ) 2>/dev/null; "

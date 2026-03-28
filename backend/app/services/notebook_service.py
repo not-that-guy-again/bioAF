@@ -135,6 +135,61 @@ class NotebookService:
 
                 spec["input_files"] = input_files_spec
 
+            # Wire up GitHub git integration if connected
+            try:
+                from app.services.github_service import GitHubService
+
+                gh_status = await GitHubService.get_status(session)
+                if gh_status["connected"] and experiment_id:
+                    # Determine repo name from experiment
+                    from app.models.experiment import Experiment as ExperimentModel
+
+                    exp_result = await session.execute(
+                        select(ExperimentModel).where(ExperimentModel.id == experiment_id)
+                    )
+                    exp = exp_result.scalar_one_or_none()
+                    if exp:
+                        repo_name = f"{exp.code or exp.name}-notebooks".lower().replace(" ", "-")
+
+                        # Create repo if it doesn't exist
+                        if not await GitHubService.repo_exists(session, repo_name):
+                            await GitHubService.create_repo(session, repo_name)
+                            exp.github_repo_name = repo_name
+                            await session.flush()
+                        elif not exp.github_repo_name:
+                            exp.github_repo_name = repo_name
+                            await session.flush()
+
+                        # Get installation token for git auth (HTTPS token-based)
+                        token_data = await GitHubService.get_installation_token(session)
+                        git_token = token_data["token"]
+                        org_name = gh_status["org_name"]
+
+                        # Look up user name/email for git commits
+                        from app.models.user import User as UserModel
+
+                        user_result = await session.execute(select(UserModel).where(UserModel.id == user_id))
+                        git_user = user_result.scalar_one_or_none()
+                        git_user_name = git_user.name or git_user.email if git_user else "bioaf"
+                        git_user_email = git_user.email if git_user else "bioaf@localhost"
+
+                        from datetime import date
+
+                        branch_name = f"session/{notebook_session.id}-{git_user_name.split()[0].lower()}-{date.today().isoformat()}"
+
+                        spec["git_config"] = {
+                            "repo_url": f"https://x-access-token:{git_token}@github.com/{org_name}/{repo_name}.git",
+                            "branch": branch_name,
+                            "user_name": git_user_name,
+                            "user_email": git_user_email,
+                            "repo_name": repo_name,
+                        }
+
+                        notebook_session.git_branch_name = branch_name
+                        await session.flush()
+            except Exception as git_err:
+                logger.warning("GitHub git setup failed (non-fatal): %s", git_err)
+
             result = await notebook_adapter.launch_session(spec)
 
             notebook_session.slurm_job_id = str(result.get("session_id", ""))
