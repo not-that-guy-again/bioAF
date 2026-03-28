@@ -17,7 +17,26 @@ function CopyField({ label, value, mono }: { label: string; value: string; mono?
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(value);
+    try {
+      // Try modern clipboard API first (requires HTTPS)
+      navigator.clipboard.writeText(value).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(() => fallbackCopy());
+    } catch {
+      fallbackCopy();
+    }
+  };
+
+  const fallbackCopy = () => {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -55,6 +74,7 @@ export default function SettingsGitHubPage() {
   const [saving, setSaving] = useState(false);
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const [appNameSuffix] = useState(() => Math.random().toString(36).slice(2, 6));
   const callbackUrl = `${baseUrl}/api/v1/settings/github/callback`;
 
   const loadStatus = useCallback(async () => {
@@ -231,7 +251,7 @@ export default function SettingsGitHubPage() {
                   </a>
 
                   <div className="space-y-3 mb-5">
-                    <CopyField label="GitHub App name" value={`bioAF-${orgName}`} />
+                    <CopyField label="GitHub App name" value={`bioAF-${orgName}-${appNameSuffix}`} />
                     <CopyField label="Homepage URL" value={baseUrl} mono />
                     <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
                       <span className="text-xs text-amber-700 block">Webhook</span>
