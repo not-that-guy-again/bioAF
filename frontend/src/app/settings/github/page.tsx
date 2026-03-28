@@ -18,7 +18,6 @@ function CopyField({ label, value, mono }: { label: string; value: string; mono?
 
   const handleCopy = () => {
     try {
-      // Try modern clipboard API first (requires HTTPS)
       navigator.clipboard.writeText(value).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -57,17 +56,24 @@ function CopyField({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
+function StepBadge({ num, active }: { num: number; active: boolean }) {
+  return (
+    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${active ? "bg-bioaf-600 text-white" : "bg-gray-200 text-gray-500"}`}>
+      {num}
+    </span>
+  );
+}
+
 export default function SettingsGitHubPage() {
   const [status, setStatus] = useState<GitHubStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // Step 1: org name
   const [orgName, setOrgName] = useState("");
   const [step, setStep] = useState(1);
+  const [appSlug, setAppSlug] = useState("");
 
-  // Step 3: credentials
   const [appId, setAppId] = useState("");
   const [installationId, setInstallationId] = useState("");
   const [privateKey, setPrivateKey] = useState("");
@@ -75,7 +81,6 @@ export default function SettingsGitHubPage() {
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const [appNameSuffix] = useState(() => Math.random().toString(36).slice(2, 6));
-  const callbackUrl = `${baseUrl}/api/v1/settings/github/callback`;
 
   const loadStatus = useCallback(async () => {
     try {
@@ -135,11 +140,14 @@ export default function SettingsGitHubPage() {
       setAppId("");
       setInstallationId("");
       setPrivateKey("");
+      setAppSlug("");
       await loadStatus();
     } catch {
       setError("Failed to disconnect");
     }
   };
+
+  const appName = `bioAF-${orgName}-${appNameSuffix}`;
 
   return (
     <div className="flex h-screen">
@@ -159,13 +167,11 @@ export default function SettingsGitHubPage() {
           {loading ? (
             <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
           ) : status?.connected ? (
-            /* Connected state */
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-3 w-3 rounded-full bg-green-500" />
                 <span className="text-sm font-medium text-green-700">Connected</span>
               </div>
-
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div>
                   <label className="text-xs text-gray-500 block">Organization</label>
@@ -177,14 +183,12 @@ export default function SettingsGitHubPage() {
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block">Installation ID</label>
-                  <p className="text-sm font-mono">{status.installation_id}</p>
+                  <p className="text-sm font-mono">{status.installation_id || "Not installed"}</p>
                 </div>
               </div>
-
               <p className="text-xs text-gray-500 mb-4">
                 Notebook sessions will automatically create git repositories and track changes for experiments with linked notebooks.
               </p>
-
               <button
                 onClick={handleDisconnect}
                 className="text-sm text-red-600 hover:text-red-800 border border-red-300 px-4 py-2 rounded hover:bg-red-50"
@@ -193,15 +197,13 @@ export default function SettingsGitHubPage() {
               </button>
             </div>
           ) : (
-            /* Setup wizard */
             <div className="space-y-6">
               {/* Step 1: Org name */}
               <div className="bg-white rounded-lg shadow p-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 1 ? "bg-bioaf-600 text-white" : "bg-gray-200 text-gray-500"}`}>1</span>
+                  <StepBadge num={1} active={step >= 1} />
                   <h2 className="text-base font-semibold">GitHub Organization</h2>
                 </div>
-
                 <div className="max-w-md">
                   <input
                     type="text"
@@ -223,19 +225,23 @@ export default function SettingsGitHubPage() {
                       Continue
                     </button>
                   )}
+                  {step > 1 && (
+                    <button onClick={() => { setStep(1); setAppSlug(""); }} className="mt-2 text-xs text-gray-400 hover:text-gray-600">Change</button>
+                  )}
                 </div>
               </div>
 
-              {/* Step 2: Create app on GitHub */}
+              {/* Step 2: Create the app */}
               {step >= 2 && (
                 <div className="bg-white rounded-lg shadow p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step >= 2 ? "bg-bioaf-600 text-white" : "bg-gray-200 text-gray-500"}`}>2</span>
+                    <StepBadge num={2} active={step >= 2} />
                     <h2 className="text-base font-semibold">Create GitHub App</h2>
                   </div>
 
                   <p className="text-sm text-gray-600 mb-4">
-                    Open the link below and fill in the fields using the values provided. Copy each value exactly.
+                    Open the link below. It will take you to GitHub where you can create a new app for your organization.
+                    Fill in the fields using the exact values shown here.
                   </p>
 
                   <a
@@ -250,63 +256,127 @@ export default function SettingsGitHubPage() {
                     Open GitHub App Creation Page
                   </a>
 
+                  <h3 className="text-sm font-medium mb-2">Copy these values into the GitHub form:</h3>
                   <div className="space-y-3 mb-5">
-                    <CopyField label="GitHub App name" value={`bioAF-${orgName}-${appNameSuffix}`} />
+                    <CopyField label="GitHub App name" value={appName} />
                     <CopyField label="Homepage URL" value={baseUrl} mono />
+                  </div>
+
+                  <div className="space-y-3 mb-5">
                     <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                      <span className="text-xs text-amber-700 block">Webhook</span>
-                      <span className="text-sm text-amber-800">Uncheck &ldquo;Active&rdquo; (webhooks are not needed)</span>
+                      <span className="text-xs text-amber-700 block">Webhook section</span>
+                      <span className="text-sm text-amber-800">Uncheck the &ldquo;Active&rdquo; checkbox</span>
                     </div>
                   </div>
 
-                  <div className="mb-5">
-                    <h3 className="text-sm font-medium mb-2">Permissions (expand each section and set these):</h3>
-                    <div className="space-y-1 text-sm bg-gray-50 rounded p-3">
-                      <p><strong>Repository permissions:</strong></p>
-                      <p className="ml-4">Contents: <span className="font-mono bg-white px-1.5 py-0.5 rounded border text-xs">Read and write</span></p>
-                      <p className="ml-4">Administration: <span className="font-mono bg-white px-1.5 py-0.5 rounded border text-xs">Read and write</span></p>
-                      <p className="mt-2"><strong>Organization permissions:</strong></p>
-                      <p className="ml-4">Members: <span className="font-mono bg-white px-1.5 py-0.5 rounded border text-xs">Read-only</span></p>
-                    </div>
+                  <h3 className="text-sm font-medium mb-2">Set these permissions:</h3>
+                  <div className="space-y-1 text-sm bg-gray-50 rounded p-3 mb-5">
+                    <p><strong>Repository permissions:</strong></p>
+                    <p className="ml-4">Contents: <span className="font-mono bg-white px-1.5 py-0.5 rounded border text-xs">Read and write</span></p>
+                    <p className="ml-4">Administration: <span className="font-mono bg-white px-1.5 py-0.5 rounded border text-xs">Read and write</span></p>
+                    <p className="mt-2"><strong>Organization permissions:</strong></p>
+                    <p className="ml-4">Members: <span className="font-mono bg-white px-1.5 py-0.5 rounded border text-xs">Read-only</span></p>
                   </div>
 
-                  <div className="mb-5">
-                    <h3 className="text-sm font-medium mb-2">Installation scope:</h3>
-                    <div className="text-sm bg-gray-50 rounded p-3">
-                      <p>Select: <strong>&ldquo;Only on this account&rdquo;</strong></p>
-                    </div>
+                  <h3 className="text-sm font-medium mb-2">At the bottom of the page:</h3>
+                  <div className="text-sm bg-gray-50 rounded p-3 mb-5">
+                    <p>Under &ldquo;Where can this GitHub App be installed?&rdquo;, select <strong>&ldquo;Only on this account&rdquo;</strong></p>
                   </div>
 
                   <p className="text-sm text-gray-600 mb-3">
-                    After clicking <strong>&ldquo;Create GitHub App&rdquo;</strong>, GitHub will show you the App ID and prompt you to generate a private key.
-                    Download the private key file (.pem) -- you will upload it in the next step.
+                    Click <strong>&ldquo;Create GitHub App&rdquo;</strong> at the bottom.
+                    After creation, you will see the <strong>App ID</strong> at the top of the app settings page.
                   </p>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Then click <strong>&ldquo;Install App&rdquo;</strong> in the left sidebar and install it on your <strong>{orgName}</strong> organization.
-                    The installation ID will appear in the URL after installation (the number at the end).
+                  <p className="text-sm text-gray-600 mb-3">
+                    On the same page, scroll down to <strong>&ldquo;Private keys&rdquo;</strong> and click
+                    {" "}<strong>&ldquo;Generate a private key&rdquo;</strong>. A <code>.pem</code> file will download automatically. Keep this file safe.
                   </p>
 
                   {step === 2 && (
+                    <div className="mt-4">
+                      <label className="text-sm text-gray-700 block mb-1">
+                        Enter the app name you used (so we can build the install link):
+                      </label>
+                      <div className="flex gap-2 max-w-md">
+                        <input
+                          type="text"
+                          value={appSlug}
+                          onChange={(e) => setAppSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+                          placeholder={appName.toLowerCase()}
+                          className="flex-1 px-3 py-2 border rounded text-sm font-mono"
+                        />
+                        <button
+                          onClick={() => setStep(3)}
+                          disabled={!appSlug.trim()}
+                          className="bg-bioaf-600 text-white px-4 py-2 rounded text-sm hover:bg-bioaf-700 disabled:opacity-50"
+                        >
+                          Continue
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        This is the app name converted to lowercase with hyphens (shown in the URL on the app settings page)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 3: Install the app */}
+              {step >= 3 && (
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <StepBadge num={3} active={step >= 3} />
+                    <h2 className="text-base font-semibold">Install App on Organization</h2>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-4">
+                    Now install the app on your <strong>{orgName}</strong> organization. Click the link below, then
+                    click <strong>&ldquo;Install&rdquo;</strong> on the GitHub page.
+                  </p>
+
+                  <a
+                    href={`https://github.com/apps/${appSlug}/installations/new`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded text-sm hover:bg-gray-800 mb-5"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    Install App on {orgName}
+                  </a>
+
+                  <p className="text-sm text-gray-600 mb-3">
+                    After clicking Install, look at the URL in your browser. It will look like:
+                  </p>
+                  <div className="bg-gray-50 rounded px-3 py-2 mb-3 font-mono text-sm">
+                    github.com/organizations/{orgName}/settings/installations/<strong className="text-bioaf-600">12345678</strong>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-4">
+                    The number at the end is your <strong>Installation ID</strong>. You will need it in the next step.
+                  </p>
+
+                  {step === 3 && (
                     <button
-                      onClick={() => setStep(3)}
+                      onClick={() => setStep(4)}
                       className="bg-bioaf-600 text-white px-4 py-2 rounded text-sm hover:bg-bioaf-700"
                     >
-                      I have created and installed the app
+                      Continue
                     </button>
                   )}
                 </div>
               )}
 
-              {/* Step 3: Enter credentials */}
-              {step >= 3 && (
+              {/* Step 4: Enter credentials */}
+              {step >= 4 && (
                 <div className="bg-white rounded-lg shadow p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-bioaf-600 text-white">3</span>
+                    <StepBadge num={4} active={step >= 4} />
                     <h2 className="text-base font-semibold">Connect</h2>
                   </div>
 
                   <p className="text-sm text-gray-600 mb-4">
-                    Enter the App ID and Installation ID from GitHub, and upload the private key (.pem) file you downloaded.
+                    Enter the App ID and Installation ID from the previous steps, and upload the private key file (.pem) you downloaded.
                   </p>
 
                   <div className="max-w-md space-y-4">
@@ -316,11 +386,11 @@ export default function SettingsGitHubPage() {
                         type="text"
                         value={appId}
                         onChange={(e) => setAppId(e.target.value)}
-                        placeholder="123456"
+                        placeholder="3206995"
                         className="w-full px-3 py-2 border rounded text-sm font-mono"
                       />
                       <p className="text-xs text-gray-400 mt-1">
-                        Found at the top of your app&apos;s settings page on GitHub
+                        Shown at the top of your app&apos;s settings page after creation (step 2)
                       </p>
                     </div>
 
@@ -330,11 +400,11 @@ export default function SettingsGitHubPage() {
                         type="text"
                         value={installationId}
                         onChange={(e) => setInstallationId(e.target.value)}
-                        placeholder="78901234"
+                        placeholder="12345678"
                         className="w-full px-3 py-2 border rounded text-sm font-mono"
                       />
                       <p className="text-xs text-gray-400 mt-1">
-                        The number at the end of the URL after installing the app (github.com/...installations/<strong>this-number</strong>)
+                        The number from the URL after installing the app on your org (step 3)
                       </p>
                     </div>
 
@@ -349,6 +419,9 @@ export default function SettingsGitHubPage() {
                       {privateKey && (
                         <p className="text-xs text-green-600 mt-1">Key loaded ({privateKey.length} characters)</p>
                       )}
+                      <p className="text-xs text-gray-400 mt-1">
+                        Downloaded from your app&apos;s settings page under &ldquo;Private keys&rdquo; (step 2)
+                      </p>
                     </div>
 
                     <div className="flex gap-3">
@@ -360,7 +433,7 @@ export default function SettingsGitHubPage() {
                         {saving ? "Connecting..." : "Connect"}
                       </button>
                       <button
-                        onClick={() => setStep(2)}
+                        onClick={() => setStep(3)}
                         className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2"
                       >
                         Back
