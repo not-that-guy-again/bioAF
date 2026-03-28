@@ -188,7 +188,7 @@ class NotebookService:
                         notebook_session.git_branch_name = branch_name
                         await session.flush()
             except Exception as git_err:
-                logger.warning("GitHub git setup failed (non-fatal): %s", git_err)
+                logger.warning("GitHub git setup failed (non-fatal): %s", git_err, exc_info=True)
 
             result = await notebook_adapter.launch_session(spec)
 
