@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -14,23 +15,15 @@ interface GitHubStatus {
 }
 
 export default function SettingsGitHubPage() {
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<GitHubStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
-  // Connect form fields
-  const [appId, setAppId] = useState("");
-  const [installationId, setInstallationId] = useState("");
   const [orgName, setOrgName] = useState("");
-  const [privateKey, setPrivateKey] = useState("");
+  const [redirecting, setRedirecting] = useState(false);
 
-  useEffect(() => {
-    loadStatus();
-  }, []);
-
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     try {
       const data = await api.get<GitHubStatus>("/api/v1/settings/github/status");
       setStatus(data);
@@ -39,33 +32,62 @@ export default function SettingsGitHubPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleConnect = async () => {
-    if (!appId || !installationId || !orgName || !privateKey) {
-      setError("All fields are required");
-      return;
-    }
-    setSaving(true);
+  // Handle callback from GitHub after manifest creation
+  const handleCallback = useCallback(async (code: string) => {
+    setLoading(true);
     setError("");
-    setMessage("");
     try {
-      await api.post("/api/v1/settings/github/connect", {
-        app_id: appId,
-        installation_id: installationId,
-        org_name: orgName,
-        private_key: privateKey,
-      });
-      setMessage("GitHub App connected");
-      setAppId("");
-      setInstallationId("");
-      setOrgName("");
-      setPrivateKey("");
+      await api.post("/api/v1/settings/github/callback", { code });
+      setMessage("GitHub App connected successfully");
       await loadStatus();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect");
-    } finally {
-      setSaving(false);
+      setError(err instanceof Error ? err.message : "Failed to complete GitHub setup");
+      setLoading(false);
+    }
+    // Clean the URL
+    window.history.replaceState({}, "", "/settings/github");
+  }, [loadStatus]);
+
+  useEffect(() => {
+    const code = searchParams.get("code");
+    if (code) {
+      handleCallback(code);
+    } else {
+      loadStatus();
+    }
+  }, [searchParams, loadStatus, handleCallback]);
+
+  const handleInstall = async () => {
+    if (!orgName.trim()) {
+      setError("Enter your GitHub organization name");
+      return;
+    }
+    setError("");
+    setRedirecting(true);
+
+    try {
+      const callbackUrl = `${window.location.origin}/settings/github`;
+      const data = await api.post<{ manifest: object; redirect_url: string }>(
+        "/api/v1/settings/github/manifest",
+        { org_name: orgName.trim(), callback_url: callbackUrl }
+      );
+
+      // Create a form and POST the manifest to GitHub
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = data.redirect_url;
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "manifest";
+      input.value = JSON.stringify(data.manifest);
+      form.appendChild(input);
+      document.body.appendChild(form);
+      form.submit();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start GitHub setup");
+      setRedirecting(false);
     }
   };
 
@@ -80,16 +102,6 @@ export default function SettingsGitHubPage() {
     } catch {
       setError("Failed to disconnect");
     }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPrivateKey(reader.result as string);
-    };
-    reader.readAsText(file);
   };
 
   return (
@@ -110,7 +122,6 @@ export default function SettingsGitHubPage() {
           {loading ? (
             <div className="flex justify-center py-12"><LoadingSpinner size="lg" /></div>
           ) : status?.connected ? (
-            /* Connected state */
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-3 w-3 rounded-full bg-green-500" />
@@ -140,11 +151,10 @@ export default function SettingsGitHubPage() {
                 onClick={handleDisconnect}
                 className="text-sm text-red-600 hover:text-red-800 border border-red-300 px-4 py-2 rounded hover:bg-red-50"
               >
-                Disconnect GitHub App
+                Disconnect
               </button>
             </div>
           ) : (
-            /* Disconnected state -- show connect form */
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-3 w-3 rounded-full bg-gray-300" />
@@ -152,63 +162,50 @@ export default function SettingsGitHubPage() {
               </div>
 
               <p className="text-sm text-gray-600 mb-6">
-                Connect a GitHub App to enable git-backed notebook history. The app needs Repository Contents (read/write) and Administration (read/write) permissions on your GitHub organization.
+                Connect your GitHub organization to enable git-backed notebook history. Notebooks will automatically track
+                changes in private repositories under your org.
               </p>
 
-              <div className="space-y-4 max-w-lg">
+              <div className="max-w-md space-y-4">
                 <div>
-                  <label className="text-sm text-gray-700 block mb-1">GitHub App ID</label>
-                  <input
-                    type="text"
-                    value={appId}
-                    onChange={(e) => setAppId(e.target.value)}
-                    placeholder="123456"
-                    className="w-full px-3 py-2 border rounded text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-700 block mb-1">Installation ID</label>
-                  <input
-                    type="text"
-                    value={installationId}
-                    onChange={(e) => setInstallationId(e.target.value)}
-                    placeholder="78901234"
-                    className="w-full px-3 py-2 border rounded text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-700 block mb-1">GitHub Organization</label>
+                  <label className="text-sm text-gray-700 block mb-1">GitHub Organization Name</label>
                   <input
                     type="text"
                     value={orgName}
                     onChange={(e) => setOrgName(e.target.value)}
                     placeholder="my-biotech-org"
                     className="w-full px-3 py-2 border rounded text-sm"
+                    onKeyDown={(e) => e.key === "Enter" && handleInstall()}
                   />
-                </div>
-
-                <div>
-                  <label className="text-sm text-gray-700 block mb-1">Private Key (.pem file)</label>
-                  <input
-                    type="file"
-                    accept=".pem"
-                    onChange={handleFileUpload}
-                    className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:bg-bioaf-50 file:text-bioaf-700 hover:file:bg-bioaf-100"
-                  />
-                  {privateKey && (
-                    <p className="text-xs text-green-600 mt-1">Key loaded ({privateKey.length} characters)</p>
-                  )}
+                  <p className="text-xs text-gray-400 mt-1">
+                    The name of your GitHub organization (not your personal account)
+                  </p>
                 </div>
 
                 <button
-                  onClick={handleConnect}
-                  disabled={saving || !appId || !installationId || !orgName || !privateKey}
-                  className="bg-bioaf-600 text-white px-6 py-2 rounded text-sm hover:bg-bioaf-700 disabled:opacity-50"
+                  onClick={handleInstall}
+                  disabled={redirecting || !orgName.trim()}
+                  className="flex items-center gap-2 bg-gray-900 text-white px-5 py-2.5 rounded text-sm hover:bg-gray-800 disabled:opacity-50"
                 >
-                  {saving ? "Connecting..." : "Connect GitHub App"}
+                  {redirecting ? (
+                    <>
+                      <LoadingSpinner size="sm" />
+                      Redirecting to GitHub...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                      </svg>
+                      Install on GitHub
+                    </>
+                  )}
                 </button>
+
+                <p className="text-xs text-gray-400">
+                  You will be redirected to GitHub to approve the app installation. The app will have read/write access
+                  to repository contents and administration within your organization.
+                </p>
               </div>
             </div>
           )}
