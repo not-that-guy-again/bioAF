@@ -33,19 +33,18 @@ FROM jupyter/scipy-notebook:latest
 
 USER root
 
-# System dependencies for R, HDF5, and build tools
+# System dependencies for R, HDF5, and git
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     libhdf5-dev libcurl4-openssl-dev libssl-dev libxml2-dev \\
-    cmake r-base r-base-dev \\
+    r-base r-base-dev \\
+    git openssh-client \\
     && rm -rf /var/lib/apt/lists/*
 
 # Python scRNA-seq packages
-# Note: louvain is excluded (requires igraph C build); leidenalg is the
-# modern replacement and is used by scanpy by default.
 RUN pip install --no-cache-dir \\
     scanpy anndata scvi-tools leidenalg \\
     pandas numpy matplotlib seaborn plotly \\
-    umap-learn bbknn scrublet \\
+    umap-learn louvain bbknn scrublet \\
     google-cloud-storage
 
 # R packages (core set for Seurat and Bioconductor)
