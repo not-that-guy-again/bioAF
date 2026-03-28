@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -15,13 +14,13 @@ interface GitHubStatus {
 }
 
 export default function SettingsGitHubPage() {
-  const searchParams = useSearchParams();
   const [status, setStatus] = useState<GitHubStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [orgName, setOrgName] = useState("");
   const [redirecting, setRedirecting] = useState(false);
+  const callbackHandled = useRef(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -34,30 +33,30 @@ export default function SettingsGitHubPage() {
     }
   }, []);
 
-  // Handle callback from GitHub after manifest creation
-  const handleCallback = useCallback(async (code: string) => {
-    setLoading(true);
-    setError("");
-    try {
-      await api.post("/api/v1/settings/github/callback", { code });
-      setMessage("GitHub App connected successfully");
-      await loadStatus();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to complete GitHub setup");
-      setLoading(false);
-    }
-    // Clean the URL
-    window.history.replaceState({}, "", "/settings/github");
-  }, [loadStatus]);
-
   useEffect(() => {
-    const code = searchParams.get("code");
-    if (code) {
-      handleCallback(code);
+    // Check for GitHub callback code in URL
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code && !callbackHandled.current) {
+      callbackHandled.current = true;
+      setLoading(true);
+      setError("");
+      api.post("/api/v1/settings/github/callback", { code })
+        .then(() => {
+          setMessage("GitHub App connected successfully");
+          return loadStatus();
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Failed to complete GitHub setup");
+          setLoading(false);
+        })
+        .finally(() => {
+          window.history.replaceState({}, "", "/settings/github");
+        });
     } else {
       loadStatus();
     }
-  }, [searchParams, loadStatus, handleCallback]);
+  }, [loadStatus]);
 
   const handleInstall = async () => {
     if (!orgName.trim()) {
