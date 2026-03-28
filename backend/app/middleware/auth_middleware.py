@@ -16,8 +16,6 @@ PUBLIC_PATHS = {
     "/api/bootstrap/status",
     "/api/bootstrap/create-admin",
     "/api/users/accept-invite",
-    "/api/v1/settings/github/callback",
-    "/api/v1/settings/github/installed",
     "/docs",
     "/openapi.json",
 }
