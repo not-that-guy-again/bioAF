@@ -238,11 +238,20 @@ cmd_status() {
 }
 
 cmd_logs() {
-    local service="${1:-}"
+    local tail_lines=100
+    local service=""
+    for arg in "$@"; do
+        case "$arg" in
+            -n) shift; tail_lines="${1:-100}"; shift ;;
+            -n*) tail_lines="${arg#-n}" ;;
+            -*) ;;
+            *) service="$arg" ;;
+        esac
+    done
     if [ -n "$service" ]; then
-        $DC logs -f --tail=100 "$service"
+        $DC logs -f --tail="$tail_lines" "$service"
     else
-        $DC logs -f --tail=50
+        $DC logs -f --tail="$tail_lines"
     fi
 }
 
@@ -423,7 +432,7 @@ cmd_help() {
     echo "  stop                Stop all services"
     echo "  restart             Restart all services"
     echo "  status              Show status of all services"
-    echo "  logs [service]      Tail logs (all services, or just one)"
+    echo "  logs [service] [-n N]  Tail logs (default 100 lines, use -n to change)"
     echo "  build [service]     Build (or rebuild) container images"
     echo ""
     bold "Database:"
