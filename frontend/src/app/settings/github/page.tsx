@@ -189,12 +189,35 @@ export default function SettingsGitHubPage() {
               <p className="text-xs text-gray-500 mb-4">
                 Notebook sessions will automatically create git repositories and track changes for experiments with linked notebooks.
               </p>
-              <button
-                onClick={handleDisconnect}
-                className="text-sm text-red-600 hover:text-red-800 border border-red-300 px-4 py-2 rounded hover:bg-red-50"
-              >
-                Disconnect
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    setError("");
+                    setMessage("");
+                    try {
+                      const result = await api.post<{ status: string; message: string; repos?: string[] }>(
+                        "/api/v1/settings/github/test"
+                      );
+                      if (result.status === "ok") {
+                        setMessage(result.message + (result.repos?.length ? ` Repos: ${result.repos.join(", ")}` : ""));
+                      } else {
+                        setError(result.message);
+                      }
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Test failed");
+                    }
+                  }}
+                  className="text-sm border border-bioaf-600 text-bioaf-600 px-4 py-2 rounded hover:bg-bioaf-50"
+                >
+                  Test Connection
+                </button>
+                <button
+                  onClick={handleDisconnect}
+                  className="text-sm text-red-600 hover:text-red-800 border border-red-300 px-4 py-2 rounded hover:bg-red-50"
+                >
+                  Disconnect
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
