@@ -240,7 +240,7 @@ async def submit_image_build(session: AsyncSession, project_id: str, region: str
     }
     if sa_email and sa_email != "null":
         build_body["serviceAccount"] = f"projects/{project_id}/serviceAccounts/{sa_email}"
-        build_body["options"]["logging"] = "GCS_ONLY"
+        build_body["options"]["defaultLogsBucketBehavior"] = "REGIONAL_USER_OWNED_BUCKET"
         logger.info("Cloud Build will run as SA: %s", sa_email)
 
     result = _authorized_request(credentials, "POST", build_url, build_body)
