@@ -143,7 +143,9 @@ describe("FileTreeSelector", () => {
     await user.click(sampleCheckbox);
 
     // Should have called onChange with the visible file IDs for SAMP-001
-    expect(onChange).toHaveBeenCalledWith([1, 2]);
+    const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+    expect(lastCall).toEqual(expect.arrayContaining([1, 2]));
+    expect(lastCall.length).toBe(2);
   });
 
   it("calculates total selected size", async () => {
