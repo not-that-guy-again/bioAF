@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir \
     scanpy anndata scvi-tools leidenalg \
     pandas numpy matplotlib seaborn plotly \
-    umap-learn louvain bbknn scrublet \
+    umap-learn bbknn scrublet \
     google-cloud-storage
 
 # R packages (core set for Seurat and Bioconductor)
