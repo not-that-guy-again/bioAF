@@ -33,16 +33,20 @@ export default function SettingsGitHubPage() {
   }, []);
 
   useEffect(() => {
-    // Check for result params from the server-side callback redirect
     const params = new URLSearchParams(window.location.search);
     if (params.get("connected") === "true") {
       setMessage("GitHub App connected successfully");
       window.history.replaceState({}, "", "/settings/github");
+      // Small delay to let the DB commit propagate before we fetch status
+      const timer = setTimeout(() => loadStatus(), 500);
+      return () => clearTimeout(timer);
     } else if (params.get("error")) {
       setError(`GitHub setup failed: ${params.get("error")?.replace(/_/g, " ")}`);
       window.history.replaceState({}, "", "/settings/github");
+      loadStatus();
+    } else {
+      loadStatus();
     }
-    loadStatus();
   }, [loadStatus]);
 
   const handleInstall = async () => {
