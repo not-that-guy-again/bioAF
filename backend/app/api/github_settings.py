@@ -43,7 +43,7 @@ async def create_manifest(
     manifest = {
         "name": f"bioAF-{body.org_name[:20]}-{app_suffix}",
         "url": body.base_url,
-        "hook_attributes": {"active": False},
+        "hook_attributes": {"url": callback_url, "active": False},
         "redirect_url": callback_url,
         "public": False,
         "default_permissions": {
