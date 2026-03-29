@@ -30,9 +30,7 @@ async def _resolve_outdir(session: AsyncSession, run: PipelineRun) -> str:
         return outdir
 
     # Fall back: build the GCS URI from results_bucket_name in platform_config
-    result = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'")
-    )
+    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'"))
     row = result.first()
     if row:
         return f"gs://{row[0]}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
@@ -81,9 +79,7 @@ async def _main(args: argparse.Namespace) -> None:
 
         if args.run_id:
             # Register outputs for a specific run
-            result = await session.execute(
-                select(PipelineRun).where(PipelineRun.id == args.run_id)
-            )
+            result = await session.execute(select(PipelineRun).where(PipelineRun.id == args.run_id))
             run = result.scalar_one_or_none()
             if not run:
                 print(f"ERROR: Pipeline run {args.run_id} not found.")
@@ -113,10 +109,12 @@ async def _main(args: argparse.Namespace) -> None:
             for run in runs:
                 # Check if this run already has registered output files
                 existing = await session.execute(
-                    select(File.id).where(
+                    select(File.id)
+                    .where(
                         File.source_pipeline_run_id == run.id,
                         File.source_type == "pipeline_output",
-                    ).limit(1)
+                    )
+                    .limit(1)
                 )
                 if existing.first():
                     if not args.force:
@@ -134,9 +132,7 @@ async def _main(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Register pipeline output files from GCS into the database"
-    )
+    parser = argparse.ArgumentParser(description="Register pipeline output files from GCS into the database")
     parser.add_argument(
         "--run-id",
         type=int,

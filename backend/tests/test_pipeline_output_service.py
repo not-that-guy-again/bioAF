@@ -167,9 +167,7 @@ async def test_register_outputs_skips_duplicates(session, pipeline_run, experime
     assert len(files) == 2
 
     # Verify only one file with that gcs_uri exists
-    result = await session.execute(
-        select(File).where(File.gcs_uri == collected[0]["gcs_uri"])
-    )
+    result = await session.execute(select(File).where(File.gcs_uri == collected[0]["gcs_uri"]))
     all_matches = result.scalars().all()
     assert len(all_matches) == 1
 
@@ -231,9 +229,7 @@ async def test_register_nextflow_metadata_creates_records(session, pipeline_run,
     with patch("app.services.pipeline_output_service.gcs_storage") as mock_gcs:
         mock_gcs.Client.return_value = mock_client
 
-        files = await PipelineOutputService.register_nextflow_metadata(
-            session, pipeline_run, "bioaf-raw-testorg"
-        )
+        files = await PipelineOutputService.register_nextflow_metadata(session, pipeline_run, "bioaf-raw-testorg")
         await session.commit()
 
     assert len(files) == 2
@@ -261,9 +257,7 @@ async def test_register_nextflow_metadata_skips_missing_blobs(session, pipeline_
     with patch("app.services.pipeline_output_service.gcs_storage") as mock_gcs:
         mock_gcs.Client.return_value = mock_client
 
-        files = await PipelineOutputService.register_nextflow_metadata(
-            session, pipeline_run, "bioaf-raw-testorg"
-        )
+        files = await PipelineOutputService.register_nextflow_metadata(session, pipeline_run, "bioaf-raw-testorg")
 
     assert files == []
 
@@ -283,7 +277,5 @@ async def test_register_nextflow_metadata_skips_without_k8s_job(session, admin_u
     await session.flush()
     await session.commit()
 
-    files = await PipelineOutputService.register_nextflow_metadata(
-        session, run, "bioaf-raw-testorg"
-    )
+    files = await PipelineOutputService.register_nextflow_metadata(session, run, "bioaf-raw-testorg")
     assert files == []

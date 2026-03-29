@@ -1,7 +1,5 @@
 """Tests for file type detection and artifact classification utilities."""
 
-import pytest
-
 from app.services.file_type_utils import classify_artifact_type, detect_file_type
 
 

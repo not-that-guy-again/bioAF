@@ -41,17 +41,13 @@ class PipelineOutputService:
 
         # Find samples linked to this run
         result = await session.execute(
-            select(PipelineRunSample.sample_id).where(
-                PipelineRunSample.pipeline_run_id == run.id
-            )
+            select(PipelineRunSample.sample_id).where(PipelineRunSample.pipeline_run_id == run.id)
         )
         sample_ids = [row[0] for row in result.all()]
 
         # Collect existing gcs_uris to skip duplicates
         uris = [f["gcs_uri"] for f in collected_files]
-        existing = await session.execute(
-            select(File.gcs_uri).where(File.gcs_uri.in_(uris))
-        )
+        existing = await session.execute(select(File.gcs_uri).where(File.gcs_uri.in_(uris)))
         existing_uris: set[str] = {row[0] for row in existing.all()}
 
         created: list[File] = []
@@ -125,9 +121,7 @@ class PipelineOutputService:
 
         # Check which URIs already exist in DB
         uris = [f["gcs_uri"] for f in metadata_files]
-        existing = await session.execute(
-            select(File.gcs_uri).where(File.gcs_uri.in_(uris))
-        )
+        existing = await session.execute(select(File.gcs_uri).where(File.gcs_uri.in_(uris)))
         existing_uris: set[str] = {row[0] for row in existing.all()}
 
         # Check which blobs exist in GCS
