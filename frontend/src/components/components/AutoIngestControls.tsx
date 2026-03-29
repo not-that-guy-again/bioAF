@@ -26,6 +26,8 @@ export function AutoIngestControls({
 }: AutoIngestControlsProps) {
   const [status, setStatus] = useState<AutoIngestStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState("");
 
   useEffect(() => {
     if (!storageDeployed || !pubsubConfigured) return;
@@ -37,18 +39,39 @@ export function AutoIngestControls({
 
   if (!storageDeployed) return null;
 
+  const handleUpdateStorage = async () => {
+    setUpdating(true);
+    setUpdateError("");
+    try {
+      await api.post("/api/v1/infrastructure/storage/update");
+      // Trigger parent refresh so pubsubConfigured updates
+      if (onUpdateStorage) onUpdateStorage();
+    } catch (err) {
+      setUpdateError(
+        err instanceof Error ? err.message : "Storage update failed",
+      );
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   if (!pubsubConfigured) {
     return (
       <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm">
         <p className="text-amber-800 font-medium text-xs">
-          Auto-ingest requires an infrastructure update. Click to deploy the
-          notification system.
+          Auto-ingest requires Pub/Sub notification infrastructure. This runs a
+          Terraform apply to add the notification resources to your existing
+          storage deployment.
         </p>
+        {updateError && (
+          <p className="text-xs text-red-600 mt-1">{updateError}</p>
+        )}
         <button
-          onClick={onUpdateStorage}
-          className="mt-2 px-3 py-1.5 bg-amber-600 text-white rounded text-xs hover:bg-amber-700"
+          onClick={handleUpdateStorage}
+          disabled={updating}
+          className="mt-2 px-3 py-1.5 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 disabled:opacity-50"
         >
-          Update Storage Infrastructure
+          {updating ? "Updating infrastructure..." : "Update Storage Infrastructure"}
         </button>
       </div>
     );

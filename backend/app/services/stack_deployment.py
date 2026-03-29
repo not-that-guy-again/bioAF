@@ -61,6 +61,7 @@ class StackStatus(BaseModel):
     compute_stack: str | None
     compute_deployed: bool
     storage_deployed: bool
+    pubsub_configured: bool = False
     cluster: ClusterInfo | None = None
 
 
@@ -114,16 +115,19 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
     compute_deployed = await _read_config(session, "compute_deployed")
     compute_stack_val = await _read_config(session, "compute_stack")
     storage_deployed = await _read_config(session, "storage_deployed")
+    pubsub_topic = await _read_config(session, "pubsub_topic_name")
 
     is_deployed = compute_deployed == "true"
     stack = compute_stack_val if compute_stack_val != "null" else None
     storage = storage_deployed == "true"
+    pubsub = pubsub_topic not in ("null", "")
 
     if not is_deployed:
         return StackStatus(
             compute_stack=stack,
             compute_deployed=False,
             storage_deployed=storage,
+            pubsub_configured=pubsub,
             cluster=None,
         )
 
@@ -190,6 +194,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
             compute_stack=stack,
             compute_deployed=True,
             storage_deployed=storage,
+            pubsub_configured=pubsub,
             cluster=cluster_info,
         )
 
@@ -199,6 +204,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
             compute_stack=stack,
             compute_deployed=True,
             storage_deployed=storage,
+            pubsub_configured=pubsub,
             cluster=None,
         )
 
