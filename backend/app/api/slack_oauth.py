@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
@@ -159,11 +160,12 @@ async def get_auth_url(
 
 @router.get("/callback")
 async def oauth_callback(
+    request: Request,
     code: str = Query(...),
     state: str = Query(...),
     session: AsyncSession = Depends(get_session),
 ):
-    """Handle the OAuth redirect from Slack. No auth header -- state carries identity."""
+    """Handle the OAuth redirect from Slack, then redirect back to bioAF."""
     try:
         claims = SlackOAuthService.decode_state(state)
     except Exception:
@@ -179,14 +181,17 @@ async def oauth_callback(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    install = await SlackOAuthService.save_installation(session, org_id, user_id, token_data)
+    await SlackOAuthService.save_installation(session, org_id, user_id, token_data)
     await session.commit()
 
-    return {
-        "status": "connected",
-        "team_name": install.team_name,
-        "team_id": install.team_id,
-    }
+    # Redirect browser back to the Slack settings page
+    callback_path = "/api/notifications/slack/callback"
+    request_url = str(request.url).split("?")[0]
+    if request_url.endswith(callback_path):
+        origin = request_url[: -len(callback_path)]
+    else:
+        origin = str(request.base_url).rstrip("/")
+    return RedirectResponse(url=f"{origin}/settings/slack?connected=true")
 
 
 @router.get("/status", response_model=SlackStatusResponse)

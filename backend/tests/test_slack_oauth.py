@@ -126,12 +126,12 @@ async def test_slack_callback_exchanges_code(client: AsyncClient, admin_token: s
 
         response = await client.get(
             f"/api/notifications/slack/callback?code=test-code&state={state}",
+            follow_redirects=False,
         )
 
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "connected"
-    assert data["team_name"] == "New Workspace"
+    # Callback redirects browser back to the Slack settings page
+    assert response.status_code == 307
+    assert "/settings/slack?connected=true" in response.headers["location"]
 
 
 @pytest.mark.asyncio
