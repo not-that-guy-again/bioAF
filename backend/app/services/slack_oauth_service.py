@@ -76,9 +76,7 @@ class SlackOAuthService:
     ) -> SlackInstallation:
         """Store or replace the Slack installation for an org."""
         # Remove existing installation if any
-        await session.execute(
-            delete(SlackInstallation).where(SlackInstallation.organization_id == org_id)
-        )
+        await session.execute(delete(SlackInstallation).where(SlackInstallation.organization_id == org_id))
 
         install = SlackInstallation(
             organization_id=org_id,
@@ -95,9 +93,7 @@ class SlackOAuthService:
 
     @staticmethod
     async def get_installation(session: AsyncSession, org_id: int) -> SlackInstallation | None:
-        result = await session.execute(
-            select(SlackInstallation).where(SlackInstallation.organization_id == org_id)
-        )
+        result = await session.execute(select(SlackInstallation).where(SlackInstallation.organization_id == org_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -107,9 +103,7 @@ class SlackOAuthService:
         if not install:
             return False
 
-        await session.execute(
-            delete(SlackChannelMapping).where(SlackChannelMapping.organization_id == org_id)
-        )
+        await session.execute(delete(SlackChannelMapping).where(SlackChannelMapping.organization_id == org_id))
         await session.delete(install)
         await session.flush()
         return True
@@ -145,11 +139,13 @@ class SlackOAuthService:
                     break
 
                 for ch in data.get("channels", []):
-                    channels.append({
-                        "id": ch["id"],
-                        "name": ch["name"],
-                        "is_private": ch.get("is_private", False),
-                    })
+                    channels.append(
+                        {
+                            "id": ch["id"],
+                            "name": ch["name"],
+                            "is_private": ch.get("is_private", False),
+                        }
+                    )
 
                 cursor = data.get("response_metadata", {}).get("next_cursor")
                 if not cursor:
@@ -161,15 +157,11 @@ class SlackOAuthService:
 
     @staticmethod
     async def list_channel_mappings(session: AsyncSession, org_id: int) -> list[SlackChannelMapping]:
-        result = await session.execute(
-            select(SlackChannelMapping).where(SlackChannelMapping.organization_id == org_id)
-        )
+        result = await session.execute(select(SlackChannelMapping).where(SlackChannelMapping.organization_id == org_id))
         return list(result.scalars().all())
 
     @staticmethod
-    async def create_channel_mapping(
-        session: AsyncSession, org_id: int, data: dict
-    ) -> SlackChannelMapping:
+    async def create_channel_mapping(session: AsyncSession, org_id: int, data: dict) -> SlackChannelMapping:
         mapping = SlackChannelMapping(
             organization_id=org_id,
             channel_id=data["channel_id"],

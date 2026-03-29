@@ -119,7 +119,9 @@ async def test_slack_callback_exchanges_code(client: AsyncClient, admin_token: s
         "authed_user": {"id": "UAUTH99"},
     }
 
-    with patch("app.services.slack_oauth_service.SlackOAuthService.exchange_code", new_callable=AsyncMock) as mock_exchange:
+    with patch(
+        "app.services.slack_oauth_service.SlackOAuthService.exchange_code", new_callable=AsyncMock
+    ) as mock_exchange:
         mock_exchange.return_value = token_data
 
         response = await client.get(

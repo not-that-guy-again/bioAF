@@ -72,9 +72,7 @@ class SlackInstallation(Base):
     __tablename__ = "slack_installations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    organization_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("organizations.id"), nullable=False, unique=True
-    )
+    organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False, unique=True)
     team_id: Mapped[str] = mapped_column(String(50), nullable=False)
     team_name: Mapped[str] = mapped_column(String(255), nullable=False)
     bot_token: Mapped[str] = mapped_column(String(500), nullable=False)

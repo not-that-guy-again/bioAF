@@ -29,7 +29,9 @@ async def get_auth_url(
     session: AsyncSession = Depends(get_session),
 ):
     if not settings.slack_client_id or not settings.slack_client_secret:
-        raise HTTPException(400, "Slack OAuth is not configured. Set BIOAF_SLACK_CLIENT_ID and BIOAF_SLACK_CLIENT_SECRET.")
+        raise HTTPException(
+            400, "Slack OAuth is not configured. Set BIOAF_SLACK_CLIENT_ID and BIOAF_SLACK_CLIENT_SECRET."
+        )
 
     auth_url = SlackOAuthService.build_auth_url(
         org_id=current_user["org_id"],
@@ -124,9 +126,7 @@ async def create_channel_mapping(
     if not install:
         raise HTTPException(404, "Slack not connected")
 
-    mapping = await SlackOAuthService.create_channel_mapping(
-        session, current_user["org_id"], body.model_dump()
-    )
+    mapping = await SlackOAuthService.create_channel_mapping(session, current_user["org_id"], body.model_dump())
     await session.commit()
     return SlackChannelMappingResponse.model_validate(mapping)
 
@@ -153,9 +153,7 @@ async def delete_channel_mapping(
     current_user: dict = require_permission("notifications", "configure"),
     session: AsyncSession = Depends(get_session),
 ):
-    deleted = await SlackOAuthService.delete_channel_mapping(
-        session, mapping_id, current_user["org_id"]
-    )
+    deleted = await SlackOAuthService.delete_channel_mapping(session, mapping_id, current_user["org_id"])
     if not deleted:
         raise HTTPException(404, "Channel mapping not found")
     await session.commit()
