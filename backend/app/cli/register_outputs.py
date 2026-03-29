@@ -29,14 +29,13 @@ async def _resolve_outdir(session: AsyncSession, run: PipelineRun) -> str:
     if outdir:
         return outdir
 
-    # Fall back: build the GCS URI from org_slug in platform_config
+    # Fall back: build the GCS URI from results_bucket_name in platform_config
     result = await session.execute(
-        text("SELECT value FROM platform_config WHERE key = 'org_slug'")
+        text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'")
     )
     row = result.first()
     if row:
-        org_slug = row[0]
-        return f"gs://bioaf-results-{org_slug}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+        return f"gs://{row[0]}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
 
     # Last resort: local-style path (GCS adapter will use its default bucket)
     return f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
@@ -53,10 +52,14 @@ async def register_outputs_for_run(
     storage_adapter = get_storage_adapter()
     outdir = await _resolve_outdir(session, run)
 
-    collected = await storage_adapter.collect_outputs(
-        outdir,
-        {"id": run.id, "experiment_id": run.experiment_id},
-    )
+    try:
+        collected = await storage_adapter.collect_outputs(
+            outdir,
+            {"id": run.id, "experiment_id": run.experiment_id},
+        )
+    except Exception as e:
+        print(f"  Run {run.id}: could not collect outputs from {outdir} -- {e}")
+        return 0
     if not collected:
         return 0
 

@@ -289,13 +289,12 @@ class PipelineMonitorService:
             storage_adapter = get_storage_adapter()
             outdir = (run.parameters_json or {}).get("outdir", "")
             if not outdir:
-                # Fall back: resolve org_slug from platform_config
-                slug_row = (
-                    await session.execute(text("SELECT value FROM platform_config WHERE key = 'org_slug'"))
+                # Fall back: read results_bucket_name from platform_config
+                bucket_row = (
+                    await session.execute(text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'"))
                 ).first()
-                if slug_row:
-                    org_slug = slug_row[0]
-                    outdir = f"gs://bioaf-results-{org_slug}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+                if bucket_row:
+                    outdir = f"gs://{bucket_row[0]}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
                 else:
                     outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
             collected = await storage_adapter.collect_outputs(
