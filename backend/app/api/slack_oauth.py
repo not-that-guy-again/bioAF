@@ -112,6 +112,34 @@ async def save_credentials(
     return SlackCredentialsResponse(configured=True, client_id_preview=preview)
 
 
+@router.delete("/credentials")
+async def clear_credentials(
+    current_user: dict = require_permission("notifications", "configure"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Clear saved Slack credentials and disconnect if connected."""
+    org_id = current_user["org_id"]
+
+    # Disconnect installation and mappings if any
+    await SlackOAuthService.disconnect(session, org_id)
+
+    # Clear org credentials
+    result = await session.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org:
+        org.slack_client_id = ""
+        org.slack_client_secret = ""
+        org.slack_signing_secret = ""
+
+    # Clear runtime settings
+    settings.slack_client_id = ""
+    settings.slack_client_secret = ""
+    settings.slack_signing_secret = ""
+
+    await session.commit()
+    return {"cleared": True}
+
+
 @router.get("/auth-url", response_model=SlackAuthUrlResponse)
 async def get_auth_url(
     current_user: dict = require_permission("notifications", "configure"),

@@ -238,6 +238,20 @@ export default function SettingsSlackPage() {
     }
   };
 
+  const handleStartOver = async () => {
+    setError("");
+    try {
+      await api.delete("/api/notifications/slack/credentials");
+      setStatus((prev) => prev ? { ...prev, configured: false, connected: false, team_name: null, team_id: null, installed_by: null, installed_at: null, enabled: false } : prev);
+      setChannels([]);
+      setMappings([]);
+      setManifest(null);
+      setMessage("Slack integration cleared. You can set it up again.");
+    } catch {
+      setError("Failed to clear Slack integration");
+    }
+  };
+
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
@@ -514,6 +528,14 @@ export default function SettingsSlackPage() {
                     </svg>
                     {connecting ? "Connecting..." : "Add to Slack"}
                   </button>
+                  <div className="mt-6">
+                    <button
+                      onClick={handleStartOver}
+                      className="text-sm text-red-500 hover:text-red-700"
+                    >
+                      Start Over
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
