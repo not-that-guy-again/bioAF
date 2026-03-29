@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { api } from "@/lib/api";
 
 interface SlackStatus {
+  configured: boolean;
   connected: boolean;
   team_name: string | null;
   team_id: string | null;
@@ -26,6 +27,13 @@ interface ChannelMapping {
   channel_name: string;
   event_types_json: string[];
   enabled: boolean;
+}
+
+interface SlackManifest {
+  display_information: { name: string; description: string };
+  features: { bot_user: { display_name: string; always_online: boolean } };
+  oauth_config: { scopes: { bot: string[] }; redirect_urls: string[] };
+  settings: { org_deploy_enabled: boolean; socket_mode_enabled: boolean; token_rotation_enabled: boolean };
 }
 
 const EVENT_CATEGORIES: Record<string, { label: string; events: string[] }> = {
@@ -97,12 +105,15 @@ export default function SettingsSlackPage() {
   const [status, setStatus] = useState<SlackStatus | null>(null);
   const [channels, setChannels] = useState<SlackChannel[]>([]);
   const [mappings, setMappings] = useState<ChannelMapping[]>([]);
+  const [manifest, setManifest] = useState<SlackManifest | null>(null);
   const [selectedChannel, setSelectedChannel] = useState("");
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const manifestRef = useRef<HTMLPreElement>(null);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -159,6 +170,34 @@ export default function SettingsSlackPage() {
     }
   }, [loadStatus, loadChannels, loadMappings]);
 
+  const handleGenerateManifest = async () => {
+    setError("");
+    try {
+      const data = await api.get<SlackManifest>("/api/notifications/slack/manifest");
+      setManifest(data);
+    } catch {
+      setError("Failed to generate manifest");
+    }
+  };
+
+  const handleCopyManifest = async () => {
+    if (!manifest) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(manifest, null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: select the text
+      if (manifestRef.current) {
+        const range = document.createRange();
+        range.selectNodeContents(manifestRef.current);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    }
+  };
+
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
@@ -166,7 +205,7 @@ export default function SettingsSlackPage() {
       const data = await api.get<{ auth_url: string }>("/api/notifications/slack/auth-url");
       window.location.href = data.auth_url;
     } catch {
-      setError("Failed to start Slack connection. Ensure BIOAF_SLACK_CLIENT_ID is configured.");
+      setError("Failed to start Slack connection. Make sure you have set BIOAF_SLACK_CLIENT_ID and BIOAF_SLACK_CLIENT_SECRET from your Slack App credentials.");
       setConnecting(false);
     }
   };
@@ -175,7 +214,7 @@ export default function SettingsSlackPage() {
     setError("");
     try {
       await api.delete("/api/notifications/slack/disconnect");
-      setStatus({ connected: false, team_name: null, team_id: null, installed_by: null, installed_at: null, enabled: false });
+      setStatus((prev) => prev ? { ...prev, connected: false, team_name: null, team_id: null, installed_by: null, installed_at: null, enabled: false } : prev);
       setChannels([]);
       setMappings([]);
       setMessage("Slack disconnected");
@@ -299,29 +338,87 @@ export default function SettingsSlackPage() {
               </div>
             )}
 
-            {/* Connection Status */}
-            <div className="bg-white rounded-lg shadow p-6 mb-6">
-              <h2 className="font-semibold mb-4">Connection</h2>
-              {status?.connected ? (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-green-500" />
-                    <div>
-                      <p className="font-medium">{status.team_name}</p>
-                      <p className="text-xs text-gray-500">
-                        Connected by {status.installed_by}
-                        {status.installed_at && ` on ${new Date(status.installed_at).toLocaleDateString()}`}
-                      </p>
+            {/* Phase 1: Setup wizard (no Slack App configured yet) */}
+            {!status?.configured && !status?.connected && (
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 className="font-semibold mb-2">Set Up Slack App</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Before connecting, you need to create a Slack App in your workspace.
+                  Click the button below to generate the configuration, then follow the steps.
+                </p>
+
+                {!manifest ? (
+                  <button
+                    onClick={handleGenerateManifest}
+                    className="px-4 py-2 bg-bioaf-600 text-white rounded hover:bg-bioaf-700 text-sm font-medium"
+                  >
+                    Generate Slack App Manifest
+                  </button>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-700">App Manifest (JSON)</span>
+                        <button
+                          onClick={handleCopyManifest}
+                          className="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50 text-gray-700"
+                        >
+                          {copied ? "Copied" : "Copy to Clipboard"}
+                        </button>
+                      </div>
+                      <pre
+                        ref={manifestRef}
+                        className="text-xs bg-white border rounded p-3 overflow-x-auto max-h-64 overflow-y-auto font-mono text-gray-800"
+                      >
+                        {JSON.stringify(manifest, null, 2)}
+                      </pre>
+                    </div>
+
+                    <div className="border-t pt-4">
+                      <h3 className="font-medium text-sm mb-3">Steps to create your Slack App</h3>
+                      <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                        <li>
+                          Go to{" "}
+                          <a
+                            href="https://api.slack.com/apps"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-bioaf-600 hover:text-bioaf-700 underline"
+                          >
+                            api.slack.com/apps
+                          </a>
+                        </li>
+                        <li>Click <span className="font-semibold">Create New App</span></li>
+                        <li>Select <span className="font-semibold">From a manifest</span></li>
+                        <li>Choose your workspace, then select <span className="font-semibold">JSON</span> as the format</li>
+                        <li>Paste the manifest above and click <span className="font-semibold">Next</span></li>
+                        <li>Review the summary and click <span className="font-semibold">Create</span></li>
+                        <li>
+                          On the app&apos;s <span className="font-semibold">Basic Information</span> page,
+                          copy the <span className="font-semibold">Client ID</span>,{" "}
+                          <span className="font-semibold">Client Secret</span>, and{" "}
+                          <span className="font-semibold">Signing Secret</span>
+                        </li>
+                        <li>
+                          Set them as environment variables on your bioAF deployment:
+                          <div className="mt-1 bg-white border rounded p-2 font-mono text-xs text-gray-600">
+                            BIOAF_SLACK_CLIENT_ID=your_client_id<br />
+                            BIOAF_SLACK_CLIENT_SECRET=your_client_secret<br />
+                            BIOAF_SLACK_SIGNING_SECRET=your_signing_secret
+                          </div>
+                        </li>
+                        <li>Restart bioAF, then return here and click <span className="font-semibold">Add to Slack</span></li>
+                      </ol>
                     </div>
                   </div>
-                  <button
-                    onClick={handleDisconnect}
-                    className="text-sm text-red-500 hover:text-red-700"
-                  >
-                    Disconnect
-                  </button>
-                </div>
-              ) : (
+                )}
+              </div>
+            )}
+
+            {/* Phase 2: Configured but not connected */}
+            {status?.configured && !status?.connected && (
+              <div className="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 className="font-semibold mb-4">Connection</h2>
                 <div className="text-center py-8">
                   <p className="text-gray-500 mb-4">
                     Connect bioAF to your Slack workspace to send notifications to channels.
@@ -340,12 +437,34 @@ export default function SettingsSlackPage() {
                     {connecting ? "Connecting..." : "Add to Slack"}
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Channel Mappings (only when connected) */}
+            {/* Phase 3: Connected */}
             {status?.connected && (
               <>
+                <div className="bg-white rounded-lg shadow p-6 mb-6">
+                  <h2 className="font-semibold mb-4">Connection</h2>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-green-500" />
+                      <div>
+                        <p className="font-medium">{status.team_name}</p>
+                        <p className="text-xs text-gray-500">
+                          Connected by {status.installed_by}
+                          {status.installed_at && ` on ${new Date(status.installed_at).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleDisconnect}
+                      className="text-sm text-red-500 hover:text-red-700"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+
                 <div className="bg-white rounded-lg shadow p-6 mb-6">
                   <h2 className="font-semibold mb-4">Channel Mappings</h2>
                   <p className="text-sm text-gray-500 mb-4">

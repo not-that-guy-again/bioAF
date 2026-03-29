@@ -118,6 +118,7 @@ class SlackAuthUrlResponse(BaseModel):
 
 
 class SlackStatusResponse(BaseModel):
+    configured: bool = False
     connected: bool
     team_name: str | None = None
     team_id: str | None = None

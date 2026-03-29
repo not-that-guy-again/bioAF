@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -21,6 +21,39 @@ from app.services.slack_oauth_service import SlackOAuthService
 logger = logging.getLogger("bioaf.api.slack_oauth")
 
 router = APIRouter(prefix="/api/notifications/slack", tags=["slack"])
+
+
+@router.get("/manifest")
+async def get_manifest(
+    request: Request,
+    current_user: dict = require_permission("notifications", "configure"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Generate the Slack App manifest JSON based on the current deployment URL."""
+    origin = str(request.base_url).rstrip("/")
+    callback_url = f"{origin}/api/notifications/slack/callback"
+
+    return {
+        "display_information": {
+            "name": "bioAF",
+            "description": "Bioinformatics analysis platform notifications",
+        },
+        "features": {
+            "bot_user": {
+                "display_name": "bioAF",
+                "always_online": True,
+            }
+        },
+        "oauth_config": {
+            "scopes": {"bot": ["chat:write", "channels:read", "groups:read"]},
+            "redirect_urls": [callback_url],
+        },
+        "settings": {
+            "org_deploy_enabled": False,
+            "socket_mode_enabled": False,
+            "token_rotation_enabled": False,
+        },
+    }
 
 
 @router.get("/auth-url", response_model=SlackAuthUrlResponse)

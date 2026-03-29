@@ -213,9 +213,11 @@ class SlackOAuthService:
     @staticmethod
     async def get_status(session: AsyncSession, org_id: int) -> dict:
         """Get the current Slack connection status for an org."""
+        configured = bool(settings.slack_client_id and settings.slack_client_secret)
         install = await SlackOAuthService.get_installation(session, org_id)
         if not install:
             return {
+                "configured": configured,
                 "connected": False,
                 "team_name": None,
                 "team_id": None,
@@ -229,6 +231,7 @@ class SlackOAuthService:
         installer_email = result.scalar_one_or_none()
 
         return {
+            "configured": configured,
             "connected": True,
             "team_name": install.team_name,
             "team_id": install.team_id,
