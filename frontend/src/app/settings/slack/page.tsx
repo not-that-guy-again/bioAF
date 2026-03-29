@@ -177,7 +177,8 @@ export default function SettingsSlackPage() {
   const handleGenerateManifest = async () => {
     setError("");
     try {
-      const data = await api.get<SlackManifest>("/api/notifications/slack/manifest");
+      const origin = encodeURIComponent(window.location.origin);
+      const data = await api.get<SlackManifest>(`/api/notifications/slack/manifest?origin=${origin}`);
       setManifest(data);
     } catch {
       setError("Failed to generate manifest");
@@ -212,19 +213,28 @@ export default function SettingsSlackPage() {
 
   const handleCopyManifest = async () => {
     if (!manifest) return;
+    const text = JSON.stringify(manifest, null, 2);
+
+    // navigator.clipboard requires HTTPS; use textarea fallback on HTTP
+    let success = false;
     try {
-      await navigator.clipboard.writeText(JSON.stringify(manifest, null, 2));
+      await navigator.clipboard.writeText(text);
+      success = true;
+    } catch {
+      // Fallback for HTTP contexts
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      success = document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback: select the text
-      if (manifestRef.current) {
-        const range = document.createRange();
-        range.selectNodeContents(manifestRef.current);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-      }
     }
   };
 

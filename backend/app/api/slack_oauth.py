@@ -41,12 +41,13 @@ router = APIRouter(prefix="/api/notifications/slack", tags=["slack"])
 @router.get("/manifest")
 async def get_manifest(
     request: Request,
+    origin: str = Query(""),
     current_user: dict = require_permission("notifications", "configure"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Generate the Slack App manifest JSON based on the current deployment URL."""
-    origin = str(request.base_url).rstrip("/")
-    callback_url = f"{origin}/api/notifications/slack/callback"
+    """Generate the Slack App manifest JSON. Uses ?origin= from the frontend."""
+    base = origin.rstrip("/") if origin else str(request.base_url).rstrip("/")
+    callback_url = f"{base}/api/notifications/slack/callback"
 
     return {
         "display_information": {
