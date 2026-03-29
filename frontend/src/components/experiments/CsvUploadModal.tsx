@@ -43,6 +43,25 @@ const SAMPLE_FIELDS = [
   { value: "collection_method", label: "Collection Method" },
 ];
 
+const EXAMPLE_VALUES: Record<string, string> = {
+  sample_id_external: "SAMPLE-001",
+  organism: "Homo sapiens",
+  tissue_type: "PBMC",
+  donor_source: "Donor-A",
+  treatment_condition: "Control",
+  chemistry_version: "v3.1",
+  viability_pct: "92.5",
+  cell_count: "10000",
+  prep_notes: "Standard protocol",
+  molecule_type: "total RNA",
+  library_prep_method: "10x Chromium 3' v3",
+  library_layout: "paired",
+  qc_status: "pass",
+  qc_notes: "",
+  collection_timestamp: "2024-01-15T10:30:00",
+  collection_method: "venipuncture",
+};
+
 interface Props {
   experimentId: number;
   onClose: () => void;
@@ -152,17 +171,48 @@ export function CsvUploadModal({ experimentId, onClose, onSuccess }: Props) {
           {step === "select" && (
             <div className="space-y-4">
               <p className="text-sm text-gray-600">
-                Upload a CSV or TSV file to bulk-create samples. Need a template?{" "}
-                <a
-                  href={`/api/experiments/${experimentId}/samples/csv-template`}
-                  className="text-bioaf-600 hover:underline"
-                  download
-                >
-                  Download sample template
-                </a>
+                Upload a CSV or TSV file to bulk-create samples. Your CSV should include a
+                header row with column names matching the fields below.
               </p>
 
-              <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-bioaf-400 hover:bg-gray-50 transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-700">Expected CSV Format</h3>
+                  <button
+                    onClick={() => api.download(`/api/experiments/${experimentId}/samples/csv-template`)}
+                    className="text-xs text-bioaf-600 hover:underline"
+                  >
+                    Download template CSV
+                  </button>
+                </div>
+                <div className="overflow-x-auto border rounded-md">
+                  <table className="min-w-full text-xs">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {SAMPLE_FIELDS.map((f) => (
+                          <th key={f.value} className="px-2 py-1.5 text-left font-medium text-gray-600 whitespace-nowrap">
+                            {f.value}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-gray-400 italic">
+                        {SAMPLE_FIELDS.map((f) => (
+                          <td key={f.value} className="px-2 py-1 whitespace-nowrap">
+                            {EXAMPLE_VALUES[f.value] ?? ""}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  All columns are optional. Unrecognized columns will prompt you to map or skip them.
+                </p>
+              </div>
+
+              <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-bioaf-400 hover:bg-gray-50 transition-colors">
                 <div className="text-center">
                   {loading ? (
                     <p className="text-sm text-gray-500">Analyzing file...</p>
