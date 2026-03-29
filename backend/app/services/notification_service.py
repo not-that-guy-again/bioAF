@@ -11,6 +11,8 @@ from app.models.notification import (
     NotificationDeliveryLog,
     NotificationPreference,
     NotificationRule,
+    SlackChannelMapping,
+    SlackInstallation,
     SlackWebhook,
 )
 from app.services.notification_channels.email_adapter import EmailChannel
@@ -260,6 +262,48 @@ class NotificationService:
                 return {"channel": "email", "status": "failed", "detail": "SMTP not configured"}
             return {"channel": "email", "status": "configured", "detail": "SMTP is configured"}
         elif channel == "slack":
+            # Try OAuth installation first
+            install_result = await session.execute(
+                select(SlackInstallation).where(
+                    SlackInstallation.organization_id == org_id,
+                    SlackInstallation.enabled == True,  # noqa: E712
+                )
+            )
+            install = install_result.scalar_one_or_none()
+
+            if install:
+                mappings_result = await session.execute(
+                    select(SlackChannelMapping).where(
+                        SlackChannelMapping.organization_id == org_id,
+                        SlackChannelMapping.enabled == True,  # noqa: E712
+                    )
+                )
+                mappings = list(mappings_result.scalars().all())
+                if not mappings:
+                    return {
+                        "channel": "slack",
+                        "status": "failed",
+                        "detail": "Slack connected but no channel mappings configured",
+                    }
+
+                results = []
+                for mapping in mappings:
+                    success = await SlackChannel.deliver(
+                        bot_token=install.bot_token,
+                        channel_id=mapping.channel_id,
+                        title=title,
+                        message=message,
+                        severity=severity,
+                    )
+                    results.append(
+                        {
+                            "webhook": mapping.channel_name,
+                            "status": "sent" if success else "failed",
+                        }
+                    )
+                return {"channel": "slack", "status": "sent", "webhooks": results}
+
+            # Fallback to legacy webhooks
             webhooks_result = await session.execute(
                 select(SlackWebhook).where(
                     SlackWebhook.organization_id == org_id,
@@ -268,11 +312,11 @@ class NotificationService:
             )
             webhooks = list(webhooks_result.scalars().all())
             if not webhooks:
-                return {"channel": "slack", "status": "failed", "detail": "No Slack webhooks configured"}
+                return {"channel": "slack", "status": "failed", "detail": "Slack not connected"}
 
             results = []
             for webhook in webhooks:
-                success = await SlackChannel.deliver(
+                success = await SlackChannel.deliver_webhook(
                     webhook_url=webhook.webhook_url,
                     title=title,
                     message=message,

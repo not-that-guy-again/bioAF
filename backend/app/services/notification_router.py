@@ -11,6 +11,8 @@ from app.models.notification import (
     NotificationDeliveryLog,
     NotificationPreference,
     NotificationRule,
+    SlackChannelMapping,
+    SlackInstallation,
     SlackWebhook,
 )
 from app.models.activity_feed import ActivityFeedEntry
@@ -208,7 +210,45 @@ class NotificationRouter:
         message: str,
         severity: str,
     ) -> None:
-        """Deliver to all matching Slack webhooks for the org."""
+        """Deliver via OAuth bot token (preferred) or legacy webhooks (fallback)."""
+        # Try OAuth installation first
+        install_result = await session.execute(
+            select(SlackInstallation).where(
+                SlackInstallation.organization_id == org_id,
+                SlackInstallation.enabled == True,  # noqa: E712
+            )
+        )
+        install = install_result.scalar_one_or_none()
+
+        if install:
+            mappings_result = await session.execute(
+                select(SlackChannelMapping).where(
+                    SlackChannelMapping.organization_id == org_id,
+                    SlackChannelMapping.enabled == True,  # noqa: E712
+                )
+            )
+            mappings = list(mappings_result.scalars().all())
+
+            for mapping in mappings:
+                if mapping.event_types_json and event_type not in mapping.event_types_json:
+                    continue
+
+                success = await SlackChannel.deliver(
+                    bot_token=install.bot_token,
+                    channel_id=mapping.channel_id,
+                    title=title,
+                    message=message,
+                    severity=severity,
+                )
+                await self._log_delivery(
+                    session,
+                    notification_id,
+                    "slack",
+                    "sent" if success else "failed",
+                )
+            return
+
+        # Fallback to legacy webhooks
         result = await session.execute(
             select(SlackWebhook).where(
                 SlackWebhook.organization_id == org_id,
@@ -218,11 +258,10 @@ class NotificationRouter:
         webhooks = list(result.scalars().all())
 
         for webhook in webhooks:
-            # Check event type filter
             if webhook.event_types_json and event_type not in webhook.event_types_json:
                 continue
 
-            success = await SlackChannel.deliver(
+            success = await SlackChannel.deliver_webhook(
                 webhook_url=webhook.webhook_url,
                 title=title,
                 message=message,
