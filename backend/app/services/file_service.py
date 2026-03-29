@@ -27,6 +27,7 @@ class FileService:
         experiment_id: int | None = None,
         source_type: str = "upload",
         source_pipeline_run_id: int | None = None,
+        artifact_type: str | None = None,
     ) -> File:
         file = File(
             organization_id=org_id,
@@ -41,6 +42,7 @@ class FileService:
             experiment_id=experiment_id,
             source_type=source_type,
             source_pipeline_run_id=source_pipeline_run_id,
+            artifact_type=artifact_type,
         )
         session.add(file)
         await session.flush()
