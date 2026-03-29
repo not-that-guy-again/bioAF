@@ -80,6 +80,8 @@ class NotificationRouter:
             recipients = await self._resolve_recipients(session, org_id, rules, payload)
 
             # Deliver to each recipient via each channel
+            slack_delivered_via_rule = False
+            first_notification_id = None
             for recipient_user in recipients:
                 # In-app always delivered
                 notification = await InAppChannel.deliver(
@@ -92,6 +94,8 @@ class NotificationRouter:
                     severity=severity,
                     metadata=metadata,
                 )
+                if first_notification_id is None:
+                    first_notification_id = notification.id
 
                 # Check email/slack delivery per rules and preferences
                 for rule in rules:
@@ -126,6 +130,7 @@ class NotificationRouter:
                             "sent" if success else "failed",
                         )
                     elif rule.channel == "slack":
+                        slack_delivered_via_rule = True
                         await self._deliver_slack(
                             session,
                             org_id,
@@ -135,6 +140,18 @@ class NotificationRouter:
                             message,
                             severity,
                         )
+
+            # Deliver to Slack via OAuth channel mappings (independent of rules)
+            if not slack_delivered_via_rule and first_notification_id is not None:
+                await self._deliver_slack(
+                    session,
+                    org_id,
+                    event_type,
+                    first_notification_id,
+                    title,
+                    message,
+                    severity,
+                )
 
             await session.commit()
 
