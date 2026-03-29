@@ -1,5 +1,7 @@
 """Tests for PipelineOutputService - registers pipeline outputs as File records."""
 
+from unittest.mock import patch, MagicMock
+
 import pytest
 import pytest_asyncio
 
@@ -205,3 +207,83 @@ async def test_register_outputs_no_samples(session, admin_user, experiment):
             {"fid": f.id},
         )
         assert rows.all() == []
+
+
+# --- Nextflow metadata registration ---
+
+
+def _mock_blob(exists: bool = True, size: int = 1000) -> MagicMock:
+    blob = MagicMock()
+    blob.exists.return_value = exists
+    blob.size = size
+    return blob
+
+
+@pytest.mark.asyncio
+async def test_register_nextflow_metadata_creates_records(session, pipeline_run, experiment):
+    """Report and trace files are registered when blobs exist in GCS."""
+    mock_bucket = MagicMock()
+    mock_bucket.blob.return_value = _mock_blob(exists=True, size=5000)
+
+    mock_client = MagicMock()
+    mock_client.bucket.return_value = mock_bucket
+
+    with patch("app.services.pipeline_output_service.gcs_storage") as mock_gcs:
+        mock_gcs.Client.return_value = mock_client
+
+        files = await PipelineOutputService.register_nextflow_metadata(
+            session, pipeline_run, "bioaf-raw-testorg"
+        )
+        await session.commit()
+
+    assert len(files) == 2
+    filenames = {f.filename for f in files}
+    assert filenames == {"report.html", "trace.tsv"}
+
+    report = next(f for f in files if f.filename == "report.html")
+    assert report.artifact_type == "pipeline_report"
+    assert report.source_type == "pipeline_output"
+    assert report.source_pipeline_run_id == pipeline_run.id
+
+    trace = next(f for f in files if f.filename == "trace.tsv")
+    assert trace.artifact_type == "pipeline_trace"
+
+
+@pytest.mark.asyncio
+async def test_register_nextflow_metadata_skips_missing_blobs(session, pipeline_run):
+    """No records created when blobs do not exist."""
+    mock_bucket = MagicMock()
+    mock_bucket.blob.return_value = _mock_blob(exists=False)
+
+    mock_client = MagicMock()
+    mock_client.bucket.return_value = mock_bucket
+
+    with patch("app.services.pipeline_output_service.gcs_storage") as mock_gcs:
+        mock_gcs.Client.return_value = mock_client
+
+        files = await PipelineOutputService.register_nextflow_metadata(
+            session, pipeline_run, "bioaf-raw-testorg"
+        )
+
+    assert files == []
+
+
+@pytest.mark.asyncio
+async def test_register_nextflow_metadata_skips_without_k8s_job(session, admin_user, experiment):
+    """No records created when run has no k8s_job_name."""
+    run = PipelineRun(
+        organization_id=admin_user.organization_id,
+        experiment_id=experiment.id,
+        submitted_by_user_id=admin_user.id,
+        pipeline_name="nf-core/scrnaseq",
+        status="completed",
+        k8s_job_name=None,
+    )
+    session.add(run)
+    await session.flush()
+    await session.commit()
+
+    files = await PipelineOutputService.register_nextflow_metadata(
+        session, run, "bioaf-raw-testorg"
+    )
+    assert files == []
