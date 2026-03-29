@@ -338,10 +338,12 @@ async def deploy_stack(
                     "working_bucket_name",
                     "results_bucket_name",
                     "config_backups_bucket_name",
+                    "pubsub_topic_name",
+                    "pubsub_subscription_name",
                 ]:
-                    bucket_name = outputs.get(config_key, {}).get("value", "")
-                    if bucket_name:
-                        await _set_config(session, config_key, bucket_name)
+                    output_val = outputs.get(config_key, {}).get("value", "")
+                    if output_val:
+                        await _set_config(session, config_key, output_val)
                 await _set_config(session, "storage_deployed", "true")
                 await log_action(
                     session,
@@ -626,6 +628,8 @@ async def destroy_storage(
         "working_bucket_name",
         "results_bucket_name",
         "config_backups_bucket_name",
+        "pubsub_topic_name",
+        "pubsub_subscription_name",
         "stack_uid",
     ]:
         await _set_config(session, key, "null")
