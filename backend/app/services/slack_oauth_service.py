@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.notification import SlackChannelMapping, SlackInstallation
+from app.models.organization import Organization
 from app.models.user import User
 
 logger = logging.getLogger("bioaf.slack_oauth")
@@ -22,7 +23,7 @@ SLACK_SCOPES = "chat:write,channels:read,groups:read"
 
 class SlackOAuthService:
     @staticmethod
-    def build_auth_url(org_id: int, user_id: int) -> str:
+    def build_auth_url(org_id: int, user_id: int, client_id_override: str = "") -> str:
         """Build the Slack OAuth authorization URL with signed state."""
         state = jwt.encode(
             {"org_id": org_id, "user_id": user_id},
@@ -30,7 +31,7 @@ class SlackOAuthService:
             algorithm=settings.jwt_algorithm,
         )
         params = {
-            "client_id": settings.slack_client_id,
+            "client_id": client_id_override or settings.slack_client_id,
             "scope": SLACK_SCOPES,
             "state": state,
         }
@@ -49,14 +50,18 @@ class SlackOAuthService:
             raise ValueError(f"Invalid state token: {e}") from e
 
     @staticmethod
-    async def exchange_code(code: str) -> dict:
+    async def exchange_code(
+        code: str,
+        client_id: str = "",
+        client_secret: str = "",
+    ) -> dict:
         """Exchange an authorization code for a bot token."""
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
                 SLACK_TOKEN_URL,
                 data={
-                    "client_id": settings.slack_client_id,
-                    "client_secret": settings.slack_client_secret,
+                    "client_id": client_id or settings.slack_client_id,
+                    "client_secret": client_secret or settings.slack_client_secret,
                     "code": code,
                 },
             )
@@ -66,6 +71,15 @@ class SlackOAuthService:
             logger.error("Slack token exchange failed: %s", error)
             raise ValueError(f"Slack OAuth error: {error}")
         return data
+
+    @staticmethod
+    async def get_org_credentials(session: AsyncSession, org_id: int) -> tuple[str, str]:
+        """Return (client_id, client_secret) from org DB or env var fallback."""
+        result = await session.execute(select(Organization).where(Organization.id == org_id))
+        org = result.scalar_one_or_none()
+        if org and org.slack_client_id and org.slack_client_secret:
+            return org.slack_client_id, org.slack_client_secret
+        return settings.slack_client_id, settings.slack_client_secret
 
     @staticmethod
     async def save_installation(
@@ -213,7 +227,8 @@ class SlackOAuthService:
     @staticmethod
     async def get_status(session: AsyncSession, org_id: int) -> dict:
         """Get the current Slack connection status for an org."""
-        configured = bool(settings.slack_client_id and settings.slack_client_secret)
+        client_id, client_secret = await SlackOAuthService.get_org_credentials(session, org_id)
+        configured = bool(client_id and client_secret)
         install = await SlackOAuthService.get_installation(session, org_id)
         if not install:
             return {

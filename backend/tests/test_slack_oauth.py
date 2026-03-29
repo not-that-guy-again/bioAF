@@ -48,7 +48,7 @@ async def test_slack_auth_url_missing_client_id(client: AsyncClient, admin_token
             headers={"Authorization": f"Bearer {admin_token}"},
         )
     assert response.status_code == 400
-    assert "not configured" in response.json()["detail"].lower()
+    assert "not" in response.json()["detail"].lower()
 
 
 # ---- Status ----

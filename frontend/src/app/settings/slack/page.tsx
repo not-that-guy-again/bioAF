@@ -111,6 +111,10 @@ export default function SettingsSlackPage() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [savingCreds, setSavingCreds] = useState(false);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [signingSecret, setSigningSecret] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const manifestRef = useRef<HTMLPreElement>(null);
@@ -177,6 +181,32 @@ export default function SettingsSlackPage() {
       setManifest(data);
     } catch {
       setError("Failed to generate manifest");
+    }
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!clientId.trim() || !clientSecret.trim() || !signingSecret.trim()) {
+      setError("All three fields are required");
+      return;
+    }
+    setSavingCreds(true);
+    setError("");
+    try {
+      await api.post("/api/notifications/slack/credentials", {
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        signing_secret: signingSecret.trim(),
+      });
+      setMessage("Slack credentials saved");
+      setClientId("");
+      setClientSecret("");
+      setSigningSecret("");
+      // Reload status so UI transitions to "configured" state
+      await loadStatus();
+    } catch {
+      setError("Failed to save credentials");
+    } finally {
+      setSavingCreds(false);
     }
   };
 
@@ -355,27 +385,32 @@ export default function SettingsSlackPage() {
                     Generate Slack App Manifest
                   </button>
                 ) : (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">App Manifest (JSON)</span>
-                        <button
-                          onClick={handleCopyManifest}
-                          className="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50 text-gray-700"
+                  <div className="space-y-6">
+                    {/* Step 1: Manifest */}
+                    <div>
+                      <h3 className="font-medium text-sm mb-2">Step 1: Copy the manifest</h3>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-gray-700">App Manifest (JSON)</span>
+                          <button
+                            onClick={handleCopyManifest}
+                            className="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50 text-gray-700"
+                          >
+                            {copied ? "Copied" : "Copy to Clipboard"}
+                          </button>
+                        </div>
+                        <pre
+                          ref={manifestRef}
+                          className="text-xs bg-white border rounded p-3 overflow-x-auto max-h-64 overflow-y-auto font-mono text-gray-800"
                         >
-                          {copied ? "Copied" : "Copy to Clipboard"}
-                        </button>
+                          {JSON.stringify(manifest, null, 2)}
+                        </pre>
                       </div>
-                      <pre
-                        ref={manifestRef}
-                        className="text-xs bg-white border rounded p-3 overflow-x-auto max-h-64 overflow-y-auto font-mono text-gray-800"
-                      >
-                        {JSON.stringify(manifest, null, 2)}
-                      </pre>
                     </div>
 
-                    <div className="border-t pt-4">
-                      <h3 className="font-medium text-sm mb-3">Steps to create your Slack App</h3>
+                    {/* Step 2: Create the app in Slack */}
+                    <div>
+                      <h3 className="font-medium text-sm mb-2">Step 2: Create the app in Slack</h3>
                       <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
                         <li>
                           Go to{" "}
@@ -393,22 +428,55 @@ export default function SettingsSlackPage() {
                         <li>Choose your workspace, then select <span className="font-semibold">JSON</span> as the format</li>
                         <li>Paste the manifest above and click <span className="font-semibold">Next</span></li>
                         <li>Review the summary and click <span className="font-semibold">Create</span></li>
-                        <li>
-                          On the app&apos;s <span className="font-semibold">Basic Information</span> page,
-                          copy the <span className="font-semibold">Client ID</span>,{" "}
-                          <span className="font-semibold">Client Secret</span>, and{" "}
-                          <span className="font-semibold">Signing Secret</span>
-                        </li>
-                        <li>
-                          Set them as environment variables on your bioAF deployment:
-                          <div className="mt-1 bg-white border rounded p-2 font-mono text-xs text-gray-600">
-                            BIOAF_SLACK_CLIENT_ID=your_client_id<br />
-                            BIOAF_SLACK_CLIENT_SECRET=your_client_secret<br />
-                            BIOAF_SLACK_SIGNING_SECRET=your_signing_secret
-                          </div>
-                        </li>
-                        <li>Restart bioAF, then return here and click <span className="font-semibold">Add to Slack</span></li>
                       </ol>
+                    </div>
+
+                    {/* Step 3: Paste credentials */}
+                    <div>
+                      <h3 className="font-medium text-sm mb-2">Step 3: Enter your app credentials</h3>
+                      <p className="text-sm text-gray-500 mb-3">
+                        After creating the app, you will land on its <span className="font-semibold">Basic Information</span> page.
+                        Copy the three values below from the <span className="font-semibold">App Credentials</span> section.
+                      </p>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Client ID</label>
+                          <input
+                            type="text"
+                            value={clientId}
+                            onChange={(e) => setClientId(e.target.value)}
+                            placeholder="Paste your Client ID"
+                            className="w-full px-3 py-2 border rounded text-sm font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Client Secret</label>
+                          <input
+                            type="password"
+                            value={clientSecret}
+                            onChange={(e) => setClientSecret(e.target.value)}
+                            placeholder="Paste your Client Secret"
+                            className="w-full px-3 py-2 border rounded text-sm font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Signing Secret</label>
+                          <input
+                            type="password"
+                            value={signingSecret}
+                            onChange={(e) => setSigningSecret(e.target.value)}
+                            placeholder="Paste your Signing Secret"
+                            className="w-full px-3 py-2 border rounded text-sm font-mono"
+                          />
+                        </div>
+                        <button
+                          onClick={handleSaveCredentials}
+                          disabled={savingCreds || !clientId || !clientSecret || !signingSecret}
+                          className="px-4 py-2 bg-bioaf-600 text-white rounded hover:bg-bioaf-700 text-sm font-medium disabled:opacity-50"
+                        >
+                          {savingCreds ? "Saving..." : "Save Credentials"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

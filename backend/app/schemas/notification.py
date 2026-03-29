@@ -153,3 +153,14 @@ class SlackChannelMappingCreate(BaseModel):
 class SlackChannelMappingUpdate(BaseModel):
     event_types: list[str] | None = None
     enabled: bool | None = None
+
+
+class SlackCredentialsSave(BaseModel):
+    client_id: str
+    client_secret: str
+    signing_secret: str
+
+
+class SlackCredentialsResponse(BaseModel):
+    configured: bool
+    client_id_preview: str | None = None
