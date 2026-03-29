@@ -294,6 +294,13 @@ class PipelineMonitorService:
             )
             if collected:
                 run.output_files_json = {"files": [f["filename"] for f in collected]}
+                try:
+                    from app.services.pipeline_output_service import PipelineOutputService
+
+                    await PipelineOutputService.register_outputs(session, run, collected)
+                    logger.info("Registered %d output files for run %d", len(collected), run.id)
+                except Exception as reg_err:
+                    logger.warning("Failed to register output files for run %d: %s", run.id, reg_err)
         except Exception as e:
             logger.warning("Failed to collect output files for run %d: %s", run.id, e)
 
