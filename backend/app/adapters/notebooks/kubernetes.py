@@ -411,6 +411,20 @@ class KubernetesNotebookProvider(NotebookProvider):
             else:
                 chpasswd_cmd = f"echo '{cred_username}:{cred_password}' | chpasswd"
 
+            # SSH key setup for git
+            ssh_setup = ""
+            ssh_private_key = session_spec.get("ssh_private_key")
+            if ssh_private_key:
+                # Escape the key for shell embedding
+                escaped_key = ssh_private_key.replace("'", "'\\''")
+                ssh_setup = (
+                    f"mkdir -p {HOME_DIR}/.ssh && "
+                    f"printf '%s\\n' '{escaped_key}' > {HOME_DIR}/.ssh/id_rsa && "
+                    f"chmod 600 {HOME_DIR}/.ssh/id_rsa && "
+                    f"ssh-keyscan github.com >> {HOME_DIR}/.ssh/known_hosts 2>/dev/null && "
+                    f"chown -R {cred_username}:{cred_username} {HOME_DIR}/.ssh && "
+                )
+
             # Build git setup commands if git_config is provided
             git_setup = ""
             git_config = session_spec.get("git_config")
@@ -439,6 +453,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 f"useradd -m -d {HOME_DIR} -s /bin/bash {cred_username} || true && "
                 f"{chpasswd_cmd} && "
                 f"chown -R {cred_username}:{cred_username} {HOME_DIR} && "
+                f"{ssh_setup}"
                 f"{git_setup}"
                 f"exec /usr/lib/rstudio-server/bin/rserver "
                 f"--www-address=0.0.0.0 --www-port={container_port} --server-daemonize=0"

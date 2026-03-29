@@ -96,7 +96,6 @@ export const navConfig: NavSection[] = [
       { label: "GCP Configuration", path: "/settings/gcp", permission: { resource: "infrastructure", action: "configure" } },
       { label: "Naming Profiles", path: "/settings/naming-profiles", permission: { resource: "infrastructure", action: "configure" } },
       { label: "Work Nodes", path: "/settings/work-nodes", permission: { resource: "work_nodes", action: "configure" } },
-      { label: "GitHub Integration", path: "/settings/github", permission: { resource: "settings", action: "configure" } },
       { label: "SMTP Configuration", path: "/settings/smtp", permission: { resource: "notifications", action: "configure" } },
       { label: "Slack Integration", path: "/settings/slack", permission: { resource: "notifications", action: "configure" } },
       { label: "Information", path: "/settings/info", permission: { resource: "infrastructure", action: "view" } },

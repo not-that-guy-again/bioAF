@@ -1,66 +1,10 @@
-"""Tests for GitHub-related database columns on experiments, projects, and compute_sessions."""
+"""Tests for git-related database columns on compute_sessions."""
 
 import pytest
 from sqlalchemy import text
 
 
-class TestGitHubDatabaseColumns:
-    @pytest.mark.asyncio
-    async def test_experiments_has_github_repo_name(self, session, admin_user):
-        """Experiment model should have github_repo_name column."""
-        from app.models.experiment import Experiment
-
-        exp = Experiment(
-            organization_id=admin_user.organization_id,
-            name="Test Exp",
-            github_repo_name="EXP-001-notebooks",
-        )
-        session.add(exp)
-        await session.flush()
-
-        result = await session.execute(
-            text("SELECT github_repo_name FROM experiments WHERE id = :id"),
-            {"id": exp.id},
-        )
-        assert result.scalar() == "EXP-001-notebooks"
-
-    @pytest.mark.asyncio
-    async def test_experiments_github_repo_name_nullable(self, session, admin_user):
-        """github_repo_name should be nullable."""
-        from app.models.experiment import Experiment
-
-        exp = Experiment(
-            organization_id=admin_user.organization_id,
-            name="Test Exp No Repo",
-        )
-        session.add(exp)
-        await session.flush()
-
-        result = await session.execute(
-            text("SELECT github_repo_name FROM experiments WHERE id = :id"),
-            {"id": exp.id},
-        )
-        assert result.scalar() is None
-
-    @pytest.mark.asyncio
-    async def test_projects_has_github_repo_name(self, session, admin_user):
-        """Project model should have github_repo_name column."""
-        from app.models.project import Project
-
-        proj = Project(
-            organization_id=admin_user.organization_id,
-            name="Test Project",
-            github_repo_name="PROJ-001-notebooks",
-        )
-        session.add(proj)
-        await session.flush()
-
-        result = await session.execute(
-            text("SELECT github_repo_name FROM projects WHERE id = :id"),
-            {"id": proj.id},
-        )
-        assert result.scalar() == "PROJ-001-notebooks"
-
+class TestGitDatabaseColumns:
     @pytest.mark.asyncio
     async def test_compute_sessions_has_git_branch_name(self, session, admin_user):
         """ComputeSession should have git_branch_name column."""
