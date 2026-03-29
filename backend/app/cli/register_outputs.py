@@ -31,7 +31,12 @@ async def register_outputs_for_run(
     Returns the number of newly registered files.
     """
     storage_adapter = get_storage_adapter()
-    outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+
+    # Use the GCS outdir from pipeline parameters if available (set by K8s adapter
+    # at launch time), otherwise fall back to local-style path resolution.
+    outdir = (run.parameters_json or {}).get("outdir", "")
+    if not outdir:
+        outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
 
     collected = await storage_adapter.collect_outputs(
         outdir,

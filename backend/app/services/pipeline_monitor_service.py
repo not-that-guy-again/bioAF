@@ -287,7 +287,9 @@ class PipelineMonitorService:
         # Collect output files via storage adapter
         try:
             storage_adapter = get_storage_adapter()
-            outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+            outdir = (run.parameters_json or {}).get("outdir", "")
+            if not outdir:
+                outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
             collected = await storage_adapter.collect_outputs(
                 outdir,
                 {"id": run.id, "experiment_id": run.experiment_id},
