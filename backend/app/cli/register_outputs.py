@@ -13,13 +13,33 @@ import asyncio
 import os
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.adapters.registry import get_storage_adapter, initialize_adapters
 from app.models.file import File
 from app.models.pipeline_run import PipelineRun
 from app.services.pipeline_output_service import PipelineOutputService
+
+
+async def _resolve_outdir(session: AsyncSession, run: PipelineRun) -> str:
+    """Resolve the GCS output directory for a pipeline run."""
+    # Prefer the outdir stored in parameters_json (set by K8s adapter at launch)
+    outdir = (run.parameters_json or {}).get("outdir", "")
+    if outdir:
+        return outdir
+
+    # Fall back: build the GCS URI from org_slug in platform_config
+    result = await session.execute(
+        text("SELECT value FROM platform_config WHERE key = 'org_slug'")
+    )
+    row = result.first()
+    if row:
+        org_slug = row[0]
+        return f"gs://bioaf-results-{org_slug}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+
+    # Last resort: local-style path (GCS adapter will use its default bucket)
+    return f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
 
 
 async def register_outputs_for_run(
@@ -31,12 +51,7 @@ async def register_outputs_for_run(
     Returns the number of newly registered files.
     """
     storage_adapter = get_storage_adapter()
-
-    # Use the GCS outdir from pipeline parameters if available (set by K8s adapter
-    # at launch time), otherwise fall back to local-style path resolution.
-    outdir = (run.parameters_json or {}).get("outdir", "")
-    if not outdir:
-        outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+    outdir = await _resolve_outdir(session, run)
 
     collected = await storage_adapter.collect_outputs(
         outdir,

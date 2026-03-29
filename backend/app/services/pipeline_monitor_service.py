@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -289,7 +289,15 @@ class PipelineMonitorService:
             storage_adapter = get_storage_adapter()
             outdir = (run.parameters_json or {}).get("outdir", "")
             if not outdir:
-                outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+                # Fall back: resolve org_slug from platform_config
+                slug_row = (
+                    await session.execute(text("SELECT value FROM platform_config WHERE key = 'org_slug'"))
+                ).first()
+                if slug_row:
+                    org_slug = slug_row[0]
+                    outdir = f"gs://bioaf-results-{org_slug}/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
+                else:
+                    outdir = f"/data/results/experiments/{run.experiment_id}/pipeline-runs/{run.id}"
             collected = await storage_adapter.collect_outputs(
                 outdir,
                 {"id": run.id, "experiment_id": run.experiment_id},
