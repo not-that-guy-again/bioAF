@@ -54,14 +54,18 @@ class SlackChannel:
         title: str,
         message: str,
         severity: str,
-    ) -> bool:
-        """Send a notification via Slack's chat.postMessage API using a bot token."""
+    ) -> tuple[bool, str]:
+        """Send a notification via Slack's chat.postMessage API.
+
+        Returns (success, error_code). error_code is empty on success.
+        """
         payload = {
             "channel": channel_id,
             "text": f"{title}: {message}",
             "attachments": _build_blocks(title, message, severity),
         }
 
+        last_error = ""
         for attempt in range(MAX_RETRIES):
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
@@ -73,12 +77,19 @@ class SlackChannel:
                     data = response.json()
                     if data.get("ok"):
                         logger.info("Slack notification sent to %s: %s", channel_id, title)
-                        return True
-                    logger.warning("Slack API error: %s", data.get("error"))
+                        return True, ""
+                    last_error = data.get("error", "unknown_error")
+                    logger.warning("Slack API error: %s", last_error)
                     # Do not retry on auth/channel errors
-                    if data.get("error") in ("channel_not_found", "not_in_channel", "invalid_auth", "token_revoked"):
-                        return False
+                    if last_error in (
+                        "channel_not_found",
+                        "not_in_channel",
+                        "invalid_auth",
+                        "token_revoked",
+                    ):
+                        return False, last_error
             except Exception as e:
+                last_error = str(e)
                 backoff = BACKOFF_BASE ** (attempt * 2 + 1)
                 logger.warning(
                     "Slack attempt %d/%d failed: %s (backoff %ds)",
@@ -91,7 +102,7 @@ class SlackChannel:
                     await asyncio.sleep(backoff)
 
         logger.error("Slack delivery failed after %d attempts", MAX_RETRIES)
-        return False
+        return False, last_error
 
     @staticmethod
     async def deliver_webhook(

@@ -36,6 +36,19 @@ interface SlackManifest {
   settings: { org_deploy_enabled: boolean; socket_mode_enabled: boolean; token_rotation_enabled: boolean };
 }
 
+interface TestWebhookResult {
+  webhook: string;
+  status: string;
+  detail?: string;
+}
+
+interface TestResult {
+  channel: string;
+  status: string;
+  detail?: string;
+  webhooks?: TestWebhookResult[];
+}
+
 const EVENT_CATEGORIES: Record<string, { label: string; events: string[] }> = {
   pipelines: {
     label: "Pipelines & Analysis",
@@ -115,6 +128,10 @@ export default function SettingsSlackPage() {
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [signingSecret, setSigningSecret] = useState("");
+  const [editingMappingId, setEditingMappingId] = useState<number | null>(null);
+  const [editEvents, setEditEvents] = useState<string[]>([]);
+  const [testResults, setTestResults] = useState<TestResult | null>(null);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const manifestRef = useRef<HTMLPreElement>(null);
@@ -320,11 +337,68 @@ export default function SettingsSlackPage() {
   };
 
   const handleTestSlack = async () => {
+    if (mappings.length === 0) {
+      setError("No channel mappings exist yet. Add a channel mapping first, then test.");
+      return;
+    }
+    setTesting(true);
+    setTestResults(null);
+    setError("");
+    setMessage("");
     try {
-      await api.post("/api/notifications/test", { channel: "slack" });
-      setMessage("Test notification sent to all mapped channels");
+      const result = await api.post<TestResult>("/api/notifications/test", { channel: "slack" });
+      setTestResults(result);
+      if (result.status === "sent") {
+        const allSent = result.webhooks?.every((w) => w.status === "sent");
+        if (allSent) {
+          setMessage("Test notification sent to all mapped channels.");
+        }
+      }
     } catch {
       setError("Failed to send test notification");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleStartEdit = (mapping: ChannelMapping) => {
+    setEditingMappingId(mapping.id);
+    setEditEvents([...mapping.event_types_json]);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMappingId(null);
+    setEditEvents([]);
+  };
+
+  const handleSaveEdit = async () => {
+    if (editingMappingId === null) return;
+    try {
+      const updated = await api.put<ChannelMapping>(
+        `/api/notifications/slack/channel-mappings/${editingMappingId}`,
+        { event_types: editEvents }
+      );
+      setMappings(mappings.map((m) => (m.id === editingMappingId ? updated : m)));
+      setEditingMappingId(null);
+      setEditEvents([]);
+      setMessage("Channel mapping updated");
+    } catch {
+      setError("Failed to update channel mapping");
+    }
+  };
+
+  const toggleEditEvent = (event: string) => {
+    setEditEvents((prev) =>
+      prev.includes(event) ? prev.filter((e) => e !== event) : [...prev, event]
+    );
+  };
+
+  const toggleEditCategory = (events: string[]) => {
+    const allSelected = events.every((e) => editEvents.includes(e));
+    if (allSelected) {
+      setEditEvents((prev) => prev.filter((e) => !events.includes(e)));
+    } else {
+      setEditEvents((prev) => [...new Set([...prev, ...events])]);
     }
   };
 
@@ -371,14 +445,7 @@ export default function SettingsSlackPage() {
                   Connect your Slack workspace to receive bioAF notifications in channels you choose.
                 </p>
               </div>
-              {status?.connected && (
-                <button
-                  onClick={handleTestSlack}
-                  className="text-sm text-bioaf-600 hover:text-bioaf-700"
-                >
-                  Send Test Notification
-                </button>
-              )}
+              {/* Test button is in the dedicated section below */}
             </div>
 
             {message && (
@@ -543,6 +610,7 @@ export default function SettingsSlackPage() {
             {/* Phase 3: Connected */}
             {status?.connected && (
               <>
+                {/* Connection status */}
                 <div className="bg-white rounded-lg shadow p-6 mb-6">
                   <h2 className="font-semibold mb-4">Connection</h2>
                   <div className="flex items-center justify-between">
@@ -565,64 +633,22 @@ export default function SettingsSlackPage() {
                   </div>
                 </div>
 
+                {/* Channel mappings */}
                 <div className="bg-white rounded-lg shadow p-6 mb-6">
-                  <h2 className="font-semibold mb-4">Channel Mappings</h2>
+                  <h2 className="font-semibold mb-2">Channel Mappings</h2>
                   <p className="text-sm text-gray-500 mb-4">
-                    Route notifications to specific Slack channels. Leave event types empty to receive all events.
+                    Choose which Slack channels receive bioAF notifications and what types of events each channel gets.
                   </p>
 
-                  {mappings.length > 0 && (
-                    <div className="space-y-2 mb-6">
-                      {mappings.map((mapping) => (
-                        <div
-                          key={mapping.id}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded"
-                        >
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => handleToggleMapping(mapping)}
-                              className={`w-8 h-5 rounded-full relative transition-colors ${
-                                mapping.enabled ? "bg-bioaf-600" : "bg-gray-300"
-                              }`}
-                            >
-                              <span
-                                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                                  mapping.enabled ? "left-3.5" : "left-0.5"
-                                }`}
-                              />
-                            </button>
-                            <div>
-                              <span className="font-medium text-sm">{mapping.channel_name}</span>
-                              {mapping.event_types_json.length > 0 ? (
-                                <span className="ml-2 text-xs text-gray-500">
-                                  {mapping.event_types_json.length} event type{mapping.event_types_json.length !== 1 ? "s" : ""}
-                                </span>
-                              ) : (
-                                <span className="ml-2 text-xs text-gray-500">All events</span>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleDeleteMapping(mapping.id)}
-                            className="text-xs text-red-500 hover:text-red-700"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
                   {/* Add new mapping */}
-                  <div className="border-t pt-4">
-                    <h3 className="font-medium text-sm mb-3">Add Channel</h3>
-                    <div className="flex gap-3 mb-4">
+                  <div className="mb-6">
+                    <div className="flex gap-3 mb-3">
                       <select
                         value={selectedChannel}
                         onChange={(e) => setSelectedChannel(e.target.value)}
                         className="flex-1 px-3 py-2 border rounded text-sm"
                       >
-                        <option value="">Select a channel...</option>
+                        <option value="">Select a channel to add...</option>
                         {channels
                           .filter((ch) => !mappings.some((m) => m.channel_id === ch.id))
                           .map((ch) => (
@@ -631,38 +657,27 @@ export default function SettingsSlackPage() {
                             </option>
                           ))}
                       </select>
-                      <button
-                        onClick={handleAddMapping}
-                        disabled={!selectedChannel}
-                        className="px-4 py-2 bg-bioaf-600 text-white rounded text-sm hover:bg-bioaf-700 disabled:opacity-50"
-                      >
-                        Add
-                      </button>
                     </div>
 
-                    {/* Event type filter */}
                     {selectedChannel && (
-                      <div className="bg-gray-50 rounded p-4">
-                        <p className="text-xs text-gray-500 mb-3">
-                          Select event types for this channel (leave all unchecked for all events):
+                      <div className="bg-gray-50 rounded p-4 mb-3">
+                        <p className="text-sm font-medium mb-2">
+                          Select which events to send to this channel
                         </p>
-                        <div className="space-y-4">
+                        <p className="text-xs text-gray-500 mb-3">
+                          Leave all unchecked to receive every event type.
+                        </p>
+                        <div className="space-y-4 mb-4">
                           {Object.entries(EVENT_CATEGORIES).map(([key, category]) => {
-                            const allSelected = category.events.every((e) =>
-                              selectedEvents.includes(e)
-                            );
-                            const someSelected = category.events.some((e) =>
-                              selectedEvents.includes(e)
-                            );
+                            const allSelected = category.events.every((e) => selectedEvents.includes(e));
+                            const someSelected = category.events.some((e) => selectedEvents.includes(e));
                             return (
                               <div key={key}>
                                 <label className="flex items-center gap-2 text-sm font-medium mb-1 cursor-pointer">
                                   <input
                                     type="checkbox"
                                     checked={allSelected}
-                                    ref={(el) => {
-                                      if (el) el.indeterminate = someSelected && !allSelected;
-                                    }}
+                                    ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
                                     onChange={() => toggleCategory(category.events)}
                                     className="rounded"
                                   />
@@ -670,10 +685,7 @@ export default function SettingsSlackPage() {
                                 </label>
                                 <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1">
                                   {category.events.map((event) => (
-                                    <label
-                                      key={event}
-                                      className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer"
-                                    >
+                                    <label key={event} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
                                       <input
                                         type="checkbox"
                                         checked={selectedEvents.includes(event)}
@@ -688,9 +700,160 @@ export default function SettingsSlackPage() {
                             );
                           })}
                         </div>
+                        <button
+                          onClick={handleAddMapping}
+                          className="px-4 py-2 bg-bioaf-600 text-white rounded text-sm hover:bg-bioaf-700"
+                        >
+                          Save Channel Mapping
+                        </button>
                       </div>
                     )}
                   </div>
+
+                  {/* Existing mappings list */}
+                  {mappings.length === 0 && !selectedChannel && (
+                    <div className="text-center py-6 text-gray-400 text-sm border rounded border-dashed">
+                      No channel mappings yet. Select a channel above to get started.
+                    </div>
+                  )}
+
+                  {mappings.length > 0 && (
+                    <div className="space-y-3">
+                      {mappings.map((mapping) => (
+                        <div key={mapping.id} className="border rounded">
+                          <div className="flex items-center justify-between p-3">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => handleToggleMapping(mapping)}
+                                className={`w-8 h-5 rounded-full relative transition-colors ${
+                                  mapping.enabled ? "bg-bioaf-600" : "bg-gray-300"
+                                }`}
+                              >
+                                <span
+                                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                                    mapping.enabled ? "left-3.5" : "left-0.5"
+                                  }`}
+                                />
+                              </button>
+                              <div>
+                                <span className="font-medium text-sm">{mapping.channel_name}</span>
+                                <span className="ml-2 text-xs text-gray-500">
+                                  {mapping.event_types_json.length > 0
+                                    ? `${mapping.event_types_json.length} event type${mapping.event_types_json.length !== 1 ? "s" : ""}`
+                                    : "All events"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => editingMappingId === mapping.id ? handleCancelEdit() : handleStartEdit(mapping)}
+                                className="text-xs text-bioaf-600 hover:text-bioaf-700"
+                              >
+                                {editingMappingId === mapping.id ? "Cancel" : "Edit"}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMapping(mapping.id)}
+                                className="text-xs text-red-500 hover:text-red-700"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Expanded edit view */}
+                          {editingMappingId === mapping.id && (
+                            <div className="border-t bg-gray-50 p-4">
+                              <p className="text-sm font-medium mb-2">Event types for {mapping.channel_name}</p>
+                              <p className="text-xs text-gray-500 mb-3">
+                                Leave all unchecked to receive every event type.
+                              </p>
+                              <div className="space-y-4 mb-4">
+                                {Object.entries(EVENT_CATEGORIES).map(([key, category]) => {
+                                  const allSelected = category.events.every((e) => editEvents.includes(e));
+                                  const someSelected = category.events.some((e) => editEvents.includes(e));
+                                  return (
+                                    <div key={key}>
+                                      <label className="flex items-center gap-2 text-sm font-medium mb-1 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={allSelected}
+                                          ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                          onChange={() => toggleEditCategory(category.events)}
+                                          className="rounded"
+                                        />
+                                        {category.label}
+                                      </label>
+                                      <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1">
+                                        {category.events.map((event) => (
+                                          <label key={event} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={editEvents.includes(event)}
+                                              onChange={() => toggleEditEvent(event)}
+                                              className="rounded"
+                                            />
+                                            {event.split(".").pop()?.replace(/_/g, " ")}
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <button
+                                onClick={handleSaveEdit}
+                                className="px-4 py-2 bg-bioaf-600 text-white rounded text-sm hover:bg-bioaf-700"
+                              >
+                                Save Changes
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Test channel mappings */}
+                <div className="bg-white rounded-lg shadow p-6 mb-6">
+                  <h2 className="font-semibold mb-2">Test Channel Mappings</h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Send a test message to all mapped channels to verify everything is working.
+                  </p>
+                  <button
+                    onClick={handleTestSlack}
+                    disabled={testing}
+                    className="px-4 py-2 bg-bioaf-600 text-white rounded text-sm hover:bg-bioaf-700 disabled:opacity-50"
+                  >
+                    {testing ? "Sending..." : "Test Channel Mappings"}
+                  </button>
+
+                  {testResults && (
+                    <div className="mt-4 space-y-2">
+                      {testResults.detail && (
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded text-sm">
+                          {testResults.detail}
+                        </div>
+                      )}
+                      {testResults.webhooks?.map((result, i) => (
+                        <div
+                          key={i}
+                          className={`p-3 rounded text-sm ${
+                            result.status === "sent"
+                              ? "bg-green-50 border border-green-200 text-green-700"
+                              : "bg-red-50 border border-red-200 text-red-700"
+                          }`}
+                        >
+                          <span className="font-medium">{result.webhook}</span>
+                          {result.status === "sent" ? (
+                            <span className="ml-2">-- Sent successfully</span>
+                          ) : (
+                            <span className="ml-2">-- {result.detail || "Failed to deliver"}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}

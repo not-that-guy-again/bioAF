@@ -233,7 +233,7 @@ class NotificationRouter:
                 if mapping.event_types_json and event_type not in mapping.event_types_json:
                     continue
 
-                success = await SlackChannel.deliver(
+                success, _error = await SlackChannel.deliver(
                     bot_token=install.bot_token,
                     channel_id=mapping.channel_id,
                     title=title,

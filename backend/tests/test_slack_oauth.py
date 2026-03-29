@@ -376,7 +376,7 @@ async def test_slack_adapter_chat_post_message():
         mock_client.post.return_value = mock_response
         mock_client_cls.return_value = mock_client
 
-        result = await SlackChannel.deliver(
+        success, error_code = await SlackChannel.deliver(
             bot_token="xoxb-test-token",
             channel_id="C001",
             title="Pipeline Complete",
@@ -384,7 +384,8 @@ async def test_slack_adapter_chat_post_message():
             severity="info",
         )
 
-    assert result is True
+    assert success is True
+    assert error_code == ""
     call_kwargs = mock_client.post.call_args
     assert "chat.postMessage" in str(call_kwargs)
 
