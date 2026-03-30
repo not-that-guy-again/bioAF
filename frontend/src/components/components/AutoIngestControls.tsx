@@ -153,6 +153,7 @@ export function AutoIngestControls({
           <span className="text-xs font-medium text-gray-700 uppercase tracking-wide">
             Auto-Ingest
           </span>
+          <span className="text-xs font-medium bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Beta</span>
           <span
             data-testid="status-dot"
             className={`inline-block w-2 h-2 rounded-full ${dotColor}`}

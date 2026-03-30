@@ -178,7 +178,7 @@ export default function NamingProfilesPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">Naming Profiles</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Naming Profiles <span className="ml-2 text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full align-middle">Beta</span></h1>
               <div className="flex gap-2">
                 <button
                   onClick={() => { setShowTest(!showTest); setShowCreate(false); setShowWizard(false); }}
