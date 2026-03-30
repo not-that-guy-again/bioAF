@@ -121,13 +121,30 @@ generate_certs() {
 
     bold "Generating self-signed TLS certificate..."
 
-    openssl req -x509 -newkey rsa:2048 -nodes \
+    # Try with -addext first (OpenSSL 1.1.1+), fall back without it for
+    # older versions that do not support the flag.
+    if ! openssl req -x509 -newkey rsa:2048 -nodes \
         -keyout "$CERTS_DIR/tls.key" \
         -out "$CERTS_DIR/tls.crt" \
         -days 365 \
         -subj "/CN=bioaf-local" \
         -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
-        2>/dev/null
+        2>&1; then
+
+        yellow "Retrying without -addext (older OpenSSL)..."
+        openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$CERTS_DIR/tls.key" \
+            -out "$CERTS_DIR/tls.crt" \
+            -days 365 \
+            -subj "/CN=bioaf-local" \
+            2>&1
+    fi
+
+    # Verify the files were actually created
+    if [ ! -f "$CERTS_DIR/tls.crt" ] || [ ! -f "$CERTS_DIR/tls.key" ]; then
+        red "ERROR: Certificate generation failed. Check openssl output above."
+        return 1
+    fi
 
     chmod 600 "$CERTS_DIR/tls.key"
     chmod 644 "$CERTS_DIR/tls.crt"
