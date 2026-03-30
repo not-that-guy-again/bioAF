@@ -391,6 +391,9 @@ export default function ExperimentDetailPage() {
               ← Back
             </button>
             <h1 className="text-2xl font-bold">{experiment.name}</h1>
+            {experiment.code && (
+              <span className="text-sm font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{experiment.code}</span>
+            )}
             <ExperimentStatusBadge status={experiment.status} />
             <div className="ml-auto flex items-center gap-2">
               <ProvenanceExportMenu entityType="experiments" entityId={Number(id)} />
