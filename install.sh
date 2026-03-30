@@ -114,6 +114,13 @@ generate_certs() {
 
     mkdir -p "$CERTS_DIR"
 
+    # Ensure the current user can write to the certs directory
+    if [ ! -w "$CERTS_DIR" ]; then
+        red "ERROR: Cannot write to $CERTS_DIR (owned by $(stat -c '%U' "$CERTS_DIR" 2>/dev/null || stat -f '%Su' "$CERTS_DIR"))."
+        red "Fix with: sudo chown -R \$(whoami) $CERTS_DIR"
+        return 1
+    fi
+
     if [ -f "$CERTS_DIR/tls.crt" ] && [ -f "$CERTS_DIR/tls.key" ] && [ "$force" = false ]; then
         green "TLS certificates already exist at docker/certs/. Skipping."
         return 0
