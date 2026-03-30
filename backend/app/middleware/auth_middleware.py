@@ -51,10 +51,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token: str | None = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ", 1)[1]
-        elif (
-            request.query_params.get("token")
-            and _is_file_content_path(path)
-        ):
+        elif request.query_params.get("token") and _is_file_content_path(path):
             token = request.query_params["token"]
 
         if not token:
