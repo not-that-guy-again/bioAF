@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 interface AutoIngestStatus {
   enabled: boolean;
   cleanup_policy: string;
+  default_delay_minutes: number;
   listener_running: boolean;
   pubsub_topic: string | null;
   pubsub_subscription: string | null;
@@ -84,6 +85,25 @@ export function AutoIngestControls({
       await api.post("/api/v1/settings/auto-ingest", {
         enabled: newEnabled,
         cleanup_policy: status?.cleanup_policy || "delete_after_copy",
+      });
+      const updated = await api.get<AutoIngestStatus>(
+        "/api/v1/settings/auto-ingest",
+      );
+      setStatus(updated);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelayChange = async (minutes: number) => {
+    setLoading(true);
+    try {
+      await api.post("/api/v1/settings/auto-ingest", {
+        enabled: status?.enabled ?? false,
+        cleanup_policy: status?.cleanup_policy || "delete_after_copy",
+        default_delay_minutes: minutes,
       });
       const updated = await api.get<AutoIngestStatus>(
         "/api/v1/settings/auto-ingest",
@@ -179,6 +199,36 @@ export function AutoIngestControls({
               <option value="retain_7d">Retain for 7 days</option>
               <option value="retain_30d">Retain for 30 days</option>
             </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="delay-minutes"
+              className="text-xs text-gray-600 block mb-1"
+            >
+              Pipeline delay after last file upload
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="delay-minutes"
+                type="number"
+                min="0"
+                max="1440"
+                value={status.default_delay_minutes}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val) && val >= 0) handleDelayChange(val);
+                }}
+                disabled={loading}
+                className="text-xs border border-gray-300 rounded px-2 py-1 w-20"
+              />
+              <span className="text-xs text-gray-500">minutes</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              How long to wait after the last file arrives for an experiment
+              before triggering pipelines. Increase if pipelines run with
+              incomplete datasets.
+            </p>
           </div>
 
           <div className="flex gap-4 text-xs text-gray-500">
