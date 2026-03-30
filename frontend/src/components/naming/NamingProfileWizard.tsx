@@ -1,41 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
-interface ProjectOption {
+interface EntityOption {
   id: number;
   name: string;
   code: string | null;
 }
 
-interface ExperimentOption {
-  id: number;
-  name: string;
-  code: string | null;
-}
-
-interface SegmentAssignment {
+interface SegmentMapping {
   value: string;
-  field: string;
-  mappedEntityId?: number;
+  role: string;
+  entityId?: number;
+  entityName?: string;
 }
 
-const FIELD_OPTIONS = [
-  { value: "project_code", label: "Project Code" },
-  { value: "experiment_code", label: "Experiment Code" },
-  { value: "sample_id", label: "Sample ID" },
-  { value: "data_type", label: "Data Type" },
+const SEGMENT_ROLES = [
+  { value: "project_code", label: "Project" },
+  { value: "experiment_code", label: "Experiment" },
+  { value: "sample_id", label: "Sample" },
+  { value: "data_type", label: "Data type (e.g. R1, R2, I1)" },
   { value: "date", label: "Date" },
   { value: "version", label: "Version" },
-  { value: "organism", label: "Organism" },
-  { value: "researcher_initials", label: "Researcher Initials" },
-  { value: "analysis_type", label: "Analysis Type" },
-  { value: "batch_id", label: "Batch ID" },
-  { value: "ignore", label: "Ignore" },
+  { value: "ignore", label: "Not important / skip" },
 ];
-
-type Step = "filename" | "assign" | "map" | "verify" | "save";
 
 interface Props {
   onSave: () => void;
@@ -43,114 +32,109 @@ interface Props {
 }
 
 export function NamingProfileWizard({ onSave, onCancel }: Props) {
-  const [step, setStep] = useState<Step>("filename");
+  // Phase: pick-file -> pick-delimiter -> walk-segments -> name-and-save
+  const [phase, setPhase] = useState<"pick-file" | "pick-delimiter" | "walk-segments" | "name-and-save">("pick-file");
   const [filename, setFilename] = useState("");
   const [delimiter, setDelimiter] = useState("_");
   const [segments, setSegments] = useState<string[]>([]);
-  const [assignments, setAssignments] = useState<SegmentAssignment[]>([]);
+  const [mappings, setMappings] = useState<SegmentMapping[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [profileName, setProfileName] = useState("");
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [experiments, setExperiments] = useState<ExperimentOption[]>([]);
-  const [verifyFilename, setVerifyFilename] = useState("");
-  const [verifyResult, setVerifyResult] = useState<Record<string, string> | null>(null);
+  const [projects, setProjects] = useState<EntityOption[]>([]);
+  const [experiments, setExperiments] = useState<EntityOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    api.get<ProjectOption[]>("/api/projects?page_size=100").then((data) => {
-      // API returns {projects: [...], total: ...}
-      const items = Array.isArray(data) ? data : (data as unknown as { projects: ProjectOption[] }).projects ?? [];
-      setProjects(items);
+    api.get<{ projects: EntityOption[] }>("/api/projects?page_size=200").then((data) => {
+      setProjects(data.projects ?? []);
     }).catch(() => {});
-    api.get<ExperimentOption[]>("/api/experiments?page_size=100").then((data) => {
-      const items = Array.isArray(data) ? data : (data as unknown as { experiments: ExperimentOption[] }).experiments ?? [];
-      setExperiments(items);
+    api.get<{ experiments: EntityOption[] }>("/api/experiments?page_size=200").then((data) => {
+      setExperiments(data.experiments ?? []);
     }).catch(() => {});
   }, []);
 
-  function splitFilename() {
-    let name = filename.trim();
-    // Strip extensions (.fastq.gz, .bam, etc.)
-    name = name.replace(/\.(fastq|fq)(\.gz|\.bz2)?$/i, "");
-    name = name.replace(/\.(bam|sam|h5ad|h5|csv|tsv|txt|bed|vcf|gtf|gff)(\.gz)?$/i, "");
-    const parts = name.split(delimiter);
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFilename(file.name);
+      setPhase("pick-delimiter");
+    }
+  }
+
+  function handleFilenameSubmit() {
+    if (filename.trim()) setPhase("pick-delimiter");
+  }
+
+  function stripExtension(name: string): string {
+    return name
+      .replace(/\.(fastq|fq)(\.gz|\.bz2)?$/i, "")
+      .replace(/\.(bam|sam|h5ad|h5|csv|tsv|txt|bed|vcf|gtf|gff|cram)(\.gz)?$/i, "");
+  }
+
+  function startWalk() {
+    const stripped = stripExtension(filename.trim());
+    const parts = stripped.split(delimiter);
     setSegments(parts);
-    setAssignments(parts.map((value) => ({ value, field: "ignore" })));
-    // Auto-detect common patterns
-    const autoAssigned = parts.map((value, i) => {
-      const lower = value.toLowerCase();
-      if (lower.startsWith("s") && /^s\d+$/i.test(lower)) return { value, field: "sample_id" };
-      if (lower.startsWith("l") && /^l\d+$/i.test(lower)) return { value, field: "ignore" };
-      if (lower.startsWith("r") && /^r[12]$/i.test(lower)) return { value, field: "data_type" };
-      if (lower.startsWith("i") && /^i[12]$/i.test(lower)) return { value, field: "data_type" };
-      if (/^\d{4}-?\d{2}-?\d{2}$/.test(value)) return { value, field: "date" };
-      if (/^v\d+$/i.test(value)) return { value, field: "version" };
-      if (i === 0) return { value, field: "project_code" };
-      return { value, field: "ignore" };
-    });
-    setAssignments(autoAssigned);
-    setStep("assign");
+    setMappings(parts.map((value) => ({ value, role: "" })));
+    setActiveIndex(0);
+    setPhase("walk-segments");
   }
 
-  function updateAssignment(idx: number, field: string) {
-    setAssignments((prev) =>
-      prev.map((a, i) => (i === idx ? { ...a, field } : a))
+  function assignRole(role: string) {
+    setMappings((prev) =>
+      prev.map((m, i) => (i === activeIndex ? { ...m, role, entityId: undefined, entityName: undefined } : m))
     );
+    // If this role needs entity selection, stay on this segment. Otherwise advance.
+    if (role !== "project_code" && role !== "experiment_code" && role !== "sample_id") {
+      advanceSegment();
+    }
   }
 
-  function updateMapping(idx: number, entityId: number) {
-    setAssignments((prev) =>
-      prev.map((a, i) => (i === idx ? { ...a, mappedEntityId: entityId } : a))
+  function assignEntity(entityId: number, entityName: string) {
+    setMappings((prev) =>
+      prev.map((m, i) => (i === activeIndex ? { ...m, entityId, entityName } : m))
     );
+    advanceSegment();
   }
 
-  const needsMapping = assignments.some(
-    (a) => a.field === "project_code" || a.field === "experiment_code"
-  );
+  function advanceSegment() {
+    if (activeIndex < segments.length - 1) {
+      setActiveIndex((prev) => prev + 1);
+    } else {
+      setPhase("name-and-save");
+    }
+  }
 
-  function handleVerify() {
-    if (!verifyFilename.trim()) return;
-    let name = verifyFilename.trim();
-    name = name.replace(/\.(fastq|fq)(\.gz|\.bz2)?$/i, "");
-    name = name.replace(/\.(bam|sam|h5ad|h5|csv|tsv|txt|bed|vcf|gtf|gff)(\.gz)?$/i, "");
-    const parts = name.split(delimiter);
-    const result: Record<string, string> = {};
-    parts.forEach((val, i) => {
-      if (i < assignments.length && assignments[i].field !== "ignore") {
-        const field = assignments[i].field;
-        result[field] = val;
-        // Show mapped entity name
-        if (field === "project_code" && assignments[i].mappedEntityId) {
-          const proj = projects.find((p) => p.id === assignments[i].mappedEntityId);
-          if (proj) result[`${field}_resolved`] = proj.name;
-        }
-        if (field === "experiment_code" && assignments[i].mappedEntityId) {
-          const exp = experiments.find((e) => e.id === assignments[i].mappedEntityId);
-          if (exp) result[`${field}_resolved`] = exp.name;
-        }
-      }
-    });
-    setVerifyResult(result);
+  function goBackSegment() {
+    if (activeIndex > 0) {
+      setActiveIndex((prev) => prev - 1);
+      // Clear the current assignment so they can redo it
+      setMappings((prev) =>
+        prev.map((m, i) => (i === activeIndex - 1 ? { ...m, role: "", entityId: undefined, entityName: undefined } : m))
+      );
+    }
   }
 
   async function handleSave() {
     setError("");
     setSaving(true);
 
-    const segmentDefs = assignments.map((a, i) => ({
+    const segmentDefs = mappings.map((m, i) => ({
       position: i,
-      field: a.field,
-      required: a.field !== "ignore",
+      field: m.role || "ignore",
+      required: m.role !== "ignore" && m.role !== "",
     }));
 
     const projectMappings: Record<string, string> = {};
     const experimentMappings: Record<string, string> = {};
-    for (const a of assignments) {
-      if (a.field === "project_code" && a.mappedEntityId) {
-        projectMappings[a.value] = String(a.mappedEntityId);
+    for (const m of mappings) {
+      if (m.role === "project_code" && m.entityId) {
+        projectMappings[m.value] = String(m.entityId);
       }
-      if (a.field === "experiment_code" && a.mappedEntityId) {
-        experimentMappings[a.value] = String(a.mappedEntityId);
+      if (m.role === "experiment_code" && m.entityId) {
+        experimentMappings[m.value] = String(m.entityId);
       }
     }
 
@@ -171,68 +155,76 @@ export function NamingProfileWizard({ onSave, onCancel }: Props) {
     }
   }
 
+  // Render the filename with the active segment highlighted
+  function renderSegmentHighlight() {
+    return (
+      <div className="flex flex-wrap items-center gap-0.5 font-mono text-lg my-4">
+        {segments.map((seg, i) => (
+          <span key={i} className="flex items-center">
+            {i > 0 && <span className="text-gray-300 mx-0.5">{delimiter}</span>}
+            <span
+              className={`px-2 py-1 rounded transition-all ${
+                i === activeIndex
+                  ? "bg-bioaf-100 border-2 border-bioaf-500 text-bioaf-900 font-bold"
+                  : i < activeIndex && mappings[i]?.role
+                    ? "bg-green-50 border border-green-300 text-green-800"
+                    : "bg-gray-100 border border-gray-200 text-gray-400"
+              }`}
+            >
+              {seg}
+              {i < activeIndex && mappings[i]?.role && mappings[i].role !== "ignore" && (
+                <span className="ml-1 text-xs font-normal text-green-600">
+                  ({SEGMENT_ROLES.find((r) => r.value === mappings[i].role)?.label})
+                </span>
+              )}
+            </span>
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  const currentMapping = mappings[activeIndex];
+  const needsEntity = currentMapping?.role === "project_code" || currentMapping?.role === "experiment_code" || currentMapping?.role === "sample_id";
+
   return (
     <div className="bg-white border rounded-lg p-6 mb-6">
-      <h2 className="text-lg font-semibold mb-4">Create Naming Profile</h2>
-
-      {/* Step 1: Enter filename and delimiter */}
-      {step === "filename" && (
+      {/* Phase 1: Pick a file */}
+      {phase === "pick-file" && (
         <div className="space-y-4">
+          <h2 className="text-lg font-semibold">Create Naming Profile</h2>
           <p className="text-sm text-gray-600">
-            Paste a real filename from your data. The wizard will split it into segments and
-            help you assign each one.
+            Select a real file or type a filename. The wizard will walk you through
+            each part of the name so you can tell bioAF what it means.
           </p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sample filename</label>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Filename</label>
+              <input
+                value={filename}
+                onChange={(e) => setFilename(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleFilenameSubmit(); }}
+                placeholder="Type or paste a filename..."
+                className="w-full border rounded-lg px-3 py-2 font-mono text-sm"
+              />
+            </div>
+            <span className="text-sm text-gray-400 pb-2">or</span>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+            >
+              Choose file
+            </button>
             <input
-              value={filename}
-              onChange={(e) => setFilename(e.target.value)}
-              placeholder="e.g. pbmc01_s001_l001_r2_i2.fastq.gz"
-              className="w-full border rounded-lg px-3 py-2 font-mono text-sm"
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Delimiter</label>
-            <div className="flex gap-3">
-              {[
-                { value: "_", label: "Underscore (_)" },
-                { value: "-", label: "Hyphen (-)" },
-                { value: ".", label: "Dot (.)" },
-              ].map((d) => (
-                <label key={d.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <input
-                    type="radio"
-                    name="delimiter"
-                    value={d.value}
-                    checked={delimiter === d.value}
-                    onChange={() => setDelimiter(d.value)}
-                  />
-                  {d.label}
-                </label>
-              ))}
-            </div>
-          </div>
-          {filename && (
-            <div className="bg-gray-50 rounded-md p-3">
-              <p className="text-xs text-gray-500 mb-1">Preview</p>
-              <div className="flex flex-wrap gap-1">
-                {filename.replace(/\.(fastq|fq)(\.gz|\.bz2)?$/i, "")
-                  .replace(/\.(bam|sam|h5ad|h5|csv|tsv|txt|bed|vcf|gtf|gff)(\.gz)?$/i, "")
-                  .split(delimiter)
-                  .map((part, i) => (
-                    <span
-                      key={i}
-                      className="bg-white border rounded px-2 py-1 font-mono text-sm"
-                    >
-                      {part}
-                    </span>
-                  ))}
-              </div>
-            </div>
-          )}
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-2">
             <button
-              onClick={splitFilename}
+              onClick={handleFilenameSubmit}
               disabled={!filename.trim()}
               className="px-4 py-2 bg-bioaf-600 text-white rounded-lg hover:bg-bioaf-700 disabled:opacity-50"
             >
@@ -245,188 +237,191 @@ export function NamingProfileWizard({ onSave, onCancel }: Props) {
         </div>
       )}
 
-      {/* Step 2: Assign segments */}
-      {step === "assign" && (
+      {/* Phase 2: Pick delimiter */}
+      {phase === "pick-delimiter" && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Assign a role to each segment of the filename. The system auto-detected some
-            common patterns. Adjust as needed.
-          </p>
-          <div className="space-y-2">
-            {segments.map((seg, i) => (
-              <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-md p-3">
-                <span className="font-mono text-sm font-medium text-gray-800 min-w-[120px] bg-white border rounded px-2 py-1">
-                  {seg}
-                </span>
-                <span className="text-gray-400">&rarr;</span>
-                <select
-                  value={assignments[i]?.field || "ignore"}
-                  onChange={(e) => updateAssignment(i, e.target.value)}
-                  className="flex-1 text-sm border border-gray-300 rounded-md px-2 py-1.5"
-                >
-                  {FIELD_OPTIONS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStep(needsMapping ? "map" : "verify")}
-              className="px-4 py-2 bg-bioaf-600 text-white rounded-lg hover:bg-bioaf-700"
-            >
-              Next
-            </button>
-            <button onClick={() => setStep("filename")} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
-              Back
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 3: Map codes to entities */}
-      {step === "map" && (
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Map the extracted codes to your existing projects and experiments. This tells the
-            system which project/experiment a file belongs to based on its filename.
-          </p>
+          <h2 className="text-lg font-semibold">How is the filename separated?</h2>
+          <p className="font-mono text-sm bg-gray-50 rounded-lg p-3 break-all">{filename}</p>
           <div className="space-y-3">
-            {assignments.map((a, i) => {
-              if (a.field === "project_code") {
-                return (
-                  <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-md p-3">
-                    <span className="text-sm text-gray-600 min-w-[100px]">Project code</span>
-                    <span className="font-mono text-sm font-medium bg-white border rounded px-2 py-1">
-                      {a.value}
-                    </span>
-                    <span className="text-gray-400">&rarr;</span>
-                    <select
-                      value={a.mappedEntityId || ""}
-                      onChange={(e) => updateMapping(i, parseInt(e.target.value, 10))}
-                      className="flex-1 text-sm border border-gray-300 rounded-md px-2 py-1.5"
-                    >
-                      <option value="">Select a project...</option>
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} {p.code ? `(${p.code})` : ""}
-                        </option>
-                      ))}
-                    </select>
+            {[
+              { value: "_", label: "Underscores", example: "part1_part2_part3" },
+              { value: "-", label: "Hyphens", example: "part1-part2-part3" },
+              { value: ".", label: "Periods", example: "part1.part2.part3" },
+            ].map((d) => {
+              const stripped = stripExtension(filename.trim());
+              const parts = stripped.split(d.value);
+              const isSelected = delimiter === d.value;
+              return (
+                <button
+                  key={d.value}
+                  onClick={() => setDelimiter(d.value)}
+                  className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${
+                    isSelected ? "border-bioaf-500 bg-bioaf-50" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm">{d.label}</span>
+                    <span className="text-xs text-gray-500">{parts.length} segments</span>
                   </div>
-                );
-              }
-              if (a.field === "experiment_code") {
-                return (
-                  <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-md p-3">
-                    <span className="text-sm text-gray-600 min-w-[100px]">Experiment code</span>
-                    <span className="font-mono text-sm font-medium bg-white border rounded px-2 py-1">
-                      {a.value}
-                    </span>
-                    <span className="text-gray-400">&rarr;</span>
-                    <select
-                      value={a.mappedEntityId || ""}
-                      onChange={(e) => updateMapping(i, parseInt(e.target.value, 10))}
-                      className="flex-1 text-sm border border-gray-300 rounded-md px-2 py-1.5"
-                    >
-                      <option value="">Select an experiment...</option>
-                      {experiments.map((exp) => (
-                        <option key={exp.id} value={exp.id}>
-                          {exp.name} {exp.code ? `(${exp.code})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {parts.map((part, i) => (
+                      <span key={i} className="bg-white border rounded px-2 py-0.5 font-mono text-xs">
+                        {part}
+                      </span>
+                    ))}
                   </div>
-                );
-              }
-              return null;
+                </button>
+              );
             })}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-2">
             <button
-              onClick={() => setStep("verify")}
+              onClick={startWalk}
               className="px-4 py-2 bg-bioaf-600 text-white rounded-lg hover:bg-bioaf-700"
             >
               Next
             </button>
-            <button onClick={() => setStep("assign")} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+            <button onClick={() => setPhase("pick-file")} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
               Back
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 4: Verify with another file */}
-      {step === "verify" && (
+      {/* Phase 3: Walk through segments one at a time */}
+      {phase === "walk-segments" && (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-semibold">
+              What is &ldquo;<span className="font-mono text-bioaf-700">{segments[activeIndex]}</span>&rdquo;?
+            </h2>
+            <span className="text-xs text-gray-400">
+              Segment {activeIndex + 1} of {segments.length}
+            </span>
+          </div>
+
+          {renderSegmentHighlight()}
+
+          {/* Role selection (if not yet picked for this segment) */}
+          {!needsEntity && (
+            <div className="grid grid-cols-2 gap-2">
+              {SEGMENT_ROLES.map((role) => (
+                <button
+                  key={role.value}
+                  onClick={() => assignRole(role.value)}
+                  className="text-left p-3 rounded-lg border border-gray-200 hover:border-bioaf-400 hover:bg-bioaf-50 transition-colors"
+                >
+                  <span className="text-sm font-medium">{role.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Entity selection (after picking project/experiment/sample) */}
+          {needsEntity && !currentMapping.entityId && (
+            <div>
+              <p className="text-sm text-gray-600 mb-3">
+                Which {currentMapping.role === "project_code" ? "project" : currentMapping.role === "experiment_code" ? "experiment" : "sample"} does
+                &ldquo;<span className="font-mono font-bold">{segments[activeIndex]}</span>&rdquo; represent?
+              </p>
+              {currentMapping.role === "project_code" && (
+                <div className="space-y-1 max-h-60 overflow-y-auto">
+                  {projects.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => assignEntity(p.id, p.name)}
+                      className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-bioaf-400 hover:bg-bioaf-50 transition-colors text-sm"
+                    >
+                      <span className="font-medium">{p.name}</span>
+                      {p.code && <span className="ml-2 text-gray-400 font-mono text-xs">{p.code}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {currentMapping.role === "experiment_code" && (
+                <div className="space-y-1 max-h-60 overflow-y-auto">
+                  {experiments.map((exp) => (
+                    <button
+                      key={exp.id}
+                      onClick={() => assignEntity(exp.id, exp.name)}
+                      className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-bioaf-400 hover:bg-bioaf-50 transition-colors text-sm"
+                    >
+                      <span className="font-medium">{exp.name}</span>
+                      {exp.code && <span className="ml-2 text-gray-400 font-mono text-xs">{exp.code}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {currentMapping.role === "sample_id" && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Sample IDs are matched automatically during ingest. No selection needed.
+                  </p>
+                  <button
+                    onClick={advanceSegment}
+                    className="px-4 py-2 bg-bioaf-600 text-white rounded-lg hover:bg-bioaf-700 text-sm"
+                  >
+                    Continue
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setMappings((prev) => prev.map((m, i) => (i === activeIndex ? { ...m, role: "" } : m)));
+                }}
+                className="mt-3 text-sm text-gray-500 hover:text-gray-700"
+              >
+                &larr; Pick a different role
+              </button>
+            </div>
+          )}
+
+          <div className="flex gap-2 mt-4 pt-4 border-t">
+            {activeIndex > 0 && (
+              <button onClick={goBackSegment} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">
+                Back
+              </button>
+            )}
+            <button onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4: Name and save */}
+      {phase === "name-and-save" && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Test the profile against another filename to make sure it parses correctly.
-          </p>
+          <h2 className="text-lg font-semibold">Profile Summary</h2>
+
+          <div className="flex flex-wrap items-center gap-0.5 font-mono text-sm bg-gray-50 rounded-lg p-4">
+            {mappings.map((m, i) => (
+              <span key={i} className="flex items-center">
+                {i > 0 && <span className="text-gray-300 mx-0.5">{delimiter}</span>}
+                <span className={`px-2 py-1 rounded border ${
+                  m.role === "ignore" || !m.role ? "bg-gray-100 border-gray-200 text-gray-400" : "bg-green-50 border-green-300 text-green-800"
+                }`}>
+                  {m.value}
+                  {m.role && m.role !== "ignore" && (
+                    <span className="ml-1 text-xs font-sans">
+                      ({SEGMENT_ROLES.find((r) => r.value === m.role)?.label}
+                      {m.entityName && `: ${m.entityName}`})
+                    </span>
+                  )}
+                </span>
+              </span>
+            ))}
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Profile name</label>
             <input
               value={profileName}
               onChange={(e) => setProfileName(e.target.value)}
-              placeholder={`Profile for ${filename}`}
+              placeholder={`Profile for ${stripExtension(filename)}`}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
           </div>
-
-          <div className="bg-gray-50 rounded-md p-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Profile summary</p>
-            <div className="text-xs text-gray-600 space-y-1">
-              <p>Delimiter: <span className="font-mono font-medium">{delimiter === "_" ? "underscore" : delimiter === "-" ? "hyphen" : "dot"}</span></p>
-              <p>Segments: {assignments.filter((a) => a.field !== "ignore").map((a) => a.field).join(", ")}</p>
-              {assignments.filter((a) => a.mappedEntityId).map((a, i) => (
-                <p key={i}>
-                  {a.field === "project_code" ? "Project" : "Experiment"} mapping:{" "}
-                  <span className="font-mono">{a.value}</span> &rarr;{" "}
-                  {a.field === "project_code"
-                    ? projects.find((p) => p.id === a.mappedEntityId)?.name
-                    : experiments.find((e) => e.id === a.mappedEntityId)?.name}
-                </p>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Verify with another filename (optional)
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={verifyFilename}
-                onChange={(e) => { setVerifyFilename(e.target.value); setVerifyResult(null); }}
-                placeholder="Paste another filename to test..."
-                className="flex-1 border rounded-lg px-3 py-2 font-mono text-sm"
-              />
-              <button
-                onClick={handleVerify}
-                disabled={!verifyFilename.trim()}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Test
-              </button>
-            </div>
-          </div>
-
-          {verifyResult && (
-            <div className="bg-green-50 border border-green-200 rounded-md p-3">
-              <p className="text-sm font-medium text-green-800 mb-2">Parsed result</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                {Object.entries(verifyResult).filter(([k]) => !k.endsWith("_resolved")).map(([key, val]) => (
-                  <div key={key} className="flex gap-2">
-                    <span className="text-gray-600">{key}:</span>
-                    <span className="font-mono font-medium">{val}</span>
-                    {verifyResult[`${key}_resolved`] && (
-                      <span className="text-green-700">({verifyResult[`${key}_resolved`]})</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3">
@@ -443,10 +438,13 @@ export function NamingProfileWizard({ onSave, onCancel }: Props) {
               {saving ? "Saving..." : "Save Profile"}
             </button>
             <button
-              onClick={() => setStep(needsMapping ? "map" : "assign")}
+              onClick={() => { setActiveIndex(0); setPhase("walk-segments"); }}
               className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
             >
-              Back
+              Re-do mapping
+            </button>
+            <button onClick={onCancel} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+              Cancel
             </button>
           </div>
         </div>
