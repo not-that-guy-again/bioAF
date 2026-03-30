@@ -54,7 +54,7 @@ get_access_url() {
         host=$(ipconfig getifaddr en0 2>/dev/null) || true
     fi
     host=${host:-localhost}
-    echo "http://${host}:8080"
+    echo "https://${host}"
 }
 
 # ---------------------------------------------------------------------------
