@@ -500,13 +500,13 @@ async def test_teardown_stack_creates_activity_feed_event(session):
 
 
 # -----------------------------------------------------------------------
-# Per-module UID generation
+# Deploy suffix generation
 # -----------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_deploy_stack_generates_per_module_uids(session):
-    """deploy_stack generates independent UIDs for storage and compute."""
+async def test_deploy_stack_sets_deploy_suffix_for_each_module(session):
+    """deploy_stack generates a fresh deploy_suffix before each module."""
     from app.services.stack_deployment import deploy_stack
 
     _, user_id = await _seed_org_and_user(session)
@@ -517,7 +517,12 @@ async def test_deploy_stack_generates_per_module_uids(session):
     await _set_config(session, "storage_deployed", "false")
     await session.commit()
 
+    suffixes_seen: list[str] = []
+
     async def mock_run_module(sess, uid, module_name):
+        # Capture the deploy_suffix that was set before this module ran
+        suffix = await _get_config(sess, "deploy_suffix")
+        suffixes_seen.append(suffix)
         yield _make_progress_event(
             "apply_complete",
             f"{module_name} done",
@@ -536,130 +541,11 @@ async def test_deploy_stack_generates_per_module_uids(session):
         async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
             pass
 
-    await session.commit()
-
-    storage_uid = await _get_config(session, "storage_uid")
-    compute_uid = await _get_config(session, "compute_uid")
-    assert storage_uid is not None
-    assert len(storage_uid) == 6  # secrets.token_hex(3) -> 6 hex chars
-    assert compute_uid is not None
-    assert len(compute_uid) == 6
-
-
-@pytest.mark.asyncio
-async def test_deploy_stack_reuses_existing_storage_uid(session):
-    """deploy_stack does not overwrite an existing storage_uid when storage is already deployed."""
-    from app.services.stack_deployment import deploy_stack
-
-    _, user_id = await _seed_org_and_user(session)
-
-    await _set_config(session, "gcp_credentials_configured", "true")
-    await _set_config(session, "terraform_initialized", "true")
-    await _set_config(session, "compute_deployed", "false")
-    await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "abc123")
-    await session.commit()
-
-    async def mock_run_module(sess, uid, module_name):
-        yield _make_progress_event(
-            "apply_complete",
-            f"{module_name} done",
-            extra={
-                "outputs": {
-                    "cluster_name": {"value": "bioaf-test"},
-                    "cluster_endpoint": {"value": "https://1.2.3.4"},
-                    "cluster_ca_cert": {"value": "Y2VydA=="},
-                }
-            },
-        )
-
-    with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
-        async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
-            pass
-
-    await session.commit()
-
-    uid = await _get_config(session, "storage_uid")
-    assert uid == "abc123"
-
-
-@pytest.mark.asyncio
-async def test_compute_teardown_preserves_storage_uid(session):
-    """Tearing down compute does not affect the storage_uid."""
-    from app.services.stack_deployment import teardown_stack
-
-    _, user_id = await _seed_org_and_user(session)
-
-    await _set_config(session, "compute_deployed", "true")
-    await _set_config(session, "compute_stack", "kubernetes")
-    await _set_config(session, "gke_cluster_name", "bioaf-myorg")
-    await _set_config(session, "storage_uid", "stor11")
-    await _set_config(session, "compute_uid", "comp22")
-    await session.execute(
-        text("""
-        INSERT INTO component_states (component_key, enabled, status, config_json)
-        VALUES ('kubernetes_cluster', true, 'running', '{}')
-        ON CONFLICT (component_key) DO UPDATE SET enabled = true, status = 'running'
-        """)
-    )
-    await session.commit()
-
-    async def mock_run_destroy(sess, uid, module_name):
-        yield _make_progress_event("apply_complete", "destroy done")
-
-    with patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy):
-        async for _ in teardown_stack(session, user_id=user_id):
-            pass
-
-    await session.commit()
-
-    # storage_uid must survive compute teardown
-    assert await _get_config(session, "storage_uid") == "stor11"
-    # compute_uid should be cleared
-    assert await _get_config(session, "compute_uid") == "null"
-
-
-@pytest.mark.asyncio
-async def test_compute_redeploy_generates_new_compute_uid(session):
-    """Redeploying compute after teardown generates a fresh compute_uid."""
-    from app.services.stack_deployment import deploy_stack
-
-    _, user_id = await _seed_org_and_user(session)
-
-    await _set_config(session, "gcp_credentials_configured", "true")
-    await _set_config(session, "terraform_initialized", "true")
-    await _set_config(session, "compute_deployed", "false")
-    await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "stor11")
-    await _set_config(session, "compute_uid", "null")
-    await session.commit()
-
-    async def mock_run_module(sess, uid, module_name):
-        yield _make_progress_event(
-            "apply_complete",
-            f"{module_name} done",
-            extra={
-                "outputs": {
-                    "cluster_name": {"value": "bioaf-test"},
-                    "cluster_endpoint": {"value": "https://1.2.3.4"},
-                    "cluster_ca_cert": {"value": "Y2VydA=="},
-                }
-            },
-        )
-
-    with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
-        async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
-            pass
-
-    await session.commit()
-
-    # storage_uid unchanged
-    assert await _get_config(session, "storage_uid") == "stor11"
-    # compute_uid freshly generated
-    compute_uid = await _get_config(session, "compute_uid")
-    assert compute_uid is not None
-    assert compute_uid != "null"
-    assert len(compute_uid) == 6
+    # Each module got its own suffix
+    assert len(suffixes_seen) == 2
+    assert all(len(s) == 6 for s in suffixes_seen)
+    # Storage and compute got different suffixes
+    assert suffixes_seen[0] != suffixes_seen[1]
 
 
 # -----------------------------------------------------------------------
@@ -875,15 +761,14 @@ async def test_destroy_storage_requires_storage_deployed(session):
 
 
 @pytest.mark.asyncio
-async def test_destroy_storage_clears_config_and_resets_storage_uid(session):
-    """destroy_storage clears all storage config keys and resets storage_uid."""
+async def test_destroy_storage_clears_resource_names(session):
+    """destroy_storage clears all storage resource names from platform_config."""
     from app.services.stack_deployment import destroy_storage
 
     _, user_id = await _seed_org_and_user(session)
 
     await _set_config(session, "compute_deployed", "false")
     await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "abc123")
     await _set_config(session, "ingest_bucket_name", "bioaf-ingest-abc123")
     await _set_config(session, "raw_bucket_name", "bioaf-raw-abc123")
     await _set_config(session, "working_bucket_name", "bioaf-working-abc123")
@@ -910,7 +795,6 @@ async def test_destroy_storage_clears_config_and_resets_storage_uid(session):
     await session.commit()
 
     assert await _get_config(session, "storage_deployed") == "null"
-    assert await _get_config(session, "storage_uid") == "null"
     assert await _get_config(session, "ingest_bucket_name") == "null"
     assert await _get_config(session, "raw_bucket_name") == "null"
     assert await _get_config(session, "working_bucket_name") == "null"
@@ -930,7 +814,7 @@ async def test_destroy_storage_yields_stack_error_on_tf_failure(session):
 
     await _set_config(session, "compute_deployed", "false")
     await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "abc123")
+
     await session.commit()
 
     async def mock_run_destroy(sess, uid, module_name):
@@ -951,7 +835,6 @@ async def test_destroy_storage_yields_stack_error_on_tf_failure(session):
     assert "stack_error" in event_types
     # Config must NOT be cleared when destroy fails
     assert await _get_config(session, "storage_deployed") == "true"
-    assert await _get_config(session, "storage_uid") == "abc123"
 
 
 @pytest.mark.asyncio
@@ -971,7 +854,7 @@ async def test_destroy_storage_empties_buckets_before_terraform_destroy(session)
 
     await _set_config(session, "compute_deployed", "false")
     await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "abc123")
+
     for key, val in bucket_names.items():
         await _set_config(session, key, val)
     await session.commit()
@@ -1015,7 +898,7 @@ async def test_destroy_storage_skips_empty_for_null_buckets(session):
 
     await _set_config(session, "compute_deployed", "false")
     await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "abc123")
+
     # Only set two real bucket names, rest are null
     await _set_config(session, "ingest_bucket_name", "bioaf-ingest-test-abc123")
     await _set_config(session, "raw_bucket_name", "bioaf-raw-test-abc123")
@@ -1195,7 +1078,6 @@ async def test_deploy_stack_logs_orphan_on_compute_failure(session):
     await _set_config(session, "compute_deployed", "false")
     await _set_config(session, "storage_deployed", "true")
     await _set_config(session, "org_slug", "demo")
-    await _set_config(session, "compute_uid", "abc123")
     await _set_config(session, "gcp_project_id", "test-project")
     await _set_config(session, "gcp_zone", "us-central1-a")
     await session.commit()
@@ -1210,52 +1092,14 @@ async def test_deploy_stack_logs_orphan_on_compute_failure(session):
 
     assert any(e.event_type == "stack_error" for e in events)
 
-    # Verify orphaned resource was logged
+    # Verify orphaned resource was logged with the deploy_suffix
     row = (
-        await session.execute(text("SELECT resource_type, resource_name, stack_uid FROM orphaned_resources LIMIT 1"))
+        await session.execute(text("SELECT resource_type, resource_name FROM orphaned_resources LIMIT 1"))
     ).fetchone()
     assert row is not None
     assert row[0] == "gke_cluster"
-    assert row[1] == "bioaf-demo-abc123"
-    assert row[2] == "abc123"
-
-
-@pytest.mark.asyncio
-async def test_deploy_stack_reuses_existing_compute_uid(session):
-    """deploy_stack reuses an existing compute_uid (not regenerated on deploy)."""
-    from app.services.stack_deployment import deploy_stack
-
-    _, user_id = await _seed_org_and_user(session)
-
-    await _set_config(session, "gcp_credentials_configured", "true")
-    await _set_config(session, "terraform_initialized", "true")
-    await _set_config(session, "compute_deployed", "false")
-    await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "storage_uid", "stor11")
-    await _set_config(session, "compute_uid", "comp22")
-    await session.commit()
-
-    async def mock_run_module(sess, uid, module_name):
-        yield _make_progress_event(
-            "apply_complete",
-            "done",
-            extra={
-                "outputs": {
-                    "cluster_name": {"value": "bioaf-test"},
-                    "cluster_endpoint": {"value": "https://1.2.3.4"},
-                    "cluster_ca_cert": {"value": "Y2VydA=="},
-                }
-            },
-        )
-
-    with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
-        async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
-            pass
-
-    await session.commit()
-
-    assert await _get_config(session, "compute_uid") == "comp22"
-    assert await _get_config(session, "storage_uid") == "stor11"
+    assert row[1].startswith("bioaf-demo-")
+    assert len(row[1].rsplit("-", 1)[-1]) == 6  # suffix is 6 hex chars
 
 
 @pytest.mark.asyncio
@@ -1269,7 +1113,6 @@ async def test_teardown_stack_logs_orphan_on_failure(session):
     await _set_config(session, "compute_stack", "kubernetes")
     await _set_config(session, "gke_cluster_name", "bioaf-demo-abc123")
     await _set_config(session, "org_slug", "demo")
-    await _set_config(session, "compute_uid", "abc123")
     await _set_config(session, "gcp_project_id", "test-project")
     await _set_config(session, "gcp_zone", "us-central1-a")
     await session.commit()

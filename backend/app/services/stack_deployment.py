@@ -306,24 +306,15 @@ async def deploy_stack(
     compute_completed = 0
     compute_planned = 0
 
-    # Generate per-module UIDs. Each module gets its own short hex
-    # suffix so that compute teardown/redeploy never affects storage
-    # bucket names. UIDs are generated once at deploy time and cleared
-    # on destroy so the next deploy gets fresh names (avoids GCP's
-    # 7-day soft-delete window).
-    if storage_deployed != "true":
-        existing_storage_uid = await _read_config(session, "storage_uid")
-        if existing_storage_uid == "null":
-            await _set_config(session, "storage_uid", secrets.token_hex(3))
-            await session.flush()
-
-    existing_compute_uid = await _read_config(session, "compute_uid")
-    if existing_compute_uid == "null":
-        await _set_config(session, "compute_uid", secrets.token_hex(3))
-        await session.flush()
+    # Generate a fresh deploy suffix for each module. This short hex
+    # string is appended to GCP resource names so that redeploys after
+    # a teardown get new names (avoids GCP's 7-day soft-delete window).
+    # The suffix is set before each module runs and cleared after.
 
     # Step 1: Deploy storage if needed
     if storage_deployed != "true":
+        await _set_config(session, "deploy_suffix", secrets.token_hex(3))
+        await session.flush()
         yield TerraformProgressEvent(
             event_type="progress",
             message="Deploying storage infrastructure...",
@@ -388,6 +379,8 @@ async def deploy_stack(
             return
 
     # Step 2: Deploy compute
+    await _set_config(session, "deploy_suffix", secrets.token_hex(3))
+    await session.flush()
     yield TerraformProgressEvent(
         event_type="progress",
         message="Deploying compute infrastructure...",
@@ -470,16 +463,16 @@ async def deploy_stack(
         project_id = await _read_config(session, "gcp_project_id")
         zone = await _read_config(session, "gcp_zone")
         org_slug = await _read_config(session, "org_slug")
-        compute_uid = await _read_config(session, "compute_uid")
-        if compute_uid and compute_uid != "null" and org_slug and org_slug != "null":
-            cluster_name = f"bioaf-{org_slug}-{compute_uid}"
+        suffix = await _read_config(session, "deploy_suffix")
+        if suffix and suffix != "null" and org_slug and org_slug != "null":
+            cluster_name = f"bioaf-{org_slug}-{suffix}"
             await OrphanedResourceService.log_resource(
                 session,
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
                 gcp_project_id=project_id if project_id != "null" else "",
                 gcp_zone=zone if zone != "null" else None,
-                stack_uid=compute_uid,
+                stack_uid=suffix,
             )
             await session.flush()
 
@@ -526,15 +519,14 @@ async def teardown_stack(
         project_id = await _read_config(session, "gcp_project_id")
         zone = await _read_config(session, "gcp_zone")
         cluster_name = await _read_config(session, "gke_cluster_name")
-        compute_uid = await _read_config(session, "compute_uid")
-        if cluster_name and cluster_name != "null" and compute_uid and compute_uid != "null":
+        if cluster_name and cluster_name != "null":
             await OrphanedResourceService.log_resource(
                 session,
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
                 gcp_project_id=project_id if project_id != "null" else "",
                 gcp_zone=zone if zone != "null" else None,
-                stack_uid=compute_uid,
+                stack_uid=cluster_name.rsplit("-", 1)[-1],
             )
             await session.flush()
 
@@ -544,9 +536,8 @@ async def teardown_stack(
         )
         return
 
-    # Clear GKE config and compute_uid (storage_uid is preserved)
+    # Clear GKE config
     await _set_config(session, "compute_deployed", "false")
-    await _set_config(session, "compute_uid", "null")
     await _set_config(session, "gke_cluster_name", "null")
     await _set_config(session, "gke_cluster_endpoint", "null")
     await _set_config(session, "gke_cluster_ca_cert", "null")
@@ -683,8 +674,8 @@ async def destroy_storage(
         )
         return
 
-    # Clear all storage-related config and reset storage_uid so next deploy
-    # generates fresh bucket names (GCS has a 7-day soft-delete window).
+    # Clear all storage-related resource names from platform_config.
+    # Next deploy generates a fresh suffix automatically.
     for key in [
         "storage_deployed",
         "ingest_bucket_name",
@@ -694,7 +685,6 @@ async def destroy_storage(
         "config_backups_bucket_name",
         "pubsub_topic_name",
         "pubsub_subscription_name",
-        "storage_uid",
     ]:
         await _set_config(session, key, "null")
 
