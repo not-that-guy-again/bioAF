@@ -663,13 +663,13 @@ def test_write_tfvars_foundation():
 
 
 def test_write_tfvars_storage():
-    """_write_tfvars writes project_id, region, org_slug, and stack_uid for storage."""
+    """_write_tfvars writes project_id, region, org_slug, and storage_uid for storage."""
     tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
     config = {
         "gcp_project_id": "my-project",
         "gcp_region": "us-west1",
         "org_slug": "my-lab",
-        "stack_uid": "a1b2c3",
+        "storage_uid": "a1b2c3",
     }
     TerraformExecutor._write_tfvars(tmp, "storage", config)
 
@@ -682,14 +682,14 @@ def test_write_tfvars_storage():
 
 
 def test_write_tfvars_compute():
-    """_write_tfvars writes project_id, region, zone, org_slug, and stack_uid for compute."""
+    """_write_tfvars writes project_id, region, zone, org_slug, and compute_uid for compute."""
     tmp = Path(tempfile.mkdtemp(prefix="tf_test_"))
     config = {
         "gcp_project_id": "my-project",
         "gcp_region": "europe-west1",
         "gcp_zone": "europe-west1-b",
         "org_slug": "acme",
-        "stack_uid": "d4e5f6",
+        "compute_uid": "d4e5f6",
     }
     TerraformExecutor._write_tfvars(tmp, "compute", config)
 

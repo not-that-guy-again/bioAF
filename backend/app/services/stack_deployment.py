@@ -306,21 +306,33 @@ async def deploy_stack(
     compute_completed = 0
     compute_planned = 0
 
-    # Generate a stack_uid if one doesn't exist yet. This short hex string
-    # is appended to all GCP resource names so that teardown + redeploy
-    # avoids GCP's 7-day soft-delete window for buckets.
-    existing_uid = await _read_config(session, "stack_uid")
-    if existing_uid == "null":
-        new_uid = secrets.token_hex(3)  # 6 hex chars, e.g. "a1b2c3"
-        await _set_config(session, "stack_uid", new_uid)
-        await session.flush()
-    elif await OrphanedResourceService.has_orphaned_for_uid(session, existing_uid):
+    # Generate per-module UIDs. Each module gets its own UID so that
+    # compute teardown/redeploy never affects storage bucket names.
+    # Storage UID persists until storage is explicitly destroyed.
+    # Compute UID is generated fresh on each deploy to avoid GCP's
+    # 7-day soft-delete window for GKE clusters.
+
+    # Storage UID: only generate if storage is not yet deployed
+    if storage_deployed != "true":
+        existing_storage_uid = await _read_config(session, "storage_uid")
+        if existing_storage_uid == "null":
+            new_uid = secrets.token_hex(3)  # 6 hex chars, e.g. "a1b2c3"
+            await _set_config(session, "storage_uid", new_uid)
+            await session.flush()
+
+    # Compute UID: generate fresh, checking for orphaned resources
+    existing_compute_uid = await _read_config(session, "compute_uid")
+    if existing_compute_uid == "null":
         new_uid = secrets.token_hex(3)
-        await _set_config(session, "stack_uid", new_uid)
+        await _set_config(session, "compute_uid", new_uid)
+        await session.flush()
+    elif await OrphanedResourceService.has_orphaned_for_uid(session, existing_compute_uid):
+        new_uid = secrets.token_hex(3)
+        await _set_config(session, "compute_uid", new_uid)
         await session.flush()
         logger.info(
-            "Re-seeded stack_uid from %s to %s (orphaned resources detected)",
-            existing_uid,
+            "Re-seeded compute_uid from %s to %s (orphaned resources detected)",
+            existing_compute_uid,
             new_uid,
         )
 
@@ -472,16 +484,16 @@ async def deploy_stack(
         project_id = await _read_config(session, "gcp_project_id")
         zone = await _read_config(session, "gcp_zone")
         org_slug = await _read_config(session, "org_slug")
-        stack_uid = await _read_config(session, "stack_uid")
-        if stack_uid and stack_uid != "null" and org_slug and org_slug != "null":
-            cluster_name = f"bioaf-{org_slug}-{stack_uid}"
+        compute_uid = await _read_config(session, "compute_uid")
+        if compute_uid and compute_uid != "null" and org_slug and org_slug != "null":
+            cluster_name = f"bioaf-{org_slug}-{compute_uid}"
             await OrphanedResourceService.log_resource(
                 session,
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
                 gcp_project_id=project_id if project_id != "null" else "",
                 gcp_zone=zone if zone != "null" else None,
-                stack_uid=stack_uid,
+                stack_uid=compute_uid,
             )
             await session.flush()
 
@@ -528,15 +540,15 @@ async def teardown_stack(
         project_id = await _read_config(session, "gcp_project_id")
         zone = await _read_config(session, "gcp_zone")
         cluster_name = await _read_config(session, "gke_cluster_name")
-        stack_uid = await _read_config(session, "stack_uid")
-        if cluster_name and cluster_name != "null" and stack_uid and stack_uid != "null":
+        compute_uid = await _read_config(session, "compute_uid")
+        if cluster_name and cluster_name != "null" and compute_uid and compute_uid != "null":
             await OrphanedResourceService.log_resource(
                 session,
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
                 gcp_project_id=project_id if project_id != "null" else "",
                 gcp_zone=zone if zone != "null" else None,
-                stack_uid=stack_uid,
+                stack_uid=compute_uid,
             )
             await session.flush()
 
@@ -546,8 +558,9 @@ async def teardown_stack(
         )
         return
 
-    # Clear GKE config
+    # Clear GKE config and compute_uid (storage_uid is preserved)
     await _set_config(session, "compute_deployed", "false")
+    await _set_config(session, "compute_uid", "null")
     await _set_config(session, "gke_cluster_name", "null")
     await _set_config(session, "gke_cluster_endpoint", "null")
     await _set_config(session, "gke_cluster_ca_cert", "null")
@@ -685,7 +698,7 @@ async def destroy_storage(
         )
         return
 
-    # Clear all storage-related config and reset stack_uid so next deploy
+    # Clear all storage-related config and reset storage_uid so next deploy
     # generates fresh bucket names (GCS has a 7-day soft-delete window).
     for key in [
         "storage_deployed",
@@ -696,7 +709,7 @@ async def destroy_storage(
         "config_backups_bucket_name",
         "pubsub_topic_name",
         "pubsub_subscription_name",
-        "stack_uid",
+        "storage_uid",
     ]:
         await _set_config(session, key, "null")
 

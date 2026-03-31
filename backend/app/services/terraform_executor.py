@@ -812,7 +812,10 @@ class TerraformExecutor:
         region = config.get("gcp_region") or "us-central1"
         zone = config.get("gcp_zone") or f"{region}-a"
         org_slug = config.get("org_slug") or "bioaf"
-        stack_uid = config.get("stack_uid") or ""
+        # Each module uses its own UID so compute teardown/redeploy
+        # never affects storage bucket names.
+        storage_uid = config.get("storage_uid") or ""
+        compute_uid = config.get("compute_uid") or ""
         state_bucket = config.get("terraform_state_bucket") or f"bioaf-tfstate-{project_id}"
 
         # Common variables shared by all modules
@@ -825,14 +828,14 @@ class TerraformExecutor:
             tfvars["state_bucket_name"] = state_bucket
         elif module_name == "storage":
             tfvars["org_slug"] = org_slug
-            tfvars["stack_uid"] = stack_uid
+            tfvars["stack_uid"] = storage_uid
             tfvars["backend_service_account_email"] = config.get("backend_service_account_email") or ""
         elif module_name == "billing_export":
             tfvars["backend_service_account_email"] = config.get("backend_service_account_email") or ""
         elif module_name == "compute":
             tfvars["zone"] = zone
             tfvars["org_slug"] = org_slug
-            tfvars["stack_uid"] = stack_uid
+            tfvars["stack_uid"] = compute_uid
             # Multi-zone node placement: derive all zones in the region so
             # the autoscaler can fall back when a machine type is unavailable
             # in the primary zone (e.g. GCE capacity exhaustion).
@@ -928,7 +931,8 @@ class TerraformExecutor:
             "gcp_zone",
             "gcp_service_account_key",
             "org_slug",
-            "stack_uid",
+            "storage_uid",
+            "compute_uid",
             "terraform_initialized",
             "terraform_state_bucket",
             "backend_service_account_email",
