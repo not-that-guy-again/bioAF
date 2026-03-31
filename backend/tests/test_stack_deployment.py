@@ -814,7 +814,13 @@ async def test_destroy_storage_clears_config_and_resets_stack_uid(session):
     async def mock_run_destroy(sess, uid, module_name):
         yield _make_progress_event("apply_complete", "destroy done")
 
-    with patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy):
+    async def mock_empty(sess, bucket_name):
+        return 0
+
+    with (
+        patch("app.services.stack_deployment._empty_gcs_bucket", side_effect=mock_empty),
+        patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy),
+    ):
         events = []
         async for event in destroy_storage(session, user_id=user_id):
             events.append(event)
@@ -848,7 +854,13 @@ async def test_destroy_storage_yields_stack_error_on_tf_failure(session):
     async def mock_run_destroy(sess, uid, module_name):
         yield _make_progress_event("apply_error", "destroy failed")
 
-    with patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy):
+    async def mock_empty(sess, bucket_name):
+        return 0
+
+    with (
+        patch("app.services.stack_deployment._empty_gcs_bucket", side_effect=mock_empty),
+        patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy),
+    ):
         events = []
         async for event in destroy_storage(session, user_id=1):
             events.append(event)
@@ -858,6 +870,100 @@ async def test_destroy_storage_yields_stack_error_on_tf_failure(session):
     # Config must NOT be cleared when destroy fails
     assert await _get_config(session, "storage_deployed") == "true"
     assert await _get_config(session, "stack_uid") == "abc123"
+
+
+@pytest.mark.asyncio
+async def test_destroy_storage_empties_buckets_before_terraform_destroy(session):
+    """destroy_storage must empty all GCS buckets before running terraform destroy."""
+    from app.services.stack_deployment import destroy_storage
+
+    _, user_id = await _seed_org_and_user(session)
+
+    bucket_names = {
+        "ingest_bucket_name": "bioaf-ingest-test-abc123",
+        "raw_bucket_name": "bioaf-raw-test-abc123",
+        "working_bucket_name": "bioaf-working-test-abc123",
+        "results_bucket_name": "bioaf-results-test-abc123",
+        "config_backups_bucket_name": "bioaf-config-test-abc123",
+    }
+
+    await _set_config(session, "compute_deployed", "false")
+    await _set_config(session, "storage_deployed", "true")
+    await _set_config(session, "stack_uid", "abc123")
+    for key, val in bucket_names.items():
+        await _set_config(session, key, val)
+    await session.commit()
+
+    emptied_buckets: list[str] = []
+    destroy_called = False
+
+    async def mock_empty_bucket(sess, bucket_name):
+        emptied_buckets.append(bucket_name)
+        return 0
+
+    async def mock_run_destroy(sess, uid, module_name):
+        nonlocal destroy_called
+        destroy_called = True
+        # All buckets must have been emptied before terraform destroy runs
+        assert len(emptied_buckets) == 5, (
+            f"Expected 5 buckets emptied before destroy, got {len(emptied_buckets)}"
+        )
+        yield _make_progress_event("apply_complete", "destroy done")
+
+    with (
+        patch("app.services.stack_deployment._empty_gcs_bucket", side_effect=mock_empty_bucket),
+        patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy),
+    ):
+        events = []
+        async for event in destroy_storage(session, user_id=user_id):
+            events.append(event)
+
+    assert destroy_called, "terraform destroy should have been called"
+    assert set(emptied_buckets) == set(bucket_names.values())
+
+    # Should yield progress events about emptying
+    messages = [e.message for e in events]
+    assert any("Emptying" in m or "emptying" in m for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_destroy_storage_skips_empty_for_null_buckets(session):
+    """destroy_storage skips bucket-emptying for buckets with null or missing names."""
+    from app.services.stack_deployment import destroy_storage
+
+    _, user_id = await _seed_org_and_user(session)
+
+    await _set_config(session, "compute_deployed", "false")
+    await _set_config(session, "storage_deployed", "true")
+    await _set_config(session, "stack_uid", "abc123")
+    # Only set two real bucket names, rest are null
+    await _set_config(session, "ingest_bucket_name", "bioaf-ingest-test-abc123")
+    await _set_config(session, "raw_bucket_name", "bioaf-raw-test-abc123")
+    await _set_config(session, "working_bucket_name", "null")
+    await _set_config(session, "results_bucket_name", "null")
+    await _set_config(session, "config_backups_bucket_name", "null")
+    await session.commit()
+
+    emptied_buckets: list[str] = []
+
+    async def mock_empty_bucket(sess, bucket_name):
+        emptied_buckets.append(bucket_name)
+        return 0
+
+    async def mock_run_destroy(sess, uid, module_name):
+        yield _make_progress_event("apply_complete", "destroy done")
+
+    with (
+        patch("app.services.stack_deployment._empty_gcs_bucket", side_effect=mock_empty_bucket),
+        patch("app.services.stack_deployment._run_destroy", side_effect=mock_run_destroy),
+    ):
+        async for _ in destroy_storage(session, user_id=user_id):
+            pass
+
+    # Only the two real buckets should have been emptied
+    assert len(emptied_buckets) == 2
+    assert "bioaf-ingest-test-abc123" in emptied_buckets
+    assert "bioaf-raw-test-abc123" in emptied_buckets
 
 
 # -----------------------------------------------------------------------

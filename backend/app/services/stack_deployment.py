@@ -588,6 +588,43 @@ async def teardown_stack(
     )
 
 
+_BUCKET_CONFIG_KEYS = [
+    "ingest_bucket_name",
+    "raw_bucket_name",
+    "working_bucket_name",
+    "results_bucket_name",
+    "config_backups_bucket_name",
+]
+
+
+async def _empty_gcs_bucket(session: AsyncSession, bucket_name: str) -> int:
+    """Delete all objects (including noncurrent versions) from a GCS bucket.
+
+    Returns the number of objects deleted. Uses the same credential
+    resolution as GcsStorageService so it works with SA keys stored
+    in platform_config.
+    """
+    from google.cloud import storage as gcs_storage
+
+    from app.services.gcs_storage import GcsStorageService
+
+    credentials = await GcsStorageService.get_credentials(session)
+    client = gcs_storage.Client(credentials=credentials)
+    bucket = client.bucket(bucket_name)
+
+    deleted = 0
+    # Delete current objects
+    for blob in client.list_blobs(bucket_name):
+        blob.delete()
+        deleted += 1
+    # Delete noncurrent versions (versioned buckets retain old copies)
+    for blob in client.list_blobs(bucket_name, versions=True):
+        blob.delete()
+        deleted += 1
+
+    return deleted
+
+
 async def destroy_storage(
     session: AsyncSession,
     user_id: int,
@@ -595,7 +632,8 @@ async def destroy_storage(
 ) -> AsyncGenerator[TerraformProgressEvent, None]:
     """Destroy the storage module (GCS buckets + Pub/Sub).
 
-    Only allowed when compute is not deployed. Clears all storage-related
+    Empties all GCS buckets before running terraform destroy (required
+    because buckets have force_destroy=false). Clears all storage-related
     platform_config keys and resets stack_uid so a fresh deploy generates
     new resource names (avoids GCS soft-delete name conflicts).
     """
@@ -607,6 +645,28 @@ async def destroy_storage(
     if storage_deployed != "true":
         raise ValueError("Storage is not deployed.")
 
+    # Step 1: Empty all GCS buckets so terraform destroy can remove them
+    # (buckets have force_destroy=false and cannot be deleted while non-empty)
+    for config_key in _BUCKET_CONFIG_KEYS:
+        bucket_name = await _read_config(session, config_key)
+        if not bucket_name or bucket_name == "null":
+            continue
+        yield TerraformProgressEvent(
+            event_type="progress",
+            message=f"Emptying bucket {bucket_name}...",
+        )
+        try:
+            count = await _empty_gcs_bucket(session, bucket_name)
+            logger.info("Emptied bucket %s (%d objects deleted)", bucket_name, count)
+        except Exception as exc:
+            logger.error("Failed to empty bucket %s: %s", bucket_name, exc)
+            yield TerraformProgressEvent(
+                event_type="stack_error",
+                message=f"Failed to empty bucket {bucket_name}: {exc}",
+            )
+            return
+
+    # Step 2: Run terraform destroy on the now-empty buckets
     yield TerraformProgressEvent(
         event_type="progress",
         message="Destroying storage infrastructure...",
