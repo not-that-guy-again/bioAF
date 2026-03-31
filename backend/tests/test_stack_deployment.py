@@ -1221,8 +1221,8 @@ async def test_deploy_stack_logs_orphan_on_compute_failure(session):
 
 
 @pytest.mark.asyncio
-async def test_deploy_stack_reseeds_compute_uid_when_orphans_exist(session):
-    """If the current compute_uid has orphaned resources, deploy_stack generates a new one."""
+async def test_deploy_stack_reuses_existing_compute_uid(session):
+    """deploy_stack reuses an existing compute_uid (not regenerated on deploy)."""
     from app.services.stack_deployment import deploy_stack
 
     _, user_id = await _seed_org_and_user(session)
@@ -1231,24 +1231,8 @@ async def test_deploy_stack_reseeds_compute_uid_when_orphans_exist(session):
     await _set_config(session, "terraform_initialized", "true")
     await _set_config(session, "compute_deployed", "false")
     await _set_config(session, "storage_deployed", "true")
-    await _set_config(session, "org_slug", "demo")
     await _set_config(session, "storage_uid", "stor11")
-    await _set_config(session, "compute_uid", "old123")
-    await _set_config(session, "gcp_project_id", "test-project")
-    await _set_config(session, "gcp_zone", "us-central1-a")
-    await session.commit()
-
-    # Seed an orphaned resource for old compute UID
-    from app.services.orphaned_resource_service import OrphanedResourceService
-
-    await OrphanedResourceService.log_resource(
-        session,
-        resource_type="gke_cluster",
-        resource_name="bioaf-demo-old123",
-        gcp_project_id="test-project",
-        stack_uid="old123",
-    )
-    await session.flush()
+    await _set_config(session, "compute_uid", "comp22")
     await session.commit()
 
     async def mock_run_module(sess, uid, module_name):
@@ -1261,20 +1245,16 @@ async def test_deploy_stack_reseeds_compute_uid_when_orphans_exist(session):
                     "cluster_endpoint": {"value": "https://1.2.3.4"},
                     "cluster_ca_cert": {"value": "Y2VydA=="},
                 }
-            }
-            if module_name == "compute"
-            else {},
+            },
         )
 
     with patch("app.services.stack_deployment._run_module", side_effect=mock_run_module):
         async for _ in deploy_stack(session, "kubernetes", user_id=user_id):
             pass
 
-    # compute_uid should be reseeded
-    new_uid = await _get_config(session, "compute_uid")
-    assert new_uid != "old123"
-    assert len(new_uid) == 6
-    # storage_uid should be untouched
+    await session.commit()
+
+    assert await _get_config(session, "compute_uid") == "comp22"
     assert await _get_config(session, "storage_uid") == "stor11"
 
 

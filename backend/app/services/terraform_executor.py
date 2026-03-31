@@ -813,9 +813,11 @@ class TerraformExecutor:
         zone = config.get("gcp_zone") or f"{region}-a"
         org_slug = config.get("org_slug") or "bioaf"
         # Each module uses its own UID so compute teardown/redeploy
-        # never affects storage bucket names.
-        storage_uid = config.get("storage_uid") or ""
-        compute_uid = config.get("compute_uid") or ""
+        # never affects storage bucket names. Fall back to the legacy
+        # shared stack_uid for pre-existing deployments.
+        legacy_uid = config.get("stack_uid") or ""
+        storage_uid = config.get("storage_uid") or legacy_uid
+        compute_uid = config.get("compute_uid") or legacy_uid
         state_bucket = config.get("terraform_state_bucket") or f"bioaf-tfstate-{project_id}"
 
         # Common variables shared by all modules
@@ -931,6 +933,7 @@ class TerraformExecutor:
             "gcp_zone",
             "gcp_service_account_key",
             "org_slug",
+            "stack_uid",
             "storage_uid",
             "compute_uid",
             "terraform_initialized",

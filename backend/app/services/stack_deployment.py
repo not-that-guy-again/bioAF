@@ -306,35 +306,21 @@ async def deploy_stack(
     compute_completed = 0
     compute_planned = 0
 
-    # Generate per-module UIDs. Each module gets its own UID so that
-    # compute teardown/redeploy never affects storage bucket names.
-    # Storage UID persists until storage is explicitly destroyed.
-    # Compute UID is generated fresh on each deploy to avoid GCP's
-    # 7-day soft-delete window for GKE clusters.
-
-    # Storage UID: only generate if storage is not yet deployed
+    # Generate per-module UIDs. Each module gets its own short hex
+    # suffix so that compute teardown/redeploy never affects storage
+    # bucket names. UIDs are generated once at deploy time and cleared
+    # on destroy so the next deploy gets fresh names (avoids GCP's
+    # 7-day soft-delete window).
     if storage_deployed != "true":
         existing_storage_uid = await _read_config(session, "storage_uid")
         if existing_storage_uid == "null":
-            new_uid = secrets.token_hex(3)  # 6 hex chars, e.g. "a1b2c3"
-            await _set_config(session, "storage_uid", new_uid)
+            await _set_config(session, "storage_uid", secrets.token_hex(3))
             await session.flush()
 
-    # Compute UID: generate fresh, checking for orphaned resources
     existing_compute_uid = await _read_config(session, "compute_uid")
     if existing_compute_uid == "null":
-        new_uid = secrets.token_hex(3)
-        await _set_config(session, "compute_uid", new_uid)
+        await _set_config(session, "compute_uid", secrets.token_hex(3))
         await session.flush()
-    elif await OrphanedResourceService.has_orphaned_for_uid(session, existing_compute_uid):
-        new_uid = secrets.token_hex(3)
-        await _set_config(session, "compute_uid", new_uid)
-        await session.flush()
-        logger.info(
-            "Re-seeded compute_uid from %s to %s (orphaned resources detected)",
-            existing_compute_uid,
-            new_uid,
-        )
 
     # Step 1: Deploy storage if needed
     if storage_deployed != "true":
