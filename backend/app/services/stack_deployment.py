@@ -623,7 +623,6 @@ async def _empty_gcs_bucket(session: AsyncSession, bucket_name: str) -> int:
 
     credentials = await GcsStorageService.get_credentials(session)
     client = gcs_storage.Client(credentials=credentials)
-    bucket = client.bucket(bucket_name)
 
     deleted = 0
     # Delete current objects

@@ -987,9 +987,7 @@ async def test_destroy_storage_empties_buckets_before_terraform_destroy(session)
         nonlocal destroy_called
         destroy_called = True
         # All buckets must have been emptied before terraform destroy runs
-        assert len(emptied_buckets) == 5, (
-            f"Expected 5 buckets emptied before destroy, got {len(emptied_buckets)}"
-        )
+        assert len(emptied_buckets) == 5, f"Expected 5 buckets emptied before destroy, got {len(emptied_buckets)}"
         yield _make_progress_event("apply_complete", "destroy done")
 
     with (
