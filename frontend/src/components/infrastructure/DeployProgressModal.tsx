@@ -150,7 +150,8 @@ function StatusBadge({ status }: { status: ResourceStatus }) {
 }
 
 function phaseTitle(phase: string | null, status: string | null): string {
-  if (status === "planning") return "Preparing deployment";
+  if (status === null || status === "planning" || status === "awaiting_confirmation")
+    return "Preparing deployment";
   if (phase === "storage") return "Deploying storage infrastructure";
   if (phase === "compute") return "Deploying compute infrastructure";
   return "Preparing deployment";
@@ -174,7 +175,7 @@ export function DeployProgressModal({
   const listRef = useRef<HTMLUListElement | null>(null);
   const [patienceIndex, setPatienceIndex] = useState(0);
 
-  const isRunning = status === "planning" || status === "applying" || status === "awaiting_confirmation";
+  const isRunning = status === null || status === "planning" || status === "applying" || status === "awaiting_confirmation";
   const isComplete = status === "completed";
   const isError = status === "failed";
   const showTimingWarning = phase === "compute";
@@ -219,7 +220,9 @@ export function DeployProgressModal({
             <div>
               <p className="text-sm text-blue-600 flex items-center gap-2">
                 <span className="inline-block h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                {status === "planning" ? "Planning resources..." : "Applying changes..."}
+                {status === null || status === "planning" || status === "awaiting_confirmation"
+                  ? "Planning resources..."
+                  : "Applying changes..."}
               </p>
               <div className="mt-2">
                 {showTimingWarning && (

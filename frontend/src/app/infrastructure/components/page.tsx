@@ -252,7 +252,11 @@ export default function InfraComponentsPage() {
     };
   }, [hasBuildRelated, componentsData]);
 
+  const [deployLoading, setDeployLoading] = useState(false);
+
   async function handleStartDeploy() {
+    if (deployLoading) return;
+    setDeployLoading(true);
     try {
       await api.post("/api/v1/infrastructure/stack/deploy-background", {
         stack_type: "kubernetes",
@@ -262,6 +266,8 @@ export default function InfraComponentsPage() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to start deployment";
       alert(message);
+    } finally {
+      setDeployLoading(false);
     }
   }
 
@@ -484,9 +490,10 @@ export default function InfraComponentsPage() {
                   ) : (
                     <button
                       onClick={handleStartDeploy}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+                      disabled={deployLoading}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Deploy
+                      {deployLoading ? "Starting..." : "Deploy"}
                     </button>
                   )}
                 </div>
@@ -966,10 +973,10 @@ export default function InfraComponentsPage() {
       )}
 
       {/* Deploy Stack Modal (poll-based) */}
-      {showDeployModal && deployProgress.active && (
+      {showDeployModal && (
         <DeployProgressModal
           phase={deployProgress.phase}
-          status={deployProgress.status}
+          status={deployProgress.active ? deployProgress.status : deployStarted ? "planning" : deployProgress.status}
           resourcesCompleted={deployProgress.resources_completed}
           resourcesTotal={deployProgress.resources_total}
           completedResources={deployProgress.completed_resources}
@@ -980,33 +987,6 @@ export default function InfraComponentsPage() {
             setShowAbortConfirm(true);
           }}
           onDone={handleDeployComplete}
-        />
-      )}
-      {/* Deploy complete/error modal -- show briefly after completion */}
-      {showDeployModal && !deployProgress.active && deployProgress.status === "completed" && (
-        <DeployProgressModal
-          phase={deployProgress.phase}
-          status={deployProgress.status}
-          resourcesCompleted={deployProgress.resources_completed}
-          resourcesTotal={deployProgress.resources_total}
-          completedResources={deployProgress.completed_resources}
-          errorMessage={null}
-          onDismiss={() => setShowDeployModal(false)}
-          onAbort={() => {}}
-          onDone={handleDeployComplete}
-        />
-      )}
-      {showDeployModal && !deployProgress.active && deployProgress.status === "failed" && (
-        <DeployProgressModal
-          phase={deployProgress.phase}
-          status={deployProgress.status}
-          resourcesCompleted={deployProgress.resources_completed}
-          resourcesTotal={deployProgress.resources_total}
-          completedResources={deployProgress.completed_resources}
-          errorMessage={deployProgress.error_message}
-          onDismiss={() => setShowDeployModal(false)}
-          onAbort={() => {}}
-          onDone={() => setShowDeployModal(false)}
         />
       )}
 

@@ -270,11 +270,17 @@ async def stack_deploy_background_endpoint(
         raise HTTPException(status_code=400, detail="Terraform has not been initialized")
 
     async def _run_deploy():
-        """Drain the deploy_stack generator in the background with its own session."""
+        """Drain the deploy_stack generator in the background with its own session.
+
+        Commits after each event so the progress polling endpoint can see
+        intermediate state (resource counts, phase, completed_resources).
+        Without per-event commits, all flush() calls stay invisible to
+        other sessions under PostgreSQL READ COMMITTED isolation.
+        """
         async with async_session_factory() as bg_session:
             try:
                 async for _event in deploy_stack(bg_session, stack_type, user_id, org_id=org_id):
-                    pass  # Events are consumed; terraform runs as a subprocess
+                    await bg_session.commit()
                 await bg_session.commit()
             except Exception:
                 logger.exception("Background deploy failed")
