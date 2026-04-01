@@ -655,7 +655,16 @@ async def destroy_storage(
             )
             return
 
-    # Step 2: Run terraform destroy on the now-empty buckets
+    # Step 2: Mark all file records as storage_deleted. The metadata
+    # (experiment links, checksums, upload history) is preserved but
+    # the backing GCS objects no longer exist.
+    result = await session.execute(text("UPDATE files SET storage_deleted = true WHERE storage_deleted = false"))
+    marked_count = result.rowcount
+    await session.flush()
+    if marked_count:
+        logger.info("Marked %d file(s) as storage_deleted", marked_count)
+
+    # Step 3: Run terraform destroy on the now-empty buckets
     yield TerraformProgressEvent(
         event_type="progress",
         message="Destroying storage infrastructure...",

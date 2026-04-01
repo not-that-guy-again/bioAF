@@ -301,6 +301,8 @@ async def download_file(
     file = await FileService.get_file(session, file_id, org_id)
     if not file:
         raise HTTPException(404, "File not found")
+    if file.storage_deleted:
+        raise HTTPException(410, "File storage has been deleted")
 
     # Generate signed download URL
     try:
@@ -350,6 +352,8 @@ async def file_content(
     file = await FileService.get_file(session, file_id, org_id)
     if not file:
         raise HTTPException(404, "File not found")
+    if file.storage_deleted:
+        raise HTTPException(410, "File storage has been deleted")
 
     try:
         from google.cloud import storage as gcs_storage
