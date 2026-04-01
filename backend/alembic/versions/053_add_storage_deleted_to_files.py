@@ -23,6 +23,17 @@ def upgrade() -> None:
     )
     op.create_index("idx_files_storage_deleted", "files", ["storage_deleted"])
 
+    # If storage is not deployed, mark all existing files as storage_deleted.
+    # This handles deployments where storage was destroyed before this
+    # migration existed.
+    conn = op.get_bind()
+    row = conn.execute(sa.text("SELECT value FROM platform_config WHERE key = 'storage_deployed'")).fetchone()
+    storage_deployed = row[0] if row else "false"
+    if storage_deployed != "true":
+        result = conn.execute(sa.text("UPDATE files SET storage_deleted = true WHERE storage_deleted = false"))
+        if result.rowcount:
+            print(f"  Marked {result.rowcount} file(s) as storage_deleted (storage not deployed)")
+
 
 def downgrade() -> None:
     op.drop_index("idx_files_storage_deleted", table_name="files")

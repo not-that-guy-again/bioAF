@@ -57,27 +57,6 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified")
 
-    # If storage is not deployed but files exist without storage_deleted,
-    # mark them. This catches cases where storage was destroyed outside
-    # the normal UI flow or before the storage_deleted feature existed.
-    try:
-        async with engine.begin() as sd_conn:
-            row = (
-                await sd_conn.execute(text("SELECT value FROM platform_config WHERE key = 'storage_deployed'"))
-            ).fetchone()
-            storage_deployed = row[0] if row else "false"
-            if storage_deployed != "true":
-                result = await sd_conn.execute(
-                    text("UPDATE files SET storage_deleted = true WHERE storage_deleted = false")
-                )
-                if result.rowcount:
-                    logger.info(
-                        "Marked %d file(s) as storage_deleted (storage not deployed)",
-                        result.rowcount,
-                    )
-    except Exception as e:
-        logger.warning("Could not check storage_deleted state: %s", e)
-
     # Load persisted SMTP settings from database (gracefully skip if columns
     # don't exist yet, e.g. before migration 040 has run)
     try:
