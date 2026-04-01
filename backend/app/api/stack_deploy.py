@@ -108,6 +108,17 @@ class ComponentToggleResponse(BaseModel):
     status: str
 
 
+class DeployProgressResponse(BaseModel):
+    active: bool
+    status: str | None = None
+    phase: str | None = None
+    resources_completed: int = 0
+    resources_total: int = 0
+    completed_resources: list[str] = []
+    error_message: str | None = None
+    run_id: int | None = None
+
+
 class NotebookImageBuildStatus(BaseModel):
     build_id: str | None
     build_status: str | None
@@ -272,6 +283,41 @@ async def stack_deploy_background_endpoint(
     asyncio.get_event_loop().create_task(_run_deploy())
 
     return {"message": "Deployment started"}
+
+
+@router.get(
+    "/api/v1/infrastructure/stack/deploy/progress",
+    response_model=DeployProgressResponse,
+)
+async def stack_deploy_progress(
+    current_user: dict = require_permission("infrastructure", "deploy"),
+    session: AsyncSession = Depends(get_session),
+) -> DeployProgressResponse:
+    """Poll deployment progress. Returns the most recent active run or idle state."""
+    from app.models.component import TerraformRun
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(TerraformRun)
+        .where(TerraformRun.status.in_(["planning", "applying", "awaiting_confirmation"]))
+        .order_by(TerraformRun.started_at.desc())
+        .limit(1)
+    )
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        return DeployProgressResponse(active=False)
+
+    return DeployProgressResponse(
+        active=True,
+        status=run.status,
+        phase=run.deploy_phase,
+        resources_completed=run.resources_completed,
+        resources_total=run.resources_planned or 0,
+        completed_resources=run.completed_resources or [],
+        error_message=run.error_message,
+        run_id=run.id,
+    )
 
 
 @router.post("/api/v1/infrastructure/stack/teardown")
