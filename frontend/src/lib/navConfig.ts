@@ -3,10 +3,18 @@ export interface PermissionRef {
   action: string;
 }
 
+export interface ComponentGate {
+  /** At least one component matching these keys must be enabled */
+  keys?: string[];
+  /** At least one component in this category must be enabled */
+  category?: string;
+}
+
 export interface NavChild {
   label: string;
   path: string;
   permission?: PermissionRef;
+  componentGate?: ComponentGate;
 }
 
 export interface NavSection {
@@ -16,6 +24,7 @@ export interface NavSection {
   children?: NavChild[];
   adminOnly?: boolean;
   permission?: PermissionRef;
+  componentGate?: ComponentGate;
 }
 
 export const navConfig: NavSection[] = [
@@ -32,6 +41,7 @@ export const navConfig: NavSection[] = [
   {
     label: "Pipelines",
     icon: "play",
+    componentGate: { category: "pipeline_orchestration" },
     children: [
       { label: "Pipeline Catalog", path: "/pipelines/catalog", permission: { resource: "pipelines", action: "view" } },
       { label: "Pipeline Runs", path: "/pipelines/runs", permission: { resource: "pipelines", action: "view" } },
@@ -52,7 +62,7 @@ export const navConfig: NavSection[] = [
     label: "Workbench",
     icon: "notebook",
     children: [
-      { label: "Notebooks", path: "/notebooks", permission: { resource: "notebooks", action: "view" } },
+      { label: "Notebooks", path: "/notebooks", permission: { resource: "notebooks", action: "view" }, componentGate: { keys: ["jupyter_k8s", "rstudio_k8s"] } },
       { label: "Work Nodes", path: "/workbench/work-nodes", permission: { resource: "notebooks", action: "view" } },
       { label: "Environments", path: "/environments", permission: { resource: "environments", action: "view" } },
     ],
