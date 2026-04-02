@@ -47,12 +47,12 @@ export function DeploymentBanner() {
 
       if (previouslyDeploying && !isActive) {
         // A run just finished -- show a phase-specific toast
-        const module = status.last_completed_module;
+        const completedModule = status.last_completed_module;
         // Only show the toast if the completed module changed (avoids
         // re-showing the same toast on every poll after completion).
-        if (module !== lastSeenModuleRef.current) {
-          lastSeenModuleRef.current = module;
-          const message = TOAST_MESSAGES[module ?? "default"] ?? TOAST_MESSAGES.default;
+        if (completedModule !== lastSeenModuleRef.current) {
+          lastSeenModuleRef.current = completedModule;
+          const message = TOAST_MESSAGES[completedModule ?? "default"] ?? TOAST_MESSAGES.default;
           setToast(message);
           setTimeout(() => setToast(null), 10_000);
         }
