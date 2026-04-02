@@ -51,8 +51,8 @@ beforeEach(() => {
   mockPost.mockReset();
   mockComponents.mockReturnValue({
     components: [
-      makeComponent("jupyter_k8s", "analysis", true),
-      makeComponent("rstudio_k8s", "analysis", true),
+      makeComponent("jupyterhub", "analysis", true),
+      makeComponent("rstudio", "analysis", true),
     ],
     loading: false,
     refetch: jest.fn(),
@@ -202,11 +202,11 @@ describe("NotebooksPage launch modal", () => {
 });
 
 describe("NotebooksPage launch button component gating", () => {
-  test("hides Launch RStudio when rstudio_k8s is not enabled", async () => {
+  test("hides Launch RStudio when rstudio is not enabled", async () => {
     mockComponents.mockReturnValue({
       components: [
-        makeComponent("jupyter_k8s", "analysis", true),
-        makeComponent("rstudio_k8s", "analysis", false),
+        makeComponent("jupyterhub", "analysis", true),
+        makeComponent("rstudio", "analysis", false),
       ],
       loading: false,
       refetch: jest.fn(),
@@ -227,11 +227,11 @@ describe("NotebooksPage launch button component gating", () => {
     expect(screen.queryByText("Launch RStudio")).not.toBeInTheDocument();
   });
 
-  test("hides Launch Jupyter when jupyter_k8s is not enabled", async () => {
+  test("hides Launch Jupyter when jupyterhub is not enabled", async () => {
     mockComponents.mockReturnValue({
       components: [
-        makeComponent("jupyter_k8s", "analysis", false),
-        makeComponent("rstudio_k8s", "analysis", true),
+        makeComponent("jupyterhub", "analysis", false),
+        makeComponent("rstudio", "analysis", true),
       ],
       loading: false,
       refetch: jest.fn(),

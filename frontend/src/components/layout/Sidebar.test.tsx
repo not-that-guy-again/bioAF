@@ -48,7 +48,7 @@ describe("Sidebar component gating", () => {
       components: [
         makeComponent("nextflow_k8s", "pipeline_orchestration", false),
         makeComponent("snakemake_k8s", "pipeline_orchestration", false),
-        makeComponent("jupyter_k8s", "analysis", true),
+        makeComponent("jupyterhub", "analysis", true),
       ],
       loading: false,
       refetch: jest.fn(),
@@ -63,7 +63,7 @@ describe("Sidebar component gating", () => {
     mockComponents.mockReturnValue({
       components: [
         makeComponent("nextflow_k8s", "pipeline_orchestration", true),
-        makeComponent("jupyter_k8s", "analysis", true),
+        makeComponent("jupyterhub", "analysis", true),
       ],
       loading: false,
       refetch: jest.fn(),
@@ -74,11 +74,11 @@ describe("Sidebar component gating", () => {
     expect(screen.getByText("Pipelines")).toBeInTheDocument();
   });
 
-  test("hides Notebooks child when neither jupyter_k8s nor rstudio_k8s is enabled", () => {
+  test("hides Notebooks child when neither jupyterhub nor rstudio is enabled", () => {
     mockComponents.mockReturnValue({
       components: [
-        makeComponent("jupyter_k8s", "analysis", false),
-        makeComponent("rstudio_k8s", "analysis", false),
+        makeComponent("jupyterhub", "analysis", false),
+        makeComponent("rstudio", "analysis", false),
       ],
       loading: false,
       refetch: jest.fn(),
@@ -92,11 +92,11 @@ describe("Sidebar component gating", () => {
     expect(screen.queryByText("Notebooks")).not.toBeInTheDocument();
   });
 
-  test("shows Notebooks child when jupyter_k8s is enabled", () => {
+  test("shows Notebooks child when jupyterhub is enabled", () => {
     mockComponents.mockReturnValue({
       components: [
-        makeComponent("jupyter_k8s", "analysis", true),
-        makeComponent("rstudio_k8s", "analysis", false),
+        makeComponent("jupyterhub", "analysis", true),
+        makeComponent("rstudio", "analysis", false),
       ],
       loading: false,
       refetch: jest.fn(),
@@ -109,11 +109,11 @@ describe("Sidebar component gating", () => {
     expect(screen.getByText("Notebooks")).toBeInTheDocument();
   });
 
-  test("shows Notebooks child when rstudio_k8s is enabled", () => {
+  test("shows Notebooks child when rstudio is enabled", () => {
     mockComponents.mockReturnValue({
       components: [
-        makeComponent("jupyter_k8s", "analysis", false),
-        makeComponent("rstudio_k8s", "analysis", true),
+        makeComponent("jupyterhub", "analysis", false),
+        makeComponent("rstudio", "analysis", true),
       ],
       loading: false,
       refetch: jest.fn(),

@@ -23,8 +23,8 @@ jest.mock("@/lib/api", () => ({
 jest.mock("@/hooks/useComponents", () => ({
   useComponents: () => ({
     components: [
-      { key: "jupyter_k8s", category: "analysis", enabled: true },
-      { key: "rstudio_k8s", category: "analysis", enabled: true },
+      { key: "jupyterhub", category: "analysis", enabled: true },
+      { key: "rstudio", category: "analysis", enabled: true },
     ],
     loading: false,
     refetch: jest.fn(),

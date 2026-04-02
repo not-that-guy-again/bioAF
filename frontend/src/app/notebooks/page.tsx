@@ -43,8 +43,8 @@ const SESSION_STATUS_COLORS: Record<string, string> = {
 export default function NotebooksPage() {
   const router = useRouter();
   const { components } = useComponents();
-  const jupyterEnabled = components.some((c) => c.key === "jupyter_k8s" && c.enabled);
-  const rstudioEnabled = components.some((c) => c.key === "rstudio_k8s" && c.enabled);
+  const jupyterEnabled = components.some((c) => c.key === "jupyterhub" && c.enabled);
+  const rstudioEnabled = components.some((c) => c.key === "rstudio" && c.enabled);
   const [sessions, setSessions] = useState<NotebookSession[]>([]);
   const [viewingSession, setViewingSession] = useState<NotebookSession | null>(null);
   const [loading, setLoading] = useState(true);
