@@ -806,7 +806,20 @@ export default function InfraComponentsPage() {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {componentsData.components
                           .filter((c) => c.category === category)
-                          .map((comp) => (
+                          .map((comp) => comp.status === "coming_soon" ? (
+                            <div
+                              key={comp.key}
+                              className="bg-white rounded-lg shadow p-5 border border-gray-200 opacity-60"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <h3 className="font-semibold text-sm text-gray-400">{comp.name}</h3>
+                                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
+                                  Coming Soon
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-400">{comp.description}</p>
+                            </div>
+                          ) : (
                             <div
                               key={comp.key}
                               className="bg-white rounded-lg shadow p-5 border border-gray-200"
