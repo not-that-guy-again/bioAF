@@ -134,12 +134,12 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
     # Query GKE API for cluster details
     cluster_name = await _read_config(session, "gke_cluster_name")
     project_id = await _read_config(session, "gcp_project_id")
-    zone = await _read_config(session, "gcp_zone")
+    region = await _read_config(session, "gcp_region") or "us-central1"
 
     try:
         credentials = await _get_gke_credentials(session)
         client = _get_gke_client(credentials)
-        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{zone}/clusters/{cluster_name}")
+        cluster = client.get_cluster(name=f"projects/{project_id}/locations/{region}/clusters/{cluster_name}")
 
         pipeline_pool = None
         interactive_pool = None
@@ -483,7 +483,7 @@ async def deploy_stack(
     if compute_failed:
         # Log the expected cluster as an orphaned resource
         project_id = await _read_config(session, "gcp_project_id")
-        zone = await _read_config(session, "gcp_zone")
+        region = await _read_config(session, "gcp_region") or "us-central1"
         org_slug = await _read_config(session, "org_slug")
         suffix = await _read_config(session, "deploy_suffix")
         if suffix and suffix != "null" and org_slug and org_slug != "null":
@@ -493,7 +493,7 @@ async def deploy_stack(
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
                 gcp_project_id=project_id if project_id != "null" else "",
-                gcp_zone=zone if zone != "null" else None,
+                gcp_zone=region,
                 stack_uid=suffix,
             )
             await session.flush()
@@ -539,7 +539,7 @@ async def teardown_stack(
     if teardown_failed:
         # Log the cluster as orphaned for later cleanup
         project_id = await _read_config(session, "gcp_project_id")
-        zone = await _read_config(session, "gcp_zone")
+        region = await _read_config(session, "gcp_region") or "us-central1"
         cluster_name = await _read_config(session, "gke_cluster_name")
         if cluster_name and cluster_name != "null":
             await OrphanedResourceService.log_resource(
@@ -547,7 +547,7 @@ async def teardown_stack(
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
                 gcp_project_id=project_id if project_id != "null" else "",
-                gcp_zone=zone if zone != "null" else None,
+                gcp_zone=region,
                 stack_uid=cluster_name.rsplit("-", 1)[-1],
             )
             await session.flush()
