@@ -126,6 +126,42 @@ describe("Sidebar component gating", () => {
     expect(screen.getByText("Notebooks")).toBeInTheDocument();
   });
 
+  test("hides QC Dashboards when qc_dashboard component is not enabled", () => {
+    mockComponents.mockReturnValue({
+      components: [
+        makeComponent("qc_dashboard", "visualization", false),
+        makeComponent("cellxgene", "visualization", true),
+      ],
+      loading: false,
+      refetch: jest.fn(),
+    });
+
+    render(<Sidebar />);
+
+    fireEvent.click(screen.getByText("Results"));
+
+    expect(screen.queryByText("QC Dashboards")).not.toBeInTheDocument();
+    expect(screen.getByText("Cellxgene")).toBeInTheDocument();
+  });
+
+  test("hides Cellxgene when cellxgene component is not enabled", () => {
+    mockComponents.mockReturnValue({
+      components: [
+        makeComponent("qc_dashboard", "visualization", true),
+        makeComponent("cellxgene", "visualization", false),
+      ],
+      loading: false,
+      refetch: jest.fn(),
+    });
+
+    render(<Sidebar />);
+
+    fireEvent.click(screen.getByText("Results"));
+
+    expect(screen.getByText("QC Dashboards")).toBeInTheDocument();
+    expect(screen.queryByText("Cellxgene")).not.toBeInTheDocument();
+  });
+
   test("shows all sections when components are still loading", () => {
     mockComponents.mockReturnValue({
       components: [],

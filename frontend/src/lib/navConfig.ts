@@ -33,8 +33,8 @@ export const navConfig: NavSection[] = [
     label: "Results",
     icon: "chart",
     children: [
-      { label: "QC Dashboards", path: "/results/qc-dashboards", permission: { resource: "experiments", action: "view" } },
-      { label: "Cellxgene", path: "/results/cellxgene", permission: { resource: "experiments", action: "view" } },
+      { label: "QC Dashboards", path: "/results/qc-dashboards", permission: { resource: "experiments", action: "view" }, componentGate: { keys: ["qc_dashboard"] } },
+      { label: "Cellxgene", path: "/results/cellxgene", permission: { resource: "experiments", action: "view" }, componentGate: { keys: ["cellxgene"] } },
       { label: "Plot Archive", path: "/results/plot-archive", permission: { resource: "experiments", action: "view" } },
     ],
   },
