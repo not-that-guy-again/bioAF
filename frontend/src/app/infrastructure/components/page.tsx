@@ -91,6 +91,19 @@ interface ClusterConfig {
   k8s_interactive_max_nodes: number;
 }
 
+const PIPELINE_MACHINE_OPTIONS = [
+  { value: "n2-highmem-8", label: "8 vCPU / 64 GB RAM", description: "Small pipelines" },
+  { value: "n2-highmem-16", label: "16 vCPU / 128 GB RAM", description: "Standard pipelines (recommended)" },
+  { value: "n2-highmem-32", label: "32 vCPU / 256 GB RAM", description: "Large or multi-sample pipelines" },
+];
+
+const INTERACTIVE_MACHINE_OPTIONS = [
+  { value: "n2-standard-4", label: "4 vCPU / 16 GB RAM", description: "Light analysis (recommended)" },
+  { value: "n2-standard-8", label: "8 vCPU / 32 GB RAM", description: "General-purpose analysis" },
+  { value: "n2-highmem-8", label: "8 vCPU / 64 GB RAM", description: "Large datasets" },
+  { value: "n2-highmem-16", label: "16 vCPU / 128 GB RAM", description: "Very large datasets" },
+];
+
 const CATEGORY_LABELS: Record<string, string> = {
   pipeline_orchestration: "Pipeline Orchestration",
   analysis: "Analysis",
@@ -625,14 +638,19 @@ export default function InfraComponentsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="text-xs text-gray-500">Pipeline Machine Type</label>
-                          <input
-                            type="text"
+                          <label className="text-xs text-gray-500">Pipeline Machine Size</label>
+                          <select
                             value={configEdits.k8s_pipeline_machine_type ?? clusterConfig.k8s_pipeline_machine_type}
                             onChange={(e) => setConfigEdits({ ...configEdits, k8s_pipeline_machine_type: e.target.value })}
-                            className="w-full border rounded px-2 py-1 text-sm mt-1"
+                            className="w-full border rounded px-2 py-1 text-sm mt-1 bg-white"
                             disabled={configSaving}
-                          />
+                          >
+                            {PIPELINE_MACHINE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label} - {opt.description}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="text-xs text-gray-500">Pipeline Max Nodes</label>
@@ -672,14 +690,19 @@ export default function InfraComponentsPage() {
                           </span>
                         </div>
                         <div>
-                          <label className="text-xs text-gray-500">Interactive Machine Type</label>
-                          <input
-                            type="text"
+                          <label className="text-xs text-gray-500">Interactive Machine Size</label>
+                          <select
                             value={configEdits.k8s_interactive_machine_type ?? clusterConfig.k8s_interactive_machine_type}
                             onChange={(e) => setConfigEdits({ ...configEdits, k8s_interactive_machine_type: e.target.value })}
-                            className="w-full border rounded px-2 py-1 text-sm mt-1"
+                            className="w-full border rounded px-2 py-1 text-sm mt-1 bg-white"
                             disabled={configSaving}
-                          />
+                          >
+                            {INTERACTIVE_MACHINE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label} - {opt.description}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="text-xs text-gray-500">Interactive Max Nodes</label>
