@@ -87,13 +87,16 @@ async def list_postgres_snapshots(
     )
 
 
-@router.post("/trigger/postgres", status_code=501)
+@router.post("/trigger/postgres")
 async def trigger_postgres_backup(
     current_user: dict = require_permission("backups", "create"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Trigger a manual PostgreSQL backup. Wired up in Commit 5."""
-    raise HTTPException(501, detail="PostgreSQL backup not yet implemented")
+    """Trigger a manual PostgreSQL backup."""
+    result = await BackupService.run_postgres_backup(current_user["org_id"])
+    if result["status"] == "error":
+        raise HTTPException(500, detail=result.get("message", "Backup failed"))
+    return result
 
 
 @router.put("/settings")

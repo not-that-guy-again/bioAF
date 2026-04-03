@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -88,13 +88,19 @@ async def test_update_backup_settings_enforces_postgres_minimum(client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_trigger_postgres_backup_stub(client: AsyncClient, admin_token: str):
-    """Trigger endpoint returns 501 until pg_dump is implemented."""
-    response = await client.post(
-        "/api/backups/trigger/postgres",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    assert response.status_code == 501
+async def test_trigger_postgres_backup_via_api(client: AsyncClient, admin_token: str):
+    """Trigger endpoint calls run_postgres_backup and returns result."""
+    with patch(
+        "app.api.backups.BackupService.run_postgres_backup",
+        new_callable=AsyncMock,
+        return_value={"status": "completed", "filename": "pgdump-test.dump", "size_bytes": 1024, "duration_seconds": 1.5},
+    ):
+        response = await client.post(
+            "/api/backups/trigger/postgres",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
 
 
 @pytest.mark.asyncio
@@ -233,3 +239,94 @@ async def test_config_snapshots_local(tmp_path):
         assert len(snapshots) == 3
         # Most recent first
         assert snapshots[0]["date"] >= snapshots[1]["date"]
+
+
+# --- pg_dump tests ---
+
+
+@pytest.mark.asyncio
+async def test_run_postgres_backup_local(tmp_path):
+    """pg_dump backup creates a .dump file in the local postgres directory."""
+    from app.services.backup_service import BackupService
+
+    mock_process = AsyncMock()
+    mock_process.returncode = 0
+    mock_process.communicate = AsyncMock(return_value=(b"", b""))
+
+    with (
+        patch("app.services.backup_service.settings") as mock_settings,
+        patch("app.services.backup_service.asyncio") as mock_asyncio,
+    ):
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+        mock_settings.backup_postgres_retention_days = 14
+        mock_settings.database_url = "postgresql+asyncpg://bioaf_app:devpassword@postgres:5432/bioaf"
+        mock_asyncio.create_subprocess_exec = AsyncMock(return_value=mock_process)
+
+        result = await BackupService.run_postgres_backup(1)
+
+    assert result["status"] == "completed"
+    assert result["filename"].startswith("pgdump-")
+    assert result["filename"].endswith(".dump")
+    # Verify the subprocess was called with pg_dump
+    call_args = mock_asyncio.create_subprocess_exec.call_args
+    assert call_args[0][0] == "pg_dump"
+
+
+@pytest.mark.asyncio
+async def test_run_postgres_backup_failure(tmp_path):
+    """pg_dump failure returns error status."""
+    from app.services.backup_service import BackupService
+
+    mock_process = AsyncMock()
+    mock_process.returncode = 1
+    mock_process.communicate = AsyncMock(return_value=(b"", b"pg_dump: error: connection failed"))
+
+    with (
+        patch("app.services.backup_service.settings") as mock_settings,
+        patch("app.services.backup_service.asyncio") as mock_asyncio,
+    ):
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+        mock_settings.backup_postgres_retention_days = 14
+        mock_settings.database_url = "postgresql+asyncpg://bioaf_app:devpassword@postgres:5432/bioaf"
+        mock_asyncio.create_subprocess_exec = AsyncMock(return_value=mock_process)
+
+        result = await BackupService.run_postgres_backup(1)
+
+    assert result["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_rotate_local_backups(tmp_path):
+    """Rotation deletes files older than retention period."""
+    from app.services.backup_service import BackupService, _PG_FILENAME_RE
+
+    pg_dir = tmp_path / "postgres"
+    pg_dir.mkdir()
+
+    # Create an old backup (20 days ago) and a recent one
+    old = datetime.now(timezone.utc) - timedelta(days=20)
+    recent = datetime.now(timezone.utc) - timedelta(hours=1)
+    old_file = pg_dir / f"pgdump-{old.strftime('%Y%m%d-%H%M%S')}.dump"
+    recent_file = pg_dir / f"pgdump-{recent.strftime('%Y%m%d-%H%M%S')}.dump"
+    old_file.write_bytes(b"old")
+    recent_file.write_bytes(b"recent")
+
+    with patch("app.services.backup_service.settings") as mock_settings:
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+
+        BackupService.rotate_local_backups(str(pg_dir), _PG_FILENAME_RE, retention_days=14)
+
+    assert not old_file.exists()
+    assert recent_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_trigger_postgres_backup_forbidden_for_viewer(client: AsyncClient, viewer_token: str):
+    response = await client.post(
+        "/api/backups/trigger/postgres",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert response.status_code == 403

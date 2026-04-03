@@ -142,6 +142,7 @@ async def lifespan(app: FastAPI):
     background_tasks.append(asyncio.create_task(_reconciler_loop()))
     background_tasks.append(asyncio.create_task(_notification_cleanup_loop()))
     background_tasks.append(asyncio.create_task(_backup_health_check_loop()))
+    background_tasks.append(asyncio.create_task(_postgres_backup_loop()))
     background_tasks.append(asyncio.create_task(_cost_billing_sync_loop()))
     background_tasks.append(asyncio.create_task(_version_check_loop()))
     background_tasks.append(asyncio.create_task(_review_reminder_loop()))
@@ -337,6 +338,29 @@ async def _backup_health_check_loop():
             break
         except Exception as e:
             logger.error("Backup health check error: %s", e)
+
+
+async def _postgres_backup_loop():
+    """Run pg_dump backups on the configured interval (local mode only)."""
+    from app.config import settings
+    from app.services.backup_service import BackupService
+
+    if settings.compute_mode != "local":
+        return  # In production, CronJob handles this
+
+    interval = settings.backup_postgres_interval_hours * 3600
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            result = await BackupService.run_postgres_backup(org_id=1)
+            if result["status"] == "completed":
+                logger.info("Scheduled pg_dump completed: %s", result.get("filename"))
+            else:
+                logger.error("Scheduled pg_dump failed: %s", result.get("message"))
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error("Postgres backup loop error: %s", e)
 
 
 async def _cost_billing_sync_loop():

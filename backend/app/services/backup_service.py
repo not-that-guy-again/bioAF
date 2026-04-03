@@ -4,10 +4,13 @@ Local mode: checks filesystem at {backup_local_dir}/{type}/.
 Production mode: checks GCS blobs at {backups_bucket}/{prefix}/.
 """
 
+import asyncio
 import logging
 import os
 import re
+import time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 from app.config import settings
 from app.services.event_bus import event_bus
@@ -241,10 +244,100 @@ class BackupService:
         return snapshots, total
 
     @staticmethod
+    async def run_postgres_backup(org_id: int) -> dict:
+        """Run pg_dump and save the result to local dir or GCS.
+
+        Parses DATABASE_URL to extract connection parameters, runs pg_dump
+        in custom format (-Fc), and rotates old backups afterward.
+        """
+        start = time.monotonic()
+        now = datetime.now(timezone.utc)
+        filename = f"pgdump-{now.strftime(_TIMESTAMP_FMT)}.dump"
+
+        # Parse connection params from DATABASE_URL
+        # Format: postgresql+asyncpg://user:pass@host:port/dbname
+        url = settings.database_url.replace("+asyncpg", "")
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = str(parsed.port or 5432)
+        user = parsed.username or "bioaf_app"
+        password = parsed.password or ""
+        dbname = parsed.path.lstrip("/") or "bioaf"
+
+        if settings.compute_mode == "local":
+            pg_dir = os.path.join(settings.backup_local_dir, "postgres")
+            os.makedirs(pg_dir, exist_ok=True)
+            output_path = os.path.join(pg_dir, filename)
+        else:
+            output_path = f"/tmp/{filename}"
+
+        env = {**os.environ, "PGPASSWORD": password}
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "pg_dump",
+                "-h", host,
+                "-p", port,
+                "-U", user,
+                "-d", dbname,
+                "-Fc",
+                "-f", output_path,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                logger.error("pg_dump failed (exit %d): %s", process.returncode, stderr.decode())
+                # Clean up failed dump
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+                return {"status": "error", "message": stderr.decode()[:500]}
+
+            size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            duration = time.monotonic() - start
+
+            # Rotate old backups
+            if settings.compute_mode == "local":
+                BackupService.rotate_local_backups(
+                    pg_dir, _PG_FILENAME_RE, settings.backup_postgres_retention_days
+                )
+
+            logger.info("pg_dump completed: %s (%d bytes, %.1fs)", filename, size, duration)
+            return {
+                "status": "completed",
+                "filename": filename,
+                "size_bytes": size,
+                "duration_seconds": round(duration, 1),
+            }
+
+        except FileNotFoundError:
+            logger.error("pg_dump not found. Install postgresql-client in the container.")
+            return {"status": "error", "message": "pg_dump binary not found"}
+        except Exception as e:
+            logger.error("pg_dump backup failed: %s", e)
+            return {"status": "error", "message": str(e)[:500]}
+
+    @staticmethod
+    def rotate_local_backups(directory: str, pattern: re.Pattern, retention_days: int) -> int:
+        """Delete local backup files older than retention_days. Returns count deleted."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        deleted = 0
+        if not os.path.isdir(directory):
+            return 0
+        for name in os.listdir(directory):
+            ts = _parse_timestamp(name, pattern)
+            if ts and ts < cutoff:
+                try:
+                    os.remove(os.path.join(directory, name))
+                    deleted += 1
+                except OSError as e:
+                    logger.warning("Failed to delete old backup %s: %s", name, e)
+        return deleted
+
+    @staticmethod
     async def check_backup_health(org_id: int) -> None:
         """Background health check: emit event if any backup is overdue."""
-        import asyncio
-
         status = await BackupService.get_backup_status(org_id)
         now = datetime.now(timezone.utc)
 
