@@ -1,3 +1,7 @@
+import os
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
+
 import pytest
 from httpx import AsyncClient
 
@@ -111,3 +115,121 @@ async def test_backup_health_check(admin_user):
     from app.services.backup_service import BackupService
 
     await BackupService.check_backup_health(admin_user.organization_id)
+
+
+# --- Local mode backup status tests ---
+
+
+@pytest.mark.asyncio
+async def test_backup_status_local_postgres_no_backups():
+    """With no backup files on disk, postgres tier shows unknown status."""
+    from app.services.backup_service import BackupService
+
+    with patch("app.services.backup_service.settings") as mock_settings:
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = "/tmp/bioaf-test-backups-nonexistent"
+        mock_settings.backup_postgres_interval_hours = 24
+        mock_settings.backup_postgres_retention_days = 14
+        mock_settings.backup_config_retention_days = 30
+
+        status = await BackupService.get_backup_status(1)
+        postgres = next(t for t in status["tiers"] if t["tier"] == "postgres")
+        assert postgres["status"] == "unknown"
+        assert postgres["backup_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_backup_status_local_postgres_healthy(tmp_path):
+    """With a recent backup file, postgres tier shows healthy."""
+    from app.services.backup_service import BackupService
+
+    pg_dir = tmp_path / "postgres"
+    pg_dir.mkdir()
+    now = datetime.now(timezone.utc)
+    filename = f"pgdump-{now.strftime('%Y%m%d-%H%M%S')}.dump"
+    dump_file = pg_dir / filename
+    dump_file.write_bytes(b"fake dump data")
+
+    with patch("app.services.backup_service.settings") as mock_settings:
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+        mock_settings.backup_postgres_interval_hours = 24
+        mock_settings.backup_postgres_retention_days = 14
+        mock_settings.backup_config_retention_days = 30
+
+        status = await BackupService.get_backup_status(1)
+        postgres = next(t for t in status["tiers"] if t["tier"] == "postgres")
+        assert postgres["status"] == "healthy"
+        assert postgres["backup_count"] == 1
+        assert postgres["last_backup"] is not None
+
+
+@pytest.mark.asyncio
+async def test_backup_status_local_postgres_warning(tmp_path):
+    """With a backup older than 2x interval, postgres tier shows warning."""
+    from app.services.backup_service import BackupService
+
+    pg_dir = tmp_path / "postgres"
+    pg_dir.mkdir()
+    old = datetime.now(timezone.utc) - timedelta(hours=50)
+    filename = f"pgdump-{old.strftime('%Y%m%d-%H%M%S')}.dump"
+    dump_file = pg_dir / filename
+    dump_file.write_bytes(b"old dump")
+
+    with patch("app.services.backup_service.settings") as mock_settings:
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+        mock_settings.backup_postgres_interval_hours = 24
+        mock_settings.backup_postgres_retention_days = 14
+        mock_settings.backup_config_retention_days = 30
+
+        status = await BackupService.get_backup_status(1)
+        postgres = next(t for t in status["tiers"] if t["tier"] == "postgres")
+        assert postgres["status"] == "warning"
+
+
+@pytest.mark.asyncio
+async def test_backup_status_local_config_healthy(tmp_path):
+    """With a recent config backup, platform_config tier shows healthy."""
+    from app.services.backup_service import BackupService
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    now = datetime.now(timezone.utc)
+    filename = f"config-{now.strftime('%Y%m%d-%H%M%S')}.json"
+    (config_dir / filename).write_text('{"app_version": "0.3.15"}')
+
+    with patch("app.services.backup_service.settings") as mock_settings:
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+        mock_settings.backup_postgres_interval_hours = 24
+        mock_settings.backup_postgres_retention_days = 14
+        mock_settings.backup_config_retention_days = 30
+
+        status = await BackupService.get_backup_status(1)
+        config_tier = next(t for t in status["tiers"] if t["tier"] == "platform_config")
+        assert config_tier["status"] == "healthy"
+        assert config_tier["backup_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_config_snapshots_local(tmp_path):
+    """Config snapshots list reads from local directory."""
+    from app.services.backup_service import BackupService
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    for i in range(3):
+        d = datetime.now(timezone.utc) - timedelta(days=i)
+        filename = f"config-{d.strftime('%Y%m%d-%H%M%S')}.json"
+        (config_dir / filename).write_text('{"test": true}')
+
+    with patch("app.services.backup_service.settings") as mock_settings:
+        mock_settings.compute_mode = "local"
+        mock_settings.backup_local_dir = str(tmp_path)
+
+        snapshots, total = await BackupService.get_config_snapshots(1)
+        assert total == 3
+        assert len(snapshots) == 3
+        # Most recent first
+        assert snapshots[0]["date"] >= snapshots[1]["date"]
