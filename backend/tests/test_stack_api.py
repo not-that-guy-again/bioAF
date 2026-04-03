@@ -299,7 +299,7 @@ class TestClusterConfigEndpoint:
 
         with (
             patch("app.api.stack_deploy.TerraformExecutor.run_plan", new_callable=AsyncMock) as mock_plan,
-            patch("app.api.stack_deploy._run_apply_background", new_callable=AsyncMock) as mock_apply,
+            patch("app.api.stack_deploy._run_apply_background", new_callable=AsyncMock),
         ):
             mock_plan.return_value = mock_run
             response = await client.post(
