@@ -727,7 +727,7 @@ async def get_cluster_config(
     config = {r[0]: r[1] for r in rows}
 
     return ClusterConfigResponse(
-        k8s_pipeline_machine_type=config.get("k8s_pipeline_machine_type", "n2-highmem-8"),
+        k8s_pipeline_machine_type=config.get("k8s_pipeline_machine_type", "n2-highmem-16"),
         k8s_pipeline_max_nodes=int(config.get("k8s_pipeline_max_nodes", "20")),
         k8s_pipeline_use_spot=config.get("k8s_pipeline_use_spot", "true") == "true",
         k8s_interactive_machine_type=config.get("k8s_interactive_machine_type", "n2-standard-4"),

@@ -252,7 +252,7 @@ class TestClusterConfigEndpoint:
     @pytest.mark.asyncio
     async def test_cluster_config_returns_current_values(self, client, admin_token, session):
         """Test 22: Config returns current machine types and node counts."""
-        await _set_config(session, "k8s_pipeline_machine_type", "n2-highmem-8")
+        await _set_config(session, "k8s_pipeline_machine_type", "n2-highmem-16")
         await _set_config(session, "k8s_pipeline_max_nodes", "20")
         await _set_config(session, "k8s_pipeline_use_spot", "true")
         await _set_config(session, "k8s_interactive_machine_type", "n2-standard-4")
@@ -265,7 +265,7 @@ class TestClusterConfigEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["k8s_pipeline_machine_type"] == "n2-highmem-8"
+        assert data["k8s_pipeline_machine_type"] == "n2-highmem-16"
         assert data["k8s_pipeline_max_nodes"] == 20
         assert data["k8s_pipeline_use_spot"] is True
         assert data["k8s_interactive_machine_type"] == "n2-standard-4"
