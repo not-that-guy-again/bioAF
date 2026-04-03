@@ -63,6 +63,7 @@ class StackStatus(BaseModel):
     storage_deployed: bool
     pubsub_configured: bool = False
     cluster: ClusterInfo | None = None
+    has_orphaned_clusters: bool = False
 
 
 async def _get_gke_credentials(session: AsyncSession):
@@ -122,6 +123,15 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
     storage = storage_deployed == "true"
     pubsub = pubsub_topic not in ("null", "")
 
+    # Check for unresolved orphaned GKE clusters
+    orphan_result = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM orphaned_resources "
+            "WHERE resource_type = 'gke_cluster' AND status IN ('detected', 'failed')"
+        )
+    )
+    has_orphans = (orphan_result.scalar() or 0) > 0
+
     if not is_deployed:
         return StackStatus(
             compute_stack=stack,
@@ -129,6 +139,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
             storage_deployed=storage,
             pubsub_configured=pubsub,
             cluster=None,
+            has_orphaned_clusters=has_orphans,
         )
 
     # Query GKE API for cluster details
@@ -196,6 +207,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
             storage_deployed=storage,
             pubsub_configured=pubsub,
             cluster=cluster_info,
+            has_orphaned_clusters=has_orphans,
         )
 
     except Exception as exc:
@@ -206,6 +218,7 @@ async def get_cluster_status(session: AsyncSession) -> StackStatus:
             storage_deployed=storage,
             pubsub_configured=pubsub,
             cluster=None,
+            has_orphaned_clusters=has_orphans,
         )
 
 
