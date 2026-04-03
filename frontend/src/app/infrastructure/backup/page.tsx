@@ -16,14 +16,20 @@ interface BackupTier {
   next_scheduled: string | null;
   retention_days: number | null;
   status: string;
-  pitr_window_hours: number | null;
   versioning_enabled: boolean | null;
+  backup_count: number | null;
 }
 
 interface ConfigSnapshot {
   date: string;
   size_bytes: number | null;
   tier: string;
+}
+
+interface PostgresSnapshot {
+  filename: string;
+  date: string;
+  size_bytes: number | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -47,8 +53,10 @@ export default function InfraBackupPage() {
   const [tiers, setTiers] = useState<BackupTier[]>([]);
   const [overallStatus, setOverallStatus] = useState("");
   const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
+  const [pgSnapshots, setPgSnapshots] = useState<PostgresSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [restoreMessage, setRestoreMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [backupRunning, setBackupRunning] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -57,13 +65,15 @@ export default function InfraBackupPage() {
 
     const load = async () => {
       try {
-        const [status, snaps] = await Promise.all([
+        const [status, snaps, pgSnaps] = await Promise.all([
           api.get<{ tiers: BackupTier[]; overall_status: string }>("/api/backups/status"),
           api.get<{ snapshots: ConfigSnapshot[] }>("/api/backups/config-snapshots"),
+          api.get<{ snapshots: PostgresSnapshot[] }>("/api/backups/postgres-snapshots"),
         ]);
         setTiers(status.tiers);
         setOverallStatus(status.overall_status);
         setSnapshots(snaps.snapshots);
+        setPgSnapshots(pgSnaps.snapshots);
       } catch {
         // ignore
       } finally {
@@ -80,9 +90,33 @@ export default function InfraBackupPage() {
         `/api/backups/restore/${type}`,
         { confirmation_token: "CONFIRM" }
       );
-      setRestoreMessage(data.message);
+      setActionMessage(data.message);
     } catch (e) {
-      setRestoreMessage(e instanceof Error ? e.message : "Restore failed");
+      setActionMessage(e instanceof Error ? e.message : "Restore failed");
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    setBackupRunning(true);
+    setActionMessage("");
+    try {
+      const data = await api.post<{ status: string; filename: string; size_bytes: number }>(
+        "/api/backups/trigger/postgres",
+        {}
+      );
+      setActionMessage(`Backup completed: ${data.filename} (${formatBytes(data.size_bytes)})`);
+      // Refresh status
+      const [status, pgSnaps] = await Promise.all([
+        api.get<{ tiers: BackupTier[]; overall_status: string }>("/api/backups/status"),
+        api.get<{ snapshots: PostgresSnapshot[] }>("/api/backups/postgres-snapshots"),
+      ]);
+      setTiers(status.tiers);
+      setOverallStatus(status.overall_status);
+      setPgSnapshots(pgSnaps.snapshots);
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Backup failed");
+    } finally {
+      setBackupRunning(false);
     }
   };
 
@@ -94,9 +128,9 @@ export default function InfraBackupPage() {
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-6">Backup & Recovery</h1>
 
-          {restoreMessage && (
+          {actionMessage && (
             <div className="mb-4 p-3 rounded bg-blue-50 text-blue-700 text-sm">
-              {restoreMessage}
+              {actionMessage}
             </div>
           )}
 
@@ -111,7 +145,7 @@ export default function InfraBackupPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 {tiers.map((tier) => (
                   <div key={tier.tier} className="bg-white rounded-lg border border-gray-200 p-4">
                     <div className="flex items-center justify-between mb-3">
@@ -137,10 +171,10 @@ export default function InfraBackupPage() {
                           <span className="text-gray-900">{tier.retention_days} days</span>
                         </div>
                       )}
-                      {tier.pitr_window_hours && (
+                      {tier.backup_count !== null && (
                         <div className="flex justify-between">
-                          <span>PITR Window:</span>
-                          <span className="text-gray-900">{tier.pitr_window_hours}h</span>
+                          <span>Backups:</span>
+                          <span className="text-gray-900">{tier.backup_count}</span>
                         </div>
                       )}
                       {tier.versioning_enabled !== null && (
@@ -156,9 +190,18 @@ export default function InfraBackupPage() {
                         </div>
                       )}
                     </div>
-                    {(tier.tier === "cloudsql" || tier.tier === "filestore" || tier.tier === "config") && (
+                    {tier.tier === "postgres" && canAccess("backups", "create") && (
                       <button
-                        onClick={() => handleRestore(tier.tier === "config" ? "config" : tier.tier)}
+                        onClick={handleTriggerBackup}
+                        disabled={backupRunning}
+                        className="mt-3 w-full text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-100 disabled:opacity-50"
+                      >
+                        {backupRunning ? "Running..." : "Run Backup Now"}
+                      </button>
+                    )}
+                    {tier.tier === "platform_config" && canAccess("backups", "restore") && (
+                      <button
+                        onClick={() => handleRestore("config")}
                         className="mt-3 w-full text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200"
                       >
                         Restore
@@ -166,6 +209,36 @@ export default function InfraBackupPage() {
                     )}
                   </div>
                 ))}
+              </div>
+
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">PostgreSQL Snapshots</h2>
+              <div className="bg-white rounded-lg border border-gray-200 mb-8">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left px-4 py-3 font-medium text-gray-700">Filename</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-700">Date</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-700">Size</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pgSnapshots.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+                          No snapshots available
+                        </td>
+                      </tr>
+                    ) : (
+                      pgSnapshots.map((s) => (
+                        <tr key={s.filename} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-gray-900 font-mono text-xs">{s.filename}</td>
+                          <td className="px-4 py-2.5 text-gray-600">{s.date}</td>
+                          <td className="px-4 py-2.5 text-gray-600">{formatBytes(s.size_bytes)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
 
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Config Snapshots</h2>
