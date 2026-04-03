@@ -11,8 +11,8 @@ class BackupTierStatus(BaseModel):
     next_scheduled: datetime | None = None
     retention_days: int | None = None
     status: str = "unknown"
-    pitr_window_hours: int | None = None
     versioning_enabled: bool | None = None
+    backup_count: int | None = None
 
 
 class BackupStatusResponse(BaseModel):
@@ -41,6 +41,17 @@ class ConfigSnapshotDiff(BaseModel):
     changes: list[dict] = []
 
 
+class PostgresSnapshot(BaseModel):
+    filename: str
+    date: str
+    size_bytes: int | None = None
+
+
+class PostgresSnapshotListResponse(BaseModel):
+    snapshots: list[PostgresSnapshot]
+    total: int
+
+
 class RestoreRequest(BaseModel):
     confirmation_token: str
     restore_point: str | None = None
@@ -52,9 +63,5 @@ class RestoreResponse(BaseModel):
 
 
 class BackupSettingsUpdate(BaseModel):
-    cloud_sql_retention_days: int | None = None
-    cloud_sql_pitr_days: int | None = None
-    filestore_retention_days: int | None = None
-    config_nightly_retention_days: int | None = None
-    config_weekly_retention_weeks: int | None = None
-    config_monthly_retention_months: int | None = None
+    postgres_retention_days: int | None = None
+    config_retention_days: int | None = None

@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     ssl_certfile: str = ""
     ssl_keyfile: str = ""
 
+    # Backups
+    backup_postgres_interval_hours: int = 24
+    backup_postgres_retention_days: int = 14
+    backup_config_retention_days: int = 30
+    backup_local_dir: str = "/tmp/bioaf-backups"
+    backups_bucket_name: str = ""
+
     # Bcrypt
     bcrypt_rounds: int = 12
 

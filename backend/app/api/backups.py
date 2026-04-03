@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -9,6 +9,8 @@ from app.schemas.backup import (
     ConfigSnapshotListResponse,
     ConfigSnapshot,
     ConfigSnapshotDiff,
+    PostgresSnapshotListResponse,
+    PostgresSnapshot,
     RestoreRequest,
     RestoreResponse,
     BackupSettingsUpdate,
@@ -73,28 +75,25 @@ async def restore_config(
     return RestoreResponse(**result)
 
 
-@router.post("/restore/cloudsql", response_model=RestoreResponse)
-async def restore_cloudsql(
-    body: RestoreRequest,
-    current_user: dict = require_permission("backups", "restore"),
+@router.get("/postgres-snapshots", response_model=PostgresSnapshotListResponse)
+async def list_postgres_snapshots(
+    current_user: dict = require_permission("backups", "view"),
     session: AsyncSession = Depends(get_session),
 ):
-    return RestoreResponse(
-        status="initiated",
-        message=f"Cloud SQL PITR restore to {body.restore_point or 'latest'} initiated",
+    snapshots, total = await BackupService.get_postgres_snapshots(current_user["org_id"])
+    return PostgresSnapshotListResponse(
+        snapshots=[PostgresSnapshot(**s) for s in snapshots],
+        total=total,
     )
 
 
-@router.post("/restore/filestore", response_model=RestoreResponse)
-async def restore_filestore(
-    body: RestoreRequest,
-    current_user: dict = require_permission("backups", "restore"),
+@router.post("/trigger/postgres", status_code=501)
+async def trigger_postgres_backup(
+    current_user: dict = require_permission("backups", "create"),
     session: AsyncSession = Depends(get_session),
 ):
-    return RestoreResponse(
-        status="initiated",
-        message=f"Filestore snapshot restore to {body.restore_point or 'latest'} initiated",
-    )
+    """Trigger a manual PostgreSQL backup. Wired up in Commit 5."""
+    raise HTTPException(501, detail="PostgreSQL backup not yet implemented")
 
 
 @router.put("/settings")
@@ -103,15 +102,12 @@ async def update_backup_settings(
     current_user: dict = require_permission("backups", "create"),
     session: AsyncSession = Depends(get_session),
 ):
-    # Enforce minimums
     errors = []
-    if body.cloud_sql_pitr_days is not None and body.cloud_sql_pitr_days < 7:
-        errors.append("Cloud SQL PITR retention must be at least 7 days")
-    if body.cloud_sql_retention_days is not None and body.cloud_sql_retention_days < 30:
-        errors.append("Cloud SQL snapshot retention must be at least 30 days")
+    if body.postgres_retention_days is not None and body.postgres_retention_days < 1:
+        errors.append("PostgreSQL backup retention must be at least 1 day")
+    if body.config_retention_days is not None and body.config_retention_days < 1:
+        errors.append("Config backup retention must be at least 1 day")
     if errors:
-        from fastapi import HTTPException
-
         raise HTTPException(400, detail="; ".join(errors))
 
     return {"status": "updated", "settings": body.model_dump(exclude_unset=True)}

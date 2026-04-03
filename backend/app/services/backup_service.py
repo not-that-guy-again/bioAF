@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
+from app.config import settings
 from app.services.event_bus import event_bus
 from app.services.event_types import BACKUP_FAILURE
 
@@ -12,41 +13,27 @@ logger = logging.getLogger("bioaf.backup_service")
 class BackupService:
     @staticmethod
     async def get_backup_status(org_id: int) -> dict:
-        """Get backup status for each tier. Uses mock data when GCP is unavailable."""
+        """Get backup status for each tier. Returns local/mock data for now;
+        Commit 4 wires this to real GCS checks."""
         now = datetime.now(timezone.utc)
         tiers = []
 
-        # Cloud SQL
+        # PostgreSQL (pg_dump)
         tiers.append(
             {
-                "tier": "cloud_sql",
-                "name": "Cloud SQL (PostgreSQL)",
-                "last_backup": (now - timedelta(hours=6)).isoformat(),
-                "size_bytes": 524288000,
-                "next_scheduled": (now + timedelta(hours=18)).isoformat(),
-                "retention_days": 30,
-                "status": "healthy",
-                "pitr_window_hours": 168,
-                "versioning_enabled": None,
-            }
-        )
-
-        # Filestore
-        tiers.append(
-            {
-                "tier": "filestore",
-                "name": "Filestore NFS Snapshots",
-                "last_backup": (now - timedelta(hours=12)).isoformat(),
+                "tier": "postgres",
+                "name": "PostgreSQL (pg_dump)",
+                "last_backup": None,
                 "size_bytes": None,
-                "next_scheduled": (now + timedelta(hours=12)).isoformat(),
-                "retention_days": 14,
-                "status": "healthy",
-                "pitr_window_hours": None,
+                "next_scheduled": None,
+                "retention_days": settings.backup_postgres_retention_days,
+                "status": "unknown",
                 "versioning_enabled": None,
+                "backup_count": 0,
             }
         )
 
-        # GCS
+        # GCS Object Versioning
         tiers.append(
             {
                 "tier": "gcs",
@@ -55,9 +42,9 @@ class BackupService:
                 "size_bytes": None,
                 "next_scheduled": None,
                 "retention_days": None,
-                "status": "healthy",
-                "pitr_window_hours": None,
-                "versioning_enabled": True,
+                "status": "unknown",
+                "versioning_enabled": None,
+                "backup_count": None,
             }
         )
 
@@ -66,13 +53,13 @@ class BackupService:
             {
                 "tier": "platform_config",
                 "name": "Platform Configuration",
-                "last_backup": (now - timedelta(hours=8)).isoformat(),
-                "size_bytes": 102400,
-                "next_scheduled": (now + timedelta(hours=16)).isoformat(),
-                "retention_days": 365,
-                "status": "healthy",
-                "pitr_window_hours": None,
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": settings.backup_config_retention_days,
+                "status": "unknown",
                 "versioning_enabled": None,
+                "backup_count": 0,
             }
         )
 
@@ -85,61 +72,58 @@ class BackupService:
                 "size_bytes": None,
                 "next_scheduled": None,
                 "retention_days": None,
-                "status": "healthy",
-                "pitr_window_hours": None,
-                "versioning_enabled": True,
+                "status": "unknown",
+                "versioning_enabled": None,
+                "backup_count": None,
             }
         )
 
         all_healthy = all(t["status"] == "healthy" for t in tiers)
+        any_error = any(t["status"] == "error" for t in tiers)
+        if all_healthy:
+            overall = "healthy"
+        elif any_error:
+            overall = "error"
+        else:
+            overall = "unknown"
+
         return {
             "tiers": tiers,
-            "overall_status": "healthy" if all_healthy else "degraded",
+            "overall_status": overall,
         }
 
     @staticmethod
     async def get_config_snapshots(org_id: int, page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
-        """List config backup snapshots. Returns mock data when GCP is unavailable."""
-        now = datetime.now(timezone.utc)
-        snapshots = []
-        for i in range(min(page_size, 30)):
-            d = now - timedelta(days=i)
-            tier = "nightly"
-            if i % 7 == 0 and i > 0:
-                tier = "weekly"
-            if i % 30 == 0 and i > 0:
-                tier = "monthly"
-            snapshots.append(
-                {
-                    "date": d.strftime("%Y-%m-%d"),
-                    "size_bytes": 102400 + i * 1024,
-                    "tier": tier,
-                }
-            )
-        return snapshots[(page - 1) * page_size : page * page_size], 30
+        """List config backup snapshots. Wired to real GCS in Commit 4."""
+        return [], 0
 
     @staticmethod
     async def get_config_snapshot_diff(org_id: int, snapshot_date: str) -> dict:
-        """Diff between snapshot and current config. Returns mock diff."""
+        """Diff between snapshot and current config."""
         return {
             "snapshot_date": snapshot_date,
             "compare_to": "current",
             "additions": [],
             "removals": [],
-            "changes": [
-                {"key": "app_version", "old": "0.9.0", "new": "1.0.0"},
-            ],
+            "changes": [],
         }
 
     @staticmethod
     async def restore_config(org_id: int, snapshot_date: str) -> dict:
-        """Restore platform config from snapshot. Placeholder for GCP implementation."""
+        """Restore platform config from snapshot."""
         logger.info("Config restore requested for org %d from snapshot %s", org_id, snapshot_date)
         return {"status": "initiated", "message": f"Config restore from {snapshot_date} initiated"}
 
     @staticmethod
+    async def get_postgres_snapshots(org_id: int) -> tuple[list[dict], int]:
+        """List postgres backup snapshots. Wired to real storage in Commit 5."""
+        return [], 0
+
+    @staticmethod
     async def check_backup_health(org_id: int) -> None:
         """Background health check: emit event if any backup is overdue >24h."""
+        import asyncio
+
         status = await BackupService.get_backup_status(org_id)
         now = datetime.now(timezone.utc)
 
@@ -147,8 +131,6 @@ class BackupService:
             if tier["last_backup"] and tier["status"] == "healthy":
                 last = datetime.fromisoformat(tier["last_backup"])
                 if (now - last).total_seconds() > 86400:
-                    import asyncio
-
                     asyncio.create_task(
                         event_bus.emit(
                             BACKUP_FAILURE,
