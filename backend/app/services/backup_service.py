@@ -22,6 +22,8 @@ from app.services.event_types import BACKUP_FAILURE
 
 logger = logging.getLogger("bioaf.backup_service")
 
+RESTORE_REVIEW_SECONDS = 3600  # 1 hour
+
 _PG_FILENAME_RE = re.compile(r"^pgdump-(\d{8}-\d{6})\.dump$")
 _CONFIG_FILENAME_RE = re.compile(r"^config-(\d{8}-\d{6})\.json$")
 _TIMESTAMP_FMT = "%Y%m%d-%H%M%S"
@@ -644,3 +646,242 @@ class BackupService:
                         },
                     )
                 )
+
+
+# ---------------------------------------------------------------------------
+# Database Restore
+# ---------------------------------------------------------------------------
+
+_restore_state: dict = {
+    "active": False,
+    "original_url": "",
+    "restore_url": "",
+    "backup_filename": "",
+    "started_at": None,
+    "expires_at": None,
+    "_timeout_task": None,
+}
+
+
+def _build_restore_url() -> str:
+    """Build a SQLAlchemy async URL pointing at bioaf_restore."""
+    return settings.database_url.replace("/bioaf", "/bioaf_restore")
+
+
+async def _run_admin_sql(statements: list[str]) -> None:
+    """Run SQL statements against the postgres maintenance database.
+
+    Uses asyncpg directly since we need AUTOCOMMIT for CREATE/DROP DATABASE.
+    """
+    import asyncpg
+
+    parsed = urlparse(settings.database_url.replace("+asyncpg", ""))
+    conn = await asyncpg.connect(
+        host=parsed.hostname or "localhost",
+        port=parsed.port or 5432,
+        user=parsed.username or "bioaf_app",
+        password=parsed.password or "",
+        database="postgres",
+    )
+    try:
+        for stmt in statements:
+            await conn.execute(stmt)
+    finally:
+        await conn.close()
+
+
+class RestoreService:
+    """Manages the database restore review flow."""
+
+    @staticmethod
+    def get_status() -> dict:
+        now = datetime.now(timezone.utc)
+        if not _restore_state["active"]:
+            return {"active": False}
+        expires = _restore_state["expires_at"]
+        remaining = max(0, int((expires - now).total_seconds())) if expires else 0
+        return {
+            "active": True,
+            "backup_filename": _restore_state["backup_filename"],
+            "started_at": _restore_state["started_at"].isoformat() if _restore_state["started_at"] else None,
+            "expires_at": expires.isoformat() if expires else None,
+            "seconds_remaining": remaining,
+        }
+
+    @staticmethod
+    async def start(session: AsyncSession, org_id: int, filename: str) -> dict:
+        """Download backup from GCS, restore to bioaf_restore, swap connection."""
+        if _restore_state["active"]:
+            return {"status": "error", "message": "A restore review is already active"}
+
+        bucket_name = await _get_backups_bucket(session)
+        if not bucket_name:
+            return {"status": "error", "message": "No backups bucket configured"}
+
+        dump_path = f"/tmp/{filename}"
+
+        try:
+            # Download dump from GCS
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(f"postgres/{filename}")
+            if not blob.exists():
+                return {"status": "error", "message": f"Backup file not found: {filename}"}
+            blob.download_to_filename(dump_path)
+            logger.info("Downloaded %s from GCS (%d bytes)", filename, os.path.getsize(dump_path))
+
+            # Create bioaf_restore database
+            await _run_admin_sql(
+                [
+                    "DROP DATABASE IF EXISTS bioaf_restore",
+                    "CREATE DATABASE bioaf_restore",
+                ]
+            )
+            logger.info("Created bioaf_restore database")
+
+            # Run pg_restore
+            parsed = urlparse(settings.database_url.replace("+asyncpg", ""))
+            env = {**os.environ, "PGPASSWORD": parsed.password or ""}
+            process = await asyncio.create_subprocess_exec(
+                "pg_restore",
+                "-h",
+                parsed.hostname or "localhost",
+                "-p",
+                str(parsed.port or 5432),
+                "-U",
+                parsed.username or "bioaf_app",
+                "-d",
+                "bioaf_restore",
+                "-Fc",
+                "--no-owner",
+                "--no-acl",
+                dump_path,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+
+            # pg_restore returns non-zero for warnings (e.g., "role does not exist")
+            # which are not fatal. Only log, don't fail.
+            if process.returncode != 0:
+                logger.warning("pg_restore warnings (exit %d): %s", process.returncode, stderr.decode()[:500])
+
+            os.remove(dump_path)
+
+            # Swap connection to bioaf_restore
+            from app.database import swap_database
+
+            restore_url = _build_restore_url()
+            _restore_state["original_url"] = settings.database_url
+            _restore_state["restore_url"] = restore_url
+            _restore_state["backup_filename"] = filename
+            _restore_state["active"] = True
+            _restore_state["started_at"] = datetime.now(timezone.utc)
+            _restore_state["expires_at"] = datetime.now(timezone.utc) + timedelta(seconds=RESTORE_REVIEW_SECONDS)
+
+            await swap_database(restore_url)
+            logger.info("Swapped to bioaf_restore for review")
+
+            # Start timeout task
+            _restore_state["_timeout_task"] = asyncio.create_task(_restore_timeout())
+
+            return {"status": "reviewing", "message": f"Restore from {filename} active. You have 1 hour to review."}
+
+        except Exception as e:
+            logger.error("Restore failed: %s", e)
+            if os.path.exists(dump_path):
+                os.remove(dump_path)
+            try:
+                await _run_admin_sql(["DROP DATABASE IF EXISTS bioaf_restore"])
+            except Exception:
+                pass
+            return {"status": "error", "message": str(e)[:500]}
+
+    @staticmethod
+    async def accept() -> dict:
+        """Accept the restored database: rename and make permanent."""
+        if not _restore_state["active"]:
+            return {"status": "error", "message": "No active restore to accept"}
+
+        if _restore_state["_timeout_task"]:
+            _restore_state["_timeout_task"].cancel()
+
+        try:
+            from app.database import swap_database
+
+            # Point at postgres maintenance DB temporarily so we're not connected
+            # to any DB we're about to rename
+            admin_async_url = settings.database_url.replace("/bioaf", "/postgres")
+            await swap_database(admin_async_url)
+
+            await _run_admin_sql(
+                [
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'bioaf' AND pid != pg_backend_pid()",
+                    "ALTER DATABASE bioaf RENAME TO bioaf_old",
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'bioaf_restore' AND pid != pg_backend_pid()",
+                    "ALTER DATABASE bioaf_restore RENAME TO bioaf",
+                    "DROP DATABASE IF EXISTS bioaf_old",
+                ]
+            )
+            logger.info("Database rename complete: bioaf_restore -> bioaf")
+
+            # Swap back to the original URL (which now points to the restored data)
+            await swap_database(_restore_state["original_url"])
+
+            _restore_state["active"] = False
+            _restore_state["_timeout_task"] = None
+            return {"status": "accepted", "message": "Restore accepted. Database has been permanently updated."}
+
+        except Exception as e:
+            logger.error("Accept restore failed: %s", e)
+            try:
+                from app.database import swap_database
+
+                await swap_database(_restore_state["original_url"])
+            except Exception:
+                pass
+            return {"status": "error", "message": str(e)[:500]}
+
+    @staticmethod
+    async def reject() -> dict:
+        """Reject the restored database and revert to the original."""
+        if not _restore_state["active"]:
+            return {"status": "error", "message": "No active restore to reject"}
+        return await _revert_restore("Restore rejected by admin")
+
+
+async def _restore_timeout() -> None:
+    """Background task that reverts the restore after the review period expires."""
+    try:
+        await asyncio.sleep(RESTORE_REVIEW_SECONDS)
+        if _restore_state["active"]:
+            logger.warning("Restore review timed out, reverting to original database")
+            await _revert_restore("Restore review timed out")
+    except asyncio.CancelledError:
+        pass
+
+
+async def _revert_restore(reason: str) -> dict:
+    """Swap back to the original database and drop bioaf_restore."""
+    if _restore_state["_timeout_task"]:
+        _restore_state["_timeout_task"].cancel()
+
+    try:
+        from app.database import swap_database
+
+        await swap_database(_restore_state["original_url"])
+        logger.info("Reverted to original database: %s", reason)
+
+        await _run_admin_sql(["DROP DATABASE IF EXISTS bioaf_restore"])
+        logger.info("Dropped bioaf_restore database")
+
+        _restore_state["active"] = False
+        _restore_state["_timeout_task"] = None
+        return {"status": "reverted", "message": reason}
+
+    except Exception as e:
+        logger.error("Failed to revert restore: %s", e)
+        _restore_state["active"] = False
+        return {"status": "error", "message": str(e)[:500]}

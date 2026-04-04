@@ -16,8 +16,10 @@ from app.schemas.backup import (
     PostgresSnapshotListResponse,
     RestoreRequest,
     RestoreResponse,
+    RestoreStatusResponse,
+    StartPostgresRestoreRequest,
 )
-from app.services.backup_service import BackupService
+from app.services.backup_service import BackupService, RestoreService
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
 
@@ -169,3 +171,49 @@ async def update_backup_settings(
 
     updated = await BackupService.update_backup_settings(session, body.model_dump(exclude_unset=True))
     return {"status": "updated", "settings": updated}
+
+
+# --- Database Restore ---
+
+
+@router.get("/restore/status", response_model=RestoreStatusResponse)
+async def get_restore_status(
+    current_user: dict = require_permission("backups", "view"),
+):
+    return RestoreService.get_status()
+
+
+@router.post("/restore/postgres")
+async def start_postgres_restore(
+    body: StartPostgresRestoreRequest,
+    current_user: dict = require_permission("backups", "restore"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start a database restore from a pg_dump backup. Enters review mode."""
+    result = await RestoreService.start(session, current_user["org_id"], body.filename)
+    if result["status"] == "error":
+        status_code = 409 if "already active" in result["message"] else 500
+        raise HTTPException(status_code, detail=result["message"])
+    return result
+
+
+@router.post("/restore/accept")
+async def accept_restore(
+    current_user: dict = require_permission("backups", "restore"),
+):
+    """Accept the restored database, making it permanent."""
+    result = await RestoreService.accept()
+    if result["status"] == "error":
+        raise HTTPException(400, detail=result["message"])
+    return result
+
+
+@router.post("/restore/reject")
+async def reject_restore(
+    current_user: dict = require_permission("backups", "restore"),
+):
+    """Reject the restored database and revert to the original."""
+    result = await RestoreService.reject()
+    if result["status"] == "error":
+        raise HTTPException(400, detail=result["message"])
+    return result

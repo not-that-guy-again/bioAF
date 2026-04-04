@@ -204,6 +204,80 @@ async def test_trigger_postgres_backup_forbidden_for_viewer(client: AsyncClient,
     assert response.status_code == 403
 
 
+# --- Database Restore tests ---
+
+
+@pytest.mark.asyncio
+async def test_restore_status_inactive(client: AsyncClient, admin_token: str):
+    response = await client.get(
+        "/api/backups/restore/status",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["active"] is False
+
+
+@pytest.mark.asyncio
+async def test_accept_restore_when_not_active(client: AsyncClient, admin_token: str):
+    response = await client.post(
+        "/api/backups/restore/accept",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_reject_restore_when_not_active(client: AsyncClient, admin_token: str):
+    response = await client.post(
+        "/api/backups/restore/reject",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_start_restore_calls_service(client: AsyncClient, admin_token: str):
+    """Start restore endpoint calls RestoreService.start."""
+    with patch(
+        "app.api.backups.RestoreService.start",
+        new_callable=AsyncMock,
+        return_value={"status": "reviewing", "message": "Restore active"},
+    ):
+        response = await client.post(
+            "/api/backups/restore/postgres",
+            json={"filename": "pgdump-20260403-030000.dump"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == "reviewing"
+
+
+@pytest.mark.asyncio
+async def test_start_restore_conflict_when_active(client: AsyncClient, admin_token: str):
+    """Returns 409 if a restore is already in progress."""
+    with patch(
+        "app.api.backups.RestoreService.start",
+        new_callable=AsyncMock,
+        return_value={"status": "error", "message": "A restore review is already active"},
+    ):
+        response = await client.post(
+            "/api/backups/restore/postgres",
+            json={"filename": "pgdump-test.dump"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_restore_forbidden_for_viewer(client: AsyncClient, viewer_token: str):
+    response = await client.post(
+        "/api/backups/restore/postgres",
+        json={"filename": "pgdump-test.dump"},
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert response.status_code == 403
+
+
 # --- GCS backup status tests ---
 
 

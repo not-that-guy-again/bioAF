@@ -62,6 +62,18 @@ class RestoreResponse(BaseModel):
     message: str
 
 
+class StartPostgresRestoreRequest(BaseModel):
+    filename: str
+
+
+class RestoreStatusResponse(BaseModel):
+    active: bool
+    backup_filename: str | None = None
+    started_at: datetime | None = None
+    expires_at: datetime | None = None
+    seconds_remaining: int | None = None
+
+
 class BackupSettingsResponse(BaseModel):
     postgres_retention_days: int
     postgres_schedule_hours: int
