@@ -1,18 +1,15 @@
 """Kubernetes cellxgene adapter.
 
-Supports local/mock mode for development and real K8s API for production.
-Mode is controlled by the BIOAF_COMPUTE_MODE environment variable.
-
-When running outside the cluster (e.g., Docker Compose on a VM), the adapter
-builds a K8s client from platform_config credentials (gke_cluster_endpoint,
-gke_cluster_ca_cert, GCP service account key).
+Always deploys real cellxgene pods to the GKE cluster. When running outside
+the cluster (e.g., Docker Compose on a VM), the adapter builds a K8s client
+from platform_config credentials (gke_cluster_endpoint, gke_cluster_ca_cert,
+GCP service account key).
 """
 
 import asyncio
 import base64
 import json as _json
 import logging
-import os
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -38,43 +35,159 @@ def _get_gcp_token(service_account_key_json: str) -> str:
     return credentials.token
 
 
-# In-memory instance store for local mode
-_local_instances: dict[int, dict] = {}
-
 DEFAULT_CELLXGENE_NAMESPACE = "bioaf-cellxgene"
 
 
 class KubernetesCellxgeneProvider(CellxgeneProvider):
-    """Kubernetes cellxgene backend with local mode for development."""
+    """Kubernetes cellxgene backend.
+
+    Connects to the GKE cluster via incluster config (when running as a pod)
+    or platform_config credentials (when running outside the cluster, e.g.
+    Docker Compose on a GCP VM).
+    """
 
     _TOKEN_TTL_SECONDS = 2700  # 45 minutes
 
     def __init__(self, session_factory=None):
-        self._mode = os.environ.get("BIOAF_COMPUTE_MODE", "local")
         self._session_factory = session_factory
         self._api_client: client.ApiClient | None = None
         self._client_created_at: float = 0.0
         self._cluster_config: dict | None = None
         self._namespace_ready = False
 
-    @property
-    def is_local(self) -> bool:
-        return self._mode == "local"
-
     async def deploy(self, publication_id: int, gcs_uri: str, dataset_name: str) -> dict:
-        if self.is_local:
-            return self._local_deploy(publication_id, gcs_uri, dataset_name)
-        return await self._k8s_deploy(publication_id, gcs_uri, dataset_name)
+        await self._get_api_client_async()
+
+        namespace = DEFAULT_CELLXGENE_NAMESPACE
+        await self.ensure_cellxgene_namespace(namespace)
+
+        name = f"cellxgene-{publication_id}"
+        apps_v1 = self._get_k8s_apps_client()
+        core_v1 = self._get_k8s_core_client()
+
+        deployment = client.V1Deployment(
+            metadata=client.V1ObjectMeta(
+                name=name,
+                namespace=namespace,
+                labels={
+                    "bioaf.io/managed": "true",
+                    "bioaf.io/publication": str(publication_id),
+                },
+            ),
+            spec=client.V1DeploymentSpec(
+                replicas=1,
+                selector=client.V1LabelSelector(match_labels={"app": name}),
+                template=client.V1PodTemplateSpec(
+                    metadata=client.V1ObjectMeta(labels={"app": name}),
+                    spec=client.V1PodSpec(
+                        service_account_name="bioaf-cellxgene-runner",
+                        node_selector={"bioaf.io/pool": "interactive"},
+                        tolerations=[
+                            client.V1Toleration(
+                                key="bioaf.io/pool",
+                                value="interactive",
+                                effect="NoSchedule",
+                            )
+                        ],
+                        containers=[
+                            client.V1Container(
+                                name="cellxgene",
+                                image="cellxgene:latest",
+                                args=["launch", "--host", "0.0.0.0", gcs_uri],
+                                ports=[client.V1ContainerPort(container_port=5005)],
+                                resources=client.V1ResourceRequirements(
+                                    requests={"cpu": "1", "memory": "4Gi"},
+                                    limits={"cpu": "2", "memory": "8Gi"},
+                                ),
+                            )
+                        ],
+                    ),
+                ),
+            ),
+        )
+        apps_v1.create_namespaced_deployment(namespace=namespace, body=deployment)
+        logger.info("Created cellxgene deployment %s in %s", name, namespace)
+
+        service = client.V1Service(
+            metadata=client.V1ObjectMeta(
+                name=name,
+                namespace=namespace,
+                labels={
+                    "bioaf.io/managed": "true",
+                    "bioaf.io/publication": str(publication_id),
+                },
+            ),
+            spec=client.V1ServiceSpec(
+                selector={"app": name},
+                ports=[client.V1ServicePort(port=80, target_port=5005)],
+                type="ClusterIP",
+            ),
+        )
+        core_v1.create_namespaced_service(namespace=namespace, body=service)
+        logger.info("Created cellxgene service %s in %s", name, namespace)
+
+        # Poll for readiness in background
+        asyncio.create_task(self._poll_deployment_ready(publication_id, name, namespace))
+
+        return {
+            "publication_id": publication_id,
+            "pod_name": name,
+            "namespace": namespace,
+            "status": "starting",
+            "access_url": None,
+        }
 
     async def teardown(self, publication_id: int) -> dict:
-        if self.is_local:
-            return self._local_teardown(publication_id)
-        return await self._k8s_teardown(publication_id)
+        await self._get_api_client_async()
+
+        name = f"cellxgene-{publication_id}"
+        namespace = DEFAULT_CELLXGENE_NAMESPACE
+
+        apps_v1 = self._get_k8s_apps_client()
+        core_v1 = self._get_k8s_core_client()
+
+        try:
+            apps_v1.delete_namespaced_deployment(name=name, namespace=namespace)
+            logger.info("Deleted cellxgene deployment %s", name)
+        except Exception as e:
+            logger.warning("Failed to delete cellxgene deployment %s: %s", name, e)
+
+        try:
+            core_v1.delete_namespaced_service(name=name, namespace=namespace)
+            logger.info("Deleted cellxgene service %s", name)
+        except Exception as e:
+            logger.warning("Failed to delete cellxgene service %s: %s", name, e)
+
+        return {
+            "publication_id": publication_id,
+            "status": "stopped",
+            "stopped_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     async def get_status(self, publication_id: int) -> dict:
-        if self.is_local:
-            return self._local_get_status(publication_id)
-        return await self._k8s_get_status(publication_id)
+        await self._get_api_client_async()
+
+        name = f"cellxgene-{publication_id}"
+        namespace = DEFAULT_CELLXGENE_NAMESPACE
+        apps_v1 = self._get_k8s_apps_client()
+
+        try:
+            dep = apps_v1.read_namespaced_deployment_status(name=name, namespace=namespace)
+            ready = dep.status.ready_replicas or 0
+            status = "running" if ready >= 1 else "starting"
+        except Exception:
+            return {
+                "publication_id": publication_id,
+                "status": "unknown",
+                "pod_name": name,
+            }
+
+        return {
+            "publication_id": publication_id,
+            "status": status,
+            "pod_name": name,
+            "namespace": namespace,
+        }
 
     # -- Cluster config --
 
@@ -176,7 +289,10 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
         return self._api_client
 
     def _get_api_client(self) -> client.ApiClient:
-        """Get or create a K8s ApiClient (sync version)."""
+        """Get or create a K8s ApiClient (sync version).
+
+        Uses cached client if available; does not reload from DB.
+        """
         if self._api_client is not None and not self._is_token_expired():
             return self._api_client
 
@@ -301,90 +417,7 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
         except Exception:
             logger.warning("Could not patch SA annotation for Workload Identity")
 
-    # -- K8s API implementations --
-
-    async def _k8s_deploy(self, publication_id: int, gcs_uri: str, dataset_name: str) -> dict:
-        """Deploy a cellxgene pod on the GKE cluster."""
-        await self._get_api_client_async()
-
-        namespace = DEFAULT_CELLXGENE_NAMESPACE
-        await self.ensure_cellxgene_namespace(namespace)
-
-        name = f"cellxgene-{publication_id}"
-        apps_v1 = self._get_k8s_apps_client()
-        core_v1 = self._get_k8s_core_client()
-
-        deployment = client.V1Deployment(
-            metadata=client.V1ObjectMeta(
-                name=name,
-                namespace=namespace,
-                labels={
-                    "bioaf.io/managed": "true",
-                    "bioaf.io/publication": str(publication_id),
-                },
-            ),
-            spec=client.V1DeploymentSpec(
-                replicas=1,
-                selector=client.V1LabelSelector(match_labels={"app": name}),
-                template=client.V1PodTemplateSpec(
-                    metadata=client.V1ObjectMeta(labels={"app": name}),
-                    spec=client.V1PodSpec(
-                        service_account_name="bioaf-cellxgene-runner",
-                        node_selector={"bioaf.io/pool": "interactive"},
-                        tolerations=[
-                            client.V1Toleration(
-                                key="bioaf.io/pool",
-                                value="interactive",
-                                effect="NoSchedule",
-                            )
-                        ],
-                        containers=[
-                            client.V1Container(
-                                name="cellxgene",
-                                image="cellxgene:latest",
-                                args=["launch", "--host", "0.0.0.0", gcs_uri],
-                                ports=[client.V1ContainerPort(container_port=5005)],
-                                resources=client.V1ResourceRequirements(
-                                    requests={"cpu": "1", "memory": "4Gi"},
-                                    limits={"cpu": "2", "memory": "8Gi"},
-                                ),
-                            )
-                        ],
-                    ),
-                ),
-            ),
-        )
-        apps_v1.create_namespaced_deployment(namespace=namespace, body=deployment)
-        logger.info("Created cellxgene deployment %s in %s", name, namespace)
-
-        service = client.V1Service(
-            metadata=client.V1ObjectMeta(
-                name=name,
-                namespace=namespace,
-                labels={
-                    "bioaf.io/managed": "true",
-                    "bioaf.io/publication": str(publication_id),
-                },
-            ),
-            spec=client.V1ServiceSpec(
-                selector={"app": name},
-                ports=[client.V1ServicePort(port=80, target_port=5005)],
-                type="ClusterIP",
-            ),
-        )
-        core_v1.create_namespaced_service(namespace=namespace, body=service)
-        logger.info("Created cellxgene service %s in %s", name, namespace)
-
-        # Poll for readiness in background
-        asyncio.create_task(self._poll_deployment_ready(publication_id, name, namespace))
-
-        return {
-            "publication_id": publication_id,
-            "pod_name": name,
-            "namespace": namespace,
-            "status": "starting",
-            "access_url": None,
-        }
+    # -- Background readiness polling --
 
     async def _poll_deployment_ready(self, publication_id: int, name: str, namespace: str) -> None:
         """Background: poll for deployment readiness, then update the DB."""
@@ -434,93 +467,3 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                 logger.info("Updated publication %s: status=%s", publication_id, status)
         except Exception:
             logger.exception("Failed to update publication %s in DB", publication_id)
-
-    async def _k8s_teardown(self, publication_id: int) -> dict:
-        """Delete the cellxgene deployment and service."""
-        await self._get_api_client_async()
-
-        name = f"cellxgene-{publication_id}"
-        namespace = DEFAULT_CELLXGENE_NAMESPACE
-
-        apps_v1 = self._get_k8s_apps_client()
-        core_v1 = self._get_k8s_core_client()
-
-        try:
-            apps_v1.delete_namespaced_deployment(name=name, namespace=namespace)
-            logger.info("Deleted cellxgene deployment %s", name)
-        except Exception as e:
-            logger.warning("Failed to delete cellxgene deployment %s: %s", name, e)
-
-        try:
-            core_v1.delete_namespaced_service(name=name, namespace=namespace)
-            logger.info("Deleted cellxgene service %s", name)
-        except Exception as e:
-            logger.warning("Failed to delete cellxgene service %s: %s", name, e)
-
-        return {
-            "publication_id": publication_id,
-            "status": "stopped",
-            "stopped_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-    async def _k8s_get_status(self, publication_id: int) -> dict:
-        """Query K8s API for deployment status."""
-        await self._get_api_client_async()
-
-        name = f"cellxgene-{publication_id}"
-        namespace = DEFAULT_CELLXGENE_NAMESPACE
-        apps_v1 = self._get_k8s_apps_client()
-
-        try:
-            dep = apps_v1.read_namespaced_deployment_status(name=name, namespace=namespace)
-            ready = dep.status.ready_replicas or 0
-            status = "running" if ready >= 1 else "starting"
-        except Exception:
-            return {
-                "publication_id": publication_id,
-                "status": "unknown",
-                "pod_name": name,
-            }
-
-        return {
-            "publication_id": publication_id,
-            "status": status,
-            "pod_name": name,
-            "namespace": namespace,
-        }
-
-    # -- Local mode implementations --
-
-    def _local_deploy(self, publication_id: int, gcs_uri: str, dataset_name: str) -> dict:
-        instance = {
-            "publication_id": publication_id,
-            "pod_name": f"cellxgene-{publication_id}",
-            "namespace": DEFAULT_CELLXGENE_NAMESPACE,
-            "status": "running",
-            "access_url": f"http://localhost:5005/cellxgene/{publication_id}/",
-            "gcs_uri": gcs_uri,
-            "dataset_name": dataset_name,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        _local_instances[publication_id] = instance
-        logger.info("Local mode: deployed cellxgene %s for %s", publication_id, dataset_name)
-        return instance
-
-    def _local_teardown(self, publication_id: int) -> dict:
-        if publication_id in _local_instances:
-            _local_instances[publication_id]["status"] = "stopped"
-            _local_instances[publication_id]["stopped_at"] = datetime.now(timezone.utc).isoformat()
-        logger.info("Local mode: torn down cellxgene %s", publication_id)
-        return {
-            "publication_id": publication_id,
-            "status": "stopped",
-            "stopped_at": datetime.now(timezone.utc).isoformat(),
-        }
-
-    def _local_get_status(self, publication_id: int) -> dict:
-        if publication_id in _local_instances:
-            return _local_instances[publication_id]
-        return {
-            "publication_id": publication_id,
-            "status": "unknown",
-        }
