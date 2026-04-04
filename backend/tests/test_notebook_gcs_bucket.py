@@ -331,12 +331,16 @@ async def test_k8s_pod_manifest_mounts_gcs_secret():
     secret_vols = [v for v in volumes if v.get("secret", {}).get("secretName") == "bioaf-gcs-sa-key"]
     assert len(secret_vols) == 1
 
-    # Init containers should have the mount and env var
+    # Init containers should have the mount, env var, and auth activation in command
     for ic in manifest["spec"]["initContainers"]:
         mount_names = [m["name"] for m in ic.get("volumeMounts", [])]
         assert "gcp-sa-key" in mount_names, f"Init container {ic['name']} missing GCS secret mount"
         env_names = [e["name"] for e in ic.get("env", [])]
         assert "GOOGLE_APPLICATION_CREDENTIALS" in env_names
+        # Command should have gcloud auth activation prepended
+        cmd = ic.get("command", [])
+        if len(cmd) >= 3 and cmd[0] == "/bin/sh":
+            assert "gcloud auth activate-service-account" in cmd[2]
 
     # Main container should also have the env var and mount
     main = manifest["spec"]["containers"][0]

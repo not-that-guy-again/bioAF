@@ -650,12 +650,21 @@ class KubernetesNotebookProvider(NotebookProvider):
 
         # Mount GCS SA key secret into all init containers and the main container
         # so gsutil / GCP client libraries can authenticate.
+        # On GKE with Workload Identity enabled, gsutil prefers the metadata
+        # server over GOOGLE_APPLICATION_CREDENTIALS, so we explicitly activate
+        # the service account in each init container command.
+        _GCS_KEY_PATH = "/secrets/gcp/key.json"
+        _GCS_AUTH_PREFIX = f"gcloud auth activate-service-account --key-file={_GCS_KEY_PATH} && "
         if has_gcs_secret:
             gcs_vol_mount = {"name": "gcp-sa-key", "mountPath": "/secrets/gcp", "readOnly": True}
-            gcs_env = {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/secrets/gcp/key.json"}
+            gcs_env = {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": _GCS_KEY_PATH}
             for ic in init_containers:
                 ic.setdefault("volumeMounts", []).append(gcs_vol_mount)
                 ic.setdefault("env", []).append(gcs_env)
+                # Prepend gcloud auth activation to the shell command
+                cmd: list[str] = ic.get("command", [])
+                if len(cmd) >= 3 and cmd[0] == "/bin/sh" and cmd[1] == "-c":
+                    cmd[2] = _GCS_AUTH_PREFIX + str(cmd[2])
             notebook_container.setdefault("env", []).append(gcs_env)
             notebook_container["volumeMounts"].append(gcs_vol_mount)
             volumes.append({"name": "gcp-sa-key", "secret": {"secretName": "bioaf-gcs-sa-key"}})
