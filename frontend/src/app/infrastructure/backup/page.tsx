@@ -32,6 +32,19 @@ interface PostgresSnapshot {
   size_bytes: number | null;
 }
 
+interface TfstateFile {
+  name: string;
+  size_bytes: number;
+  updated: string | null;
+}
+
+interface BackupSettings {
+  postgres_retention_days: number;
+  postgres_schedule_hours: number;
+  config_retention_days: number;
+  config_schedule_hours: number;
+}
+
 const statusColors: Record<string, string> = {
   healthy: "bg-green-100 text-green-700",
   warning: "bg-yellow-100 text-yellow-700",
@@ -54,33 +67,40 @@ export default function InfraBackupPage() {
   const [overallStatus, setOverallStatus] = useState("");
   const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
   const [pgSnapshots, setPgSnapshots] = useState<PostgresSnapshot[]>([]);
+  const [tfstateFiles, setTfstateFiles] = useState<TfstateFile[]>([]);
+  const [settings, setSettings] = useState<BackupSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState("");
-  const [backupRunning, setBackupRunning] = useState(false);
+  const [runningAction, setRunningAction] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const loadData = async () => {
+    try {
+      const [status, snaps, pgSnaps, tfFiles, backupSettings] = await Promise.all([
+        api.get<{ tiers: BackupTier[]; overall_status: string }>("/api/backups/status"),
+        api.get<{ snapshots: ConfigSnapshot[] }>("/api/backups/config-snapshots"),
+        api.get<{ snapshots: PostgresSnapshot[] }>("/api/backups/postgres-snapshots"),
+        api.get<{ files: TfstateFile[] }>("/api/backups/tfstate-files"),
+        api.get<BackupSettings>("/api/backups/settings"),
+      ]);
+      setTiers(status.tiers);
+      setOverallStatus(status.overall_status);
+      setSnapshots(snaps.snapshots);
+      setPgSnapshots(pgSnaps.snapshots);
+      setTfstateFiles(tfFiles.files);
+      setSettings(backupSettings);
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     if (permLoading) return;
     if (!canAccess("backups", "view")) { router.push("/dashboard"); return; }
-
-    const load = async () => {
-      try {
-        const [status, snaps, pgSnaps] = await Promise.all([
-          api.get<{ tiers: BackupTier[]; overall_status: string }>("/api/backups/status"),
-          api.get<{ snapshots: ConfigSnapshot[] }>("/api/backups/config-snapshots"),
-          api.get<{ snapshots: PostgresSnapshot[] }>("/api/backups/postgres-snapshots"),
-        ]);
-        setTiers(status.tiers);
-        setOverallStatus(status.overall_status);
-        setSnapshots(snaps.snapshots);
-        setPgSnapshots(pgSnaps.snapshots);
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadData();
   }, [router, permLoading, canAccess]);
 
   const handleRestore = async (type: string) => {
@@ -96,27 +116,38 @@ export default function InfraBackupPage() {
     }
   };
 
-  const handleTriggerBackup = async () => {
-    setBackupRunning(true);
+  const handleTriggerBackup = async (type: "postgres" | "config") => {
+    setRunningAction(type);
     setActionMessage("");
     try {
       const data = await api.post<{ status: string; filename: string; size_bytes: number }>(
-        "/api/backups/trigger/postgres",
+        `/api/backups/trigger/${type}`,
         {}
       );
       setActionMessage(`Backup completed: ${data.filename} (${formatBytes(data.size_bytes)})`);
-      // Refresh status
-      const [status, pgSnaps] = await Promise.all([
-        api.get<{ tiers: BackupTier[]; overall_status: string }>("/api/backups/status"),
-        api.get<{ snapshots: PostgresSnapshot[] }>("/api/backups/postgres-snapshots"),
-      ]);
-      setTiers(status.tiers);
-      setOverallStatus(status.overall_status);
-      setPgSnapshots(pgSnaps.snapshots);
+      await loadData();
     } catch (e) {
       setActionMessage(e instanceof Error ? e.message : "Backup failed");
     } finally {
-      setBackupRunning(false);
+      setRunningAction("");
+    }
+  };
+
+  const handleDownloadTfstate = (filename: string) => {
+    window.open(`/api/backups/tfstate-download/${encodeURIComponent(filename)}`, "_blank");
+  };
+
+  const handleSaveSettings = async () => {
+    if (!settings) return;
+    setSavingSettings(true);
+    setActionMessage("");
+    try {
+      await api.put("/api/backups/settings", settings);
+      setActionMessage("Settings saved");
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Failed to save settings");
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -192,17 +223,26 @@ export default function InfraBackupPage() {
                     </div>
                     {tier.tier === "postgres" && canAccess("backups", "create") && (
                       <button
-                        onClick={handleTriggerBackup}
-                        disabled={backupRunning}
+                        onClick={() => handleTriggerBackup("postgres")}
+                        disabled={runningAction !== ""}
                         className="mt-3 w-full text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-100 disabled:opacity-50"
                       >
-                        {backupRunning ? "Running..." : "Run Backup Now"}
+                        {runningAction === "postgres" ? "Running..." : "Run Backup Now"}
+                      </button>
+                    )}
+                    {tier.tier === "platform_config" && canAccess("backups", "create") && (
+                      <button
+                        onClick={() => handleTriggerBackup("config")}
+                        disabled={runningAction !== ""}
+                        className="mt-3 w-full text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-100 disabled:opacity-50"
+                      >
+                        {runningAction === "config" ? "Running..." : "Run Backup Now"}
                       </button>
                     )}
                     {tier.tier === "platform_config" && canAccess("backups", "restore") && (
                       <button
                         onClick={() => handleRestore("config")}
-                        className="mt-3 w-full text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200"
+                        className="mt-1 w-full text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200"
                       >
                         Restore
                       </button>
@@ -210,6 +250,74 @@ export default function InfraBackupPage() {
                   </div>
                 ))}
               </div>
+
+              {/* Backup Settings */}
+              {settings && canAccess("backups", "create") && (
+                <>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">Backup Settings</h2>
+                  <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900 mb-3">PostgreSQL</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Schedule (hours)</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={settings.postgres_schedule_hours}
+                              onChange={(e) => setSettings({ ...settings, postgres_schedule_hours: parseInt(e.target.value) || 1 })}
+                              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Retention (days)</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={settings.postgres_retention_days}
+                              onChange={(e) => setSettings({ ...settings, postgres_retention_days: parseInt(e.target.value) || 1 })}
+                              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-900 mb-3">Platform Config</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Schedule (hours)</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={settings.config_schedule_hours}
+                              onChange={(e) => setSettings({ ...settings, config_schedule_hours: parseInt(e.target.value) || 1 })}
+                              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Retention (days)</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={settings.config_retention_days}
+                              onChange={(e) => setSettings({ ...settings, config_retention_days: parseInt(e.target.value) || 1 })}
+                              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSaveSettings}
+                      disabled={savingSettings}
+                      className="mt-4 text-sm bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {savingSettings ? "Saving..." : "Save Settings"}
+                    </button>
+                  </div>
+                </>
+              )}
 
               <h2 className="text-lg font-semibold text-gray-900 mb-4">PostgreSQL Snapshots</h2>
               <div className="bg-white rounded-lg border border-gray-200 mb-8">
@@ -242,7 +350,7 @@ export default function InfraBackupPage() {
               </div>
 
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Config Snapshots</h2>
-              <div className="bg-white rounded-lg border border-gray-200">
+              <div className="bg-white rounded-lg border border-gray-200 mb-8">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-gray-50">
@@ -264,6 +372,47 @@ export default function InfraBackupPage() {
                           <td className="px-4 py-2.5 text-gray-900">{s.date}</td>
                           <td className="px-4 py-2.5 text-gray-600">{formatBytes(s.size_bytes)}</td>
                           <td className="px-4 py-2.5 text-gray-600">{s.tier}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Terraform State Files</h2>
+              <div className="bg-white rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left px-4 py-3 font-medium text-gray-700">Name</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-700">Size</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-700">Last Updated</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-700"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tfstateFiles.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                          No state files available
+                        </td>
+                      </tr>
+                    ) : (
+                      tfstateFiles.map((f) => (
+                        <tr key={f.name} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-gray-900 font-mono text-xs">{f.name}</td>
+                          <td className="px-4 py-2.5 text-gray-600">{formatBytes(f.size_bytes)}</td>
+                          <td className="px-4 py-2.5 text-gray-600">
+                            {f.updated ? new Date(f.updated).toLocaleString() : "N/A"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <button
+                              onClick={() => handleDownloadTfstate(f.name)}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              Download
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
