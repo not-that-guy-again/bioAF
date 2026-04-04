@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.adapters.registry import get_cellxgene_adapter
 from app.models.cellxgene_publication import CellxgenePublication
 from app.models.file import File
 from app.services.audit_service import log_action
@@ -54,9 +55,10 @@ class CellxgeneService:
             details={"dataset_name": dataset_name, "file_id": file_id},
         )
 
-        # Deploy cellxgene pod (async, don't block response)
+        # Deploy cellxgene via adapter
         try:
-            await CellxgeneService._deploy_cellxgene_pod(pub.id, file.gcs_uri, dataset_name)
+            adapter = get_cellxgene_adapter()
+            await adapter.deploy(pub.id, file.gcs_uri, dataset_name)
             pub.status = "published"
             pub.published_at = datetime.now(timezone.utc)
         except Exception as e:
@@ -78,7 +80,8 @@ class CellxgeneService:
         await session.flush()
 
         try:
-            await CellxgeneService._teardown_cellxgene_pod(publication_id)
+            adapter = get_cellxgene_adapter()
+            await adapter.teardown(publication_id)
             pub.status = "unpublished"
             pub.unpublished_at = datetime.now(timezone.utc)
         except Exception as e:
@@ -153,88 +156,3 @@ class CellxgeneService:
             .order_by(File.created_at.desc())
         )
         return list(result.scalars().all())
-
-    @staticmethod
-    async def _deploy_cellxgene_pod(publication_id: int, gcs_uri: str, dataset_name: str) -> None:
-        """Deploy a cellxgene pod via Kubernetes API."""
-        try:
-            from kubernetes import client as k8s_client, config as k8s_config
-
-            try:
-                k8s_config.load_incluster_config()
-            except k8s_config.ConfigException:
-                k8s_config.load_kube_config()
-
-            apps_v1 = k8s_client.AppsV1Api()
-            core_v1 = k8s_client.CoreV1Api()
-
-            name = f"cellxgene-{publication_id}"
-            namespace = "bioaf-cellxgene"
-
-            # Create deployment
-            deployment = k8s_client.V1Deployment(
-                metadata=k8s_client.V1ObjectMeta(name=name, namespace=namespace),
-                spec=k8s_client.V1DeploymentSpec(
-                    replicas=1,
-                    selector=k8s_client.V1LabelSelector(match_labels={"app": name}),
-                    template=k8s_client.V1PodTemplateSpec(
-                        metadata=k8s_client.V1ObjectMeta(labels={"app": name}),
-                        spec=k8s_client.V1PodSpec(
-                            containers=[
-                                k8s_client.V1Container(
-                                    name="cellxgene",
-                                    image="cellxgene:latest",
-                                    args=["launch", "--host", "0.0.0.0", gcs_uri],
-                                    ports=[k8s_client.V1ContainerPort(container_port=5005)],
-                                )
-                            ]
-                        ),
-                    ),
-                ),
-            )
-            apps_v1.create_namespaced_deployment(namespace=namespace, body=deployment)
-
-            # Create service
-            service = k8s_client.V1Service(
-                metadata=k8s_client.V1ObjectMeta(name=name, namespace=namespace),
-                spec=k8s_client.V1ServiceSpec(
-                    selector={"app": name},
-                    ports=[k8s_client.V1ServicePort(port=80, target_port=5005)],
-                    type="ClusterIP",
-                ),
-            )
-            core_v1.create_namespaced_service(namespace=namespace, body=service)
-
-            logger.info("Deployed cellxgene pod %s", name)
-        except ImportError:
-            logger.warning("kubernetes package not installed, skipping pod deployment")
-        except Exception as e:
-            logger.error("Kubernetes deployment failed: %s", e)
-            raise
-
-    @staticmethod
-    async def _teardown_cellxgene_pod(publication_id: int) -> None:
-        """Teardown cellxgene pod."""
-        try:
-            from kubernetes import client as k8s_client, config as k8s_config
-
-            try:
-                k8s_config.load_incluster_config()
-            except k8s_config.ConfigException:
-                k8s_config.load_kube_config()
-
-            apps_v1 = k8s_client.AppsV1Api()
-            core_v1 = k8s_client.CoreV1Api()
-
-            name = f"cellxgene-{publication_id}"
-            namespace = "bioaf-cellxgene"
-
-            apps_v1.delete_namespaced_deployment(name=name, namespace=namespace)
-            core_v1.delete_namespaced_service(name=name, namespace=namespace)
-
-            logger.info("Torn down cellxgene pod %s", name)
-        except ImportError:
-            logger.warning("kubernetes package not installed, skipping pod teardown")
-        except Exception as e:
-            logger.error("Kubernetes teardown failed: %s", e)
-            raise
