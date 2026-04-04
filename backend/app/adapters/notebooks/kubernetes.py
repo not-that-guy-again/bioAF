@@ -326,6 +326,44 @@ class KubernetesNotebookProvider(NotebookProvider):
         logger.info("Created role binding in %s", namespace)
         self._namespace_ready = True
 
+    def _ensure_gcs_secret(self, namespace: str) -> bool:
+        """Create a K8s Secret with the GCP SA key for GCS access.
+
+        Returns True if the secret exists (created or already present).
+        """
+        import base64 as _b64
+
+        from kubernetes.client.rest import ApiException
+
+        cfg = self._cluster_config or {}
+        sa_key = cfg.get("gcp_service_account_key", "")
+        if not sa_key:
+            return False
+
+        core_client = self._get_k8s_core_client()
+        secret_name = "bioaf-gcs-sa-key"
+
+        try:
+            core_client.read_namespaced_secret(name=secret_name, namespace=namespace)
+            return True
+        except ApiException as e:
+            if e.status != 404:
+                logger.warning("Error checking GCS secret: %s", e)
+                return False
+
+        core_client.create_namespaced_secret(
+            namespace=namespace,
+            body={
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {"name": secret_name, "labels": {"bioaf.io/managed": "true"}},
+                "type": "Opaque",
+                "data": {"key.json": _b64.b64encode(sa_key.encode()).decode()},
+            },
+        )
+        logger.info("Created GCS SA key secret in %s", namespace)
+        return True
+
     @staticmethod
     def _patch_sa_annotation(core_v1, namespace: str, gcp_sa_email: str) -> None:
         """Ensure the notebook-runner SA has the Workload Identity annotation."""
@@ -344,7 +382,7 @@ class KubernetesNotebookProvider(NotebookProvider):
 
     # -- K8s API implementations (production) --
 
-    def _build_pod_manifest(self, session_spec: dict) -> dict:
+    def _build_pod_manifest(self, session_spec: dict, has_gcs_secret: bool = False) -> dict:
         """Build a Kubernetes Pod manifest from a session spec.
 
         Extracted from _k8s_launch_session so it can be unit-tested without
@@ -610,6 +648,18 @@ class KubernetesNotebookProvider(NotebookProvider):
                 }
             )
 
+        # Mount GCS SA key secret into all init containers and the main container
+        # so gsutil / GCP client libraries can authenticate.
+        if has_gcs_secret:
+            gcs_vol_mount = {"name": "gcp-sa-key", "mountPath": "/secrets/gcp", "readOnly": True}
+            gcs_env = {"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": "/secrets/gcp/key.json"}
+            for ic in init_containers:
+                ic.setdefault("volumeMounts", []).append(gcs_vol_mount)
+                ic.setdefault("env", []).append(gcs_env)
+            notebook_container.setdefault("env", []).append(gcs_env)
+            notebook_container["volumeMounts"].append(gcs_vol_mount)
+            volumes.append({"name": "gcp-sa-key", "secret": {"secretName": "bioaf-gcs-sa-key"}})
+
         # Pod annotations -- GCS FUSE CSI driver requires this for sidecar injection
         annotations: dict[str, str] = {}
         if has_fuse_volumes:
@@ -664,7 +714,10 @@ class KubernetesNotebookProvider(NotebookProvider):
 
         await self.ensure_notebook_namespace(namespace, gcp_sa_email=session_spec.get("notebook_runner_sa_email", ""))
 
-        pod_manifest = self._build_pod_manifest(session_spec)
+        # Ensure GCS credentials secret exists for bucket access
+        has_gcs_secret = self._ensure_gcs_secret(namespace)
+
+        pod_manifest = self._build_pod_manifest(session_spec, has_gcs_secret=has_gcs_secret)
         gcs_home_prefix = pod_manifest.pop("_gcs_home_prefix")
 
         pod_name = pod_manifest["metadata"]["name"]

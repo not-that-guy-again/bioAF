@@ -305,3 +305,66 @@ async def test_k8s_gcsfuse_volume_uses_configured_bucket():
     for vol in csi_volumes:
         bucket = vol["csi"]["volumeAttributes"]["bucketName"]
         assert bucket == "bioaf-working-custom-org", f"Expected configured bucket, got {bucket}"
+
+
+@pytest.mark.asyncio
+async def test_k8s_pod_manifest_mounts_gcs_secret():
+    """Pod manifest mounts GCS SA key secret when has_gcs_secret=True."""
+    from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
+
+    adapter = KubernetesNotebookProvider()
+    manifest = adapter._build_pod_manifest(
+        session_spec={
+            "session_type": "jupyter",
+            "session_id": 996,
+            "user_id": 1,
+            "image": "test-image:latest",
+            "cpu_cores": 2,
+            "memory_gb": 4,
+            "node_pool": "interactive",
+        },
+        has_gcs_secret=True,
+    )
+
+    # Secret volume should be present
+    volumes = manifest["spec"]["volumes"]
+    secret_vols = [v for v in volumes if v.get("secret", {}).get("secretName") == "bioaf-gcs-sa-key"]
+    assert len(secret_vols) == 1
+
+    # Init containers should have the mount and env var
+    for ic in manifest["spec"]["initContainers"]:
+        mount_names = [m["name"] for m in ic.get("volumeMounts", [])]
+        assert "gcp-sa-key" in mount_names, f"Init container {ic['name']} missing GCS secret mount"
+        env_names = [e["name"] for e in ic.get("env", [])]
+        assert "GOOGLE_APPLICATION_CREDENTIALS" in env_names
+
+    # Main container should also have the env var and mount
+    main = manifest["spec"]["containers"][0]
+    mount_names = [m["name"] for m in main.get("volumeMounts", [])]
+    assert "gcp-sa-key" in mount_names
+    env_names = [e["name"] for e in main.get("env", [])]
+    assert "GOOGLE_APPLICATION_CREDENTIALS" in env_names
+
+
+@pytest.mark.asyncio
+async def test_k8s_pod_manifest_no_gcs_secret_without_flag():
+    """Pod manifest does not mount GCS secret when has_gcs_secret=False."""
+    from app.adapters.notebooks.kubernetes import KubernetesNotebookProvider
+
+    adapter = KubernetesNotebookProvider()
+    manifest = adapter._build_pod_manifest(
+        session_spec={
+            "session_type": "jupyter",
+            "session_id": 995,
+            "user_id": 1,
+            "image": "test-image:latest",
+            "cpu_cores": 2,
+            "memory_gb": 4,
+            "node_pool": "interactive",
+        },
+        has_gcs_secret=False,
+    )
+
+    volumes = manifest["spec"]["volumes"]
+    secret_vols = [v for v in volumes if "secret" in v]
+    assert len(secret_vols) == 0
