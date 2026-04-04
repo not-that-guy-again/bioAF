@@ -1,19 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
 from app.api.dependencies import require_permission
+from app.database import get_session
 from app.schemas.backup import (
+    BackupSettingsUpdate,
     BackupStatusResponse,
     BackupTierStatus,
-    ConfigSnapshotListResponse,
     ConfigSnapshot,
     ConfigSnapshotDiff,
-    PostgresSnapshotListResponse,
+    ConfigSnapshotListResponse,
     PostgresSnapshot,
+    PostgresSnapshotListResponse,
     RestoreRequest,
     RestoreResponse,
-    BackupSettingsUpdate,
 )
 from app.services.backup_service import BackupService
 
@@ -25,7 +25,7 @@ async def get_backup_status(
     current_user: dict = require_permission("backups", "view"),
     session: AsyncSession = Depends(get_session),
 ):
-    status = await BackupService.get_backup_status(current_user["org_id"])
+    status = await BackupService.get_backup_status(session, current_user["org_id"])
     return BackupStatusResponse(
         tiers=[BackupTierStatus(**t) for t in status["tiers"]],
         overall_status=status["overall_status"],
@@ -40,6 +40,7 @@ async def list_config_snapshots(
     session: AsyncSession = Depends(get_session),
 ):
     snapshots, total = await BackupService.get_config_snapshots(
+        session,
         current_user["org_id"],
         page,
         page_size,
@@ -80,7 +81,7 @@ async def list_postgres_snapshots(
     current_user: dict = require_permission("backups", "view"),
     session: AsyncSession = Depends(get_session),
 ):
-    snapshots, total = await BackupService.get_postgres_snapshots(current_user["org_id"])
+    snapshots, total = await BackupService.get_postgres_snapshots(session, current_user["org_id"])
     return PostgresSnapshotListResponse(
         snapshots=[PostgresSnapshot(**s) for s in snapshots],
         total=total,
@@ -92,8 +93,8 @@ async def trigger_postgres_backup(
     current_user: dict = require_permission("backups", "create"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Trigger a manual PostgreSQL backup."""
-    result = await BackupService.run_postgres_backup(current_user["org_id"])
+    """Trigger a manual PostgreSQL backup to GCS."""
+    result = await BackupService.run_postgres_backup(session, current_user["org_id"])
     if result["status"] == "error":
         raise HTTPException(500, detail=result.get("message", "Backup failed"))
     return result

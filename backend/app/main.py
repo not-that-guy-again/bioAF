@@ -331,7 +331,7 @@ async def _backup_health_check_loop():
                 orgs = list(result.scalars().all())
                 for org in orgs:
                     try:
-                        await BackupService.check_backup_health(org.id)
+                        await BackupService.check_backup_health(session, org.id)
                     except Exception as e:
                         logger.warning("Backup health check failed for org %d: %s", org.id, e)
         except asyncio.CancelledError:
@@ -341,18 +341,17 @@ async def _backup_health_check_loop():
 
 
 async def _postgres_backup_loop():
-    """Run pg_dump backups on the configured interval (local mode only)."""
+    """Run pg_dump backups on the configured interval."""
     from app.config import settings
+    from app.database import async_session_factory
     from app.services.backup_service import BackupService
-
-    if settings.compute_mode != "local":
-        return  # In production, CronJob handles this
 
     interval = settings.backup_postgres_interval_hours * 3600
     while True:
         try:
             await asyncio.sleep(interval)
-            result = await BackupService.run_postgres_backup(org_id=1)
+            async with async_session_factory() as session:
+                result = await BackupService.run_postgres_backup(session, org_id=1)
             if result["status"] == "completed":
                 logger.info("Scheduled pg_dump completed: %s", result.get("filename"))
             else:

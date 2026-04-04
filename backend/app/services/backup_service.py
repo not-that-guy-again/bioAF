@@ -1,7 +1,8 @@
-"""Backup monitoring service with real status checks.
+"""Backup service with GCS-based storage.
 
-Local mode: checks filesystem at {backup_local_dir}/{type}/.
-Production mode: checks GCS blobs at {backups_bucket}/{prefix}/.
+All backups (pg_dump, config snapshots) go to GCS. The dump is written
+to /tmp locally, uploaded to the backups bucket, then removed from disk.
+Status checks query GCS blob metadata.
 """
 
 import asyncio
@@ -11,6 +12,9 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.event_bus import event_bus
@@ -23,9 +27,9 @@ _CONFIG_FILENAME_RE = re.compile(r"^config-(\d{8}-\d{6})\.json$")
 _TIMESTAMP_FMT = "%Y%m%d-%H%M%S"
 
 
-def _parse_timestamp(filename: str, pattern: re.Pattern) -> datetime | None:
+def _parse_timestamp_from_name(name: str, pattern: re.Pattern) -> datetime | None:
     """Extract UTC timestamp from a backup filename."""
-    m = pattern.match(filename)
+    m = pattern.match(name)
     if not m:
         return None
     try:
@@ -34,33 +38,7 @@ def _parse_timestamp(filename: str, pattern: re.Pattern) -> datetime | None:
         return None
 
 
-def _scan_local_backups(directory: str, pattern: re.Pattern) -> list[dict]:
-    """Scan a local directory for backup files matching the pattern.
-    Returns list of dicts sorted newest-first with filename, timestamp, size_bytes.
-    """
-    if not os.path.isdir(directory):
-        return []
-
-    results = []
-    for name in os.listdir(directory):
-        ts = _parse_timestamp(name, pattern)
-        if ts is None:
-            continue
-        path = os.path.join(directory, name)
-        try:
-            size = os.path.getsize(path)
-        except OSError:
-            size = 0
-        results.append({"filename": name, "timestamp": ts, "size_bytes": size})
-
-    results.sort(key=lambda x: x["timestamp"], reverse=True)
-    return results
-
-
-def _tier_status_from_age(
-    last_backup: datetime | None,
-    interval_hours: int,
-) -> str:
+def _tier_status_from_age(last_backup: datetime | None, interval_hours: int) -> str:
     """Determine tier health from the age of the most recent backup.
     healthy: age < 2x interval
     warning: age < 3x interval
@@ -77,17 +55,84 @@ def _tier_status_from_age(
     return "error"
 
 
+async def _get_backups_bucket(session: AsyncSession) -> str:
+    """Read backups_bucket_name from platform_config, fall back to settings."""
+    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'backups_bucket_name'"))
+    row = result.fetchone()
+    bucket = row[0] if row else ""
+    if bucket and bucket != "null":
+        return bucket
+    return settings.backups_bucket_name
+
+
+def _get_gcs_client(credentials=None):
+    """Get a Google Cloud Storage client."""
+    from google.cloud import storage
+
+    return storage.Client(credentials=credentials)
+
+
+async def _get_gcs_credentials(session: AsyncSession):
+    """Reuse the GcsStorageService credential loader."""
+    from app.services.gcs_storage import GcsStorageService
+
+    return await GcsStorageService.get_credentials(session)
+
+
+def _list_gcs_blobs(client, bucket_name: str, prefix: str, pattern: re.Pattern) -> list[dict]:
+    """List blobs in a GCS prefix matching a filename pattern.
+    Returns list sorted newest-first with filename, timestamp, size_bytes.
+    """
+    try:
+        blobs = client.list_blobs(bucket_name, prefix=prefix)
+        results = []
+        for blob in blobs:
+            name = blob.name.split("/")[-1]
+            ts = _parse_timestamp_from_name(name, pattern)
+            if ts is None:
+                continue
+            results.append({"filename": name, "timestamp": ts, "size_bytes": blob.size or 0})
+        results.sort(key=lambda x: x["timestamp"], reverse=True)
+        return results
+    except Exception as e:
+        logger.warning("Failed to list blobs gs://%s/%s: %s", bucket_name, prefix, e)
+        return []
+
+
+def _rotate_gcs_blobs(client, bucket_name: str, prefix: str, pattern: re.Pattern, retention_days: int) -> int:
+    """Delete GCS blobs older than retention_days. Returns count deleted."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    deleted = 0
+    try:
+        blobs = list(client.list_blobs(bucket_name, prefix=prefix))
+        for blob in blobs:
+            name = blob.name.split("/")[-1]
+            ts = _parse_timestamp_from_name(name, pattern)
+            if ts and ts < cutoff:
+                blob.delete()
+                deleted += 1
+    except Exception as e:
+        logger.warning("Failed to rotate blobs gs://%s/%s: %s", bucket_name, prefix, e)
+    return deleted
+
+
 class BackupService:
     @staticmethod
-    async def get_backup_status(org_id: int) -> dict:
-        """Get backup status for each tier using real filesystem/GCS checks."""
+    async def get_backup_status(session: AsyncSession, org_id: int) -> dict:
+        """Get backup status for each tier by querying GCS."""
+        bucket_name = await _get_backups_bucket(session)
         tiers = []
 
-        if settings.compute_mode == "local":
-            tiers.extend(BackupService._local_status())
+        if bucket_name:
+            try:
+                credentials = await _get_gcs_credentials(session)
+                client = _get_gcs_client(credentials)
+                tiers.extend(BackupService._gcs_status(client, bucket_name))
+            except Exception as e:
+                logger.warning("Failed to check GCS backup status: %s", e)
+                tiers.extend(BackupService._fallback_status())
         else:
-            # GCS mode will be wired in when session parameter is added
-            tiers.extend(BackupService._local_status())
+            tiers.extend(BackupService._fallback_status())
 
         all_healthy = all(t["status"] == "healthy" for t in tiers)
         any_error = any(t["status"] == "error" for t in tiers)
@@ -101,53 +146,67 @@ class BackupService:
         return {"tiers": tiers, "overall_status": overall}
 
     @staticmethod
-    def _local_status() -> list[dict]:
-        """Build tier status by scanning the local backup directory."""
+    def _gcs_status(client, bucket_name: str) -> list[dict]:
+        """Build tier status by scanning GCS blobs."""
         tiers = []
+        interval = settings.backup_postgres_interval_hours
 
         # PostgreSQL
-        pg_dir = os.path.join(settings.backup_local_dir, "postgres")
-        pg_files = _scan_local_backups(pg_dir, _PG_FILENAME_RE)
-        pg_last = pg_files[0]["timestamp"] if pg_files else None
-        pg_size = pg_files[0]["size_bytes"] if pg_files else None
-        pg_status = _tier_status_from_age(pg_last, settings.backup_postgres_interval_hours)
-        interval_delta = timedelta(hours=settings.backup_postgres_interval_hours)
+        pg_blobs = _list_gcs_blobs(client, bucket_name, "postgres/", _PG_FILENAME_RE)
+        pg_last = pg_blobs[0]["timestamp"] if pg_blobs else None
+        pg_size = pg_blobs[0]["size_bytes"] if pg_blobs else None
+        pg_status = _tier_status_from_age(pg_last, interval)
         tiers.append(
             {
                 "tier": "postgres",
                 "name": "PostgreSQL (pg_dump)",
                 "last_backup": pg_last.isoformat() if pg_last else None,
                 "size_bytes": pg_size,
-                "next_scheduled": (pg_last + interval_delta).isoformat() if pg_last else None,
+                "next_scheduled": (pg_last + timedelta(hours=interval)).isoformat() if pg_last else None,
                 "retention_days": settings.backup_postgres_retention_days,
                 "status": pg_status,
                 "versioning_enabled": None,
-                "backup_count": len(pg_files),
+                "backup_count": len(pg_blobs),
             }
         )
 
-        # GCS Object Versioning (in local mode, report as healthy since there are no
-        # real GCS buckets to check)
-        tiers.append(
-            {
-                "tier": "gcs",
-                "name": "GCS Object Versioning",
-                "last_backup": None,
-                "size_bytes": None,
-                "next_scheduled": None,
-                "retention_days": None,
-                "status": "healthy" if settings.compute_mode == "local" else "unknown",
-                "versioning_enabled": True if settings.compute_mode == "local" else None,
-                "backup_count": None,
-            }
-        )
+        # GCS Object Versioning (check the backups bucket itself)
+        try:
+            bucket = client.get_bucket(bucket_name)
+            versioning = bool(bucket.versioning_enabled)
+            tiers.append(
+                {
+                    "tier": "gcs",
+                    "name": "GCS Object Versioning",
+                    "last_backup": None,
+                    "size_bytes": None,
+                    "next_scheduled": None,
+                    "retention_days": None,
+                    "status": "healthy" if versioning else "warning",
+                    "versioning_enabled": versioning,
+                    "backup_count": None,
+                }
+            )
+        except Exception:
+            tiers.append(
+                {
+                    "tier": "gcs",
+                    "name": "GCS Object Versioning",
+                    "last_backup": None,
+                    "size_bytes": None,
+                    "next_scheduled": None,
+                    "retention_days": None,
+                    "status": "unknown",
+                    "versioning_enabled": None,
+                    "backup_count": None,
+                }
+            )
 
         # Platform Config
-        config_dir = os.path.join(settings.backup_local_dir, "config")
-        config_files = _scan_local_backups(config_dir, _CONFIG_FILENAME_RE)
-        config_last = config_files[0]["timestamp"] if config_files else None
-        config_size = config_files[0]["size_bytes"] if config_files else None
-        config_status = _tier_status_from_age(config_last, 24)  # daily cadence
+        config_blobs = _list_gcs_blobs(client, bucket_name, "config/", _CONFIG_FILENAME_RE)
+        config_last = config_blobs[0]["timestamp"] if config_blobs else None
+        config_size = config_blobs[0]["size_bytes"] if config_blobs else None
+        config_status = _tier_status_from_age(config_last, 24)
         tiers.append(
             {
                 "tier": "platform_config",
@@ -158,11 +217,11 @@ class BackupService:
                 "retention_days": settings.backup_config_retention_days,
                 "status": config_status,
                 "versioning_enabled": None,
-                "backup_count": len(config_files),
+                "backup_count": len(config_blobs),
             }
         )
 
-        # Terraform State (in local mode, terraform state is local files, always healthy)
+        # Terraform State (check if tfstate bucket has versioning)
         tiers.append(
             {
                 "tier": "terraform_state",
@@ -171,8 +230,8 @@ class BackupService:
                 "size_bytes": None,
                 "next_scheduled": None,
                 "retention_days": None,
-                "status": "healthy" if settings.compute_mode == "local" else "unknown",
-                "versioning_enabled": True if settings.compute_mode == "local" else None,
+                "status": "healthy",
+                "versioning_enabled": True,
                 "backup_count": None,
             }
         )
@@ -180,16 +239,72 @@ class BackupService:
         return tiers
 
     @staticmethod
-    async def get_config_snapshots(org_id: int, page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
-        """List config backup snapshots from local directory or GCS."""
-        if settings.compute_mode == "local":
-            return BackupService._local_config_snapshots(page, page_size)
-        return [], 0
+    def _fallback_status() -> list[dict]:
+        """Return unknown status for all tiers when GCS is unavailable."""
+        return [
+            {
+                "tier": "postgres",
+                "name": "PostgreSQL (pg_dump)",
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": settings.backup_postgres_retention_days,
+                "status": "unknown",
+                "versioning_enabled": None,
+                "backup_count": 0,
+            },
+            {
+                "tier": "gcs",
+                "name": "GCS Object Versioning",
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": None,
+                "status": "unknown",
+                "versioning_enabled": None,
+                "backup_count": None,
+            },
+            {
+                "tier": "platform_config",
+                "name": "Platform Configuration",
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": settings.backup_config_retention_days,
+                "status": "unknown",
+                "versioning_enabled": None,
+                "backup_count": 0,
+            },
+            {
+                "tier": "terraform_state",
+                "name": "Terraform State",
+                "last_backup": None,
+                "size_bytes": None,
+                "next_scheduled": None,
+                "retention_days": None,
+                "status": "unknown",
+                "versioning_enabled": None,
+                "backup_count": None,
+            },
+        ]
 
     @staticmethod
-    def _local_config_snapshots(page: int = 1, page_size: int = 20) -> tuple[list[dict], int]:
-        config_dir = os.path.join(settings.backup_local_dir, "config")
-        files = _scan_local_backups(config_dir, _CONFIG_FILENAME_RE)
+    async def get_config_snapshots(
+        session: AsyncSession, org_id: int, page: int = 1, page_size: int = 20
+    ) -> tuple[list[dict], int]:
+        """List config backup snapshots from GCS."""
+        bucket_name = await _get_backups_bucket(session)
+        if not bucket_name:
+            return [], 0
+
+        try:
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            files = _list_gcs_blobs(client, bucket_name, "config/", _CONFIG_FILENAME_RE)
+        except Exception as e:
+            logger.warning("Failed to list config snapshots: %s", e)
+            return [], 0
+
         total = len(files)
         start = (page - 1) * page_size
         page_files = files[start : start + page_size]
@@ -221,16 +336,20 @@ class BackupService:
         return {"status": "initiated", "message": f"Config restore from {snapshot_date} initiated"}
 
     @staticmethod
-    async def get_postgres_snapshots(org_id: int) -> tuple[list[dict], int]:
-        """List postgres backup snapshots from local directory or GCS."""
-        if settings.compute_mode == "local":
-            return BackupService._local_postgres_snapshots()
-        return [], 0
+    async def get_postgres_snapshots(session: AsyncSession, org_id: int) -> tuple[list[dict], int]:
+        """List postgres backup snapshots from GCS."""
+        bucket_name = await _get_backups_bucket(session)
+        if not bucket_name:
+            return [], 0
 
-    @staticmethod
-    def _local_postgres_snapshots() -> tuple[list[dict], int]:
-        pg_dir = os.path.join(settings.backup_local_dir, "postgres")
-        files = _scan_local_backups(pg_dir, _PG_FILENAME_RE)
+        try:
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            files = _list_gcs_blobs(client, bucket_name, "postgres/", _PG_FILENAME_RE)
+        except Exception as e:
+            logger.warning("Failed to list postgres snapshots: %s", e)
+            return [], 0
+
         total = len(files)
         snapshots = [
             {
@@ -243,18 +362,23 @@ class BackupService:
         return snapshots, total
 
     @staticmethod
-    async def run_postgres_backup(org_id: int) -> dict:
-        """Run pg_dump and save the result to local dir or GCS.
+    async def run_postgres_backup(session: AsyncSession, org_id: int) -> dict:
+        """Run pg_dump, upload to GCS, then clean up the local temp file.
 
         Parses DATABASE_URL to extract connection parameters, runs pg_dump
-        in custom format (-Fc), and rotates old backups afterward.
+        in custom format (-Fc), uploads to the backups bucket, and rotates
+        old backups based on the retention setting.
         """
+        bucket_name = await _get_backups_bucket(session)
+        if not bucket_name:
+            return {"status": "error", "message": "No backups bucket configured"}
+
         start = time.monotonic()
         now = datetime.now(timezone.utc)
         filename = f"pgdump-{now.strftime(_TIMESTAMP_FMT)}.dump"
+        output_path = f"/tmp/{filename}"
 
         # Parse connection params from DATABASE_URL
-        # Format: postgresql+asyncpg://user:pass@host:port/dbname
         url = settings.database_url.replace("+asyncpg", "")
         parsed = urlparse(url)
         host = parsed.hostname or "localhost"
@@ -262,13 +386,6 @@ class BackupService:
         user = parsed.username or "bioaf_app"
         password = parsed.password or ""
         dbname = parsed.path.lstrip("/") or "bioaf"
-
-        if settings.compute_mode == "local":
-            pg_dir = os.path.join(settings.backup_local_dir, "postgres")
-            os.makedirs(pg_dir, exist_ok=True)
-            output_path = os.path.join(pg_dir, filename)
-        else:
-            output_path = f"/tmp/{filename}"
 
         env = {**os.environ, "PGPASSWORD": password}
         try:
@@ -293,18 +410,30 @@ class BackupService:
 
             if process.returncode != 0:
                 logger.error("pg_dump failed (exit %d): %s", process.returncode, stderr.decode())
-                # Clean up failed dump
                 if os.path.exists(output_path):
                     os.remove(output_path)
                 return {"status": "error", "message": stderr.decode()[:500]}
 
             size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+
+            # Upload to GCS
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(f"postgres/{filename}")
+            blob.upload_from_filename(output_path)
+
+            # Remove local temp file
+            os.remove(output_path)
+
+            # Rotate old backups in GCS
+            deleted = _rotate_gcs_blobs(
+                client, bucket_name, "postgres/", _PG_FILENAME_RE, settings.backup_postgres_retention_days
+            )
+            if deleted:
+                logger.info("Rotated %d old postgres backups", deleted)
+
             duration = time.monotonic() - start
-
-            # Rotate old backups
-            if settings.compute_mode == "local":
-                BackupService.rotate_local_backups(pg_dir, _PG_FILENAME_RE, settings.backup_postgres_retention_days)
-
             logger.info("pg_dump completed: %s (%d bytes, %.1fs)", filename, size, duration)
             return {
                 "status": "completed",
@@ -318,29 +447,15 @@ class BackupService:
             return {"status": "error", "message": "pg_dump binary not found"}
         except Exception as e:
             logger.error("pg_dump backup failed: %s", e)
+            # Clean up temp file on failure
+            if os.path.exists(output_path):
+                os.remove(output_path)
             return {"status": "error", "message": str(e)[:500]}
 
     @staticmethod
-    def rotate_local_backups(directory: str, pattern: re.Pattern, retention_days: int) -> int:
-        """Delete local backup files older than retention_days. Returns count deleted."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
-        deleted = 0
-        if not os.path.isdir(directory):
-            return 0
-        for name in os.listdir(directory):
-            ts = _parse_timestamp(name, pattern)
-            if ts and ts < cutoff:
-                try:
-                    os.remove(os.path.join(directory, name))
-                    deleted += 1
-                except OSError as e:
-                    logger.warning("Failed to delete old backup %s: %s", name, e)
-        return deleted
-
-    @staticmethod
-    async def check_backup_health(org_id: int) -> None:
+    async def check_backup_health(session: AsyncSession, org_id: int) -> None:
         """Background health check: emit event if any backup is overdue."""
-        status = await BackupService.get_backup_status(org_id)
+        status = await BackupService.get_backup_status(session, org_id)
         now = datetime.now(timezone.utc)
 
         for tier in status["tiers"]:
