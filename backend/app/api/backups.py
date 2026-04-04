@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_permission
 from app.database import get_session
 from app.schemas.backup import (
+    BackupSettingsResponse,
     BackupSettingsUpdate,
     BackupStatusResponse,
     BackupTierStatus,
@@ -100,6 +101,26 @@ async def trigger_postgres_backup(
     return result
 
 
+@router.post("/trigger/config")
+async def trigger_config_backup(
+    current_user: dict = require_permission("backups", "create"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Trigger a manual platform config backup to GCS."""
+    result = await BackupService.run_config_backup(session, current_user["org_id"])
+    if result["status"] == "error":
+        raise HTTPException(500, detail=result.get("message", "Backup failed"))
+    return result
+
+
+@router.get("/settings", response_model=BackupSettingsResponse)
+async def get_backup_settings(
+    current_user: dict = require_permission("backups", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    return await BackupService.get_backup_settings(session)
+
+
 @router.put("/settings")
 async def update_backup_settings(
     body: BackupSettingsUpdate,
@@ -109,9 +130,14 @@ async def update_backup_settings(
     errors = []
     if body.postgres_retention_days is not None and body.postgres_retention_days < 1:
         errors.append("PostgreSQL backup retention must be at least 1 day")
+    if body.postgres_schedule_hours is not None and body.postgres_schedule_hours < 1:
+        errors.append("PostgreSQL backup schedule must be at least 1 hour")
     if body.config_retention_days is not None and body.config_retention_days < 1:
         errors.append("Config backup retention must be at least 1 day")
+    if body.config_schedule_hours is not None and body.config_schedule_hours < 1:
+        errors.append("Config backup schedule must be at least 1 hour")
     if errors:
         raise HTTPException(400, detail="; ".join(errors))
 
-    return {"status": "updated", "settings": body.model_dump(exclude_unset=True)}
+    updated = await BackupService.update_backup_settings(session, body.model_dump(exclude_unset=True))
+    return {"status": "updated", "settings": updated}

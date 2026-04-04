@@ -121,6 +121,54 @@ async def test_postgres_snapshots_empty(client: AsyncClient, admin_token: str):
 
 
 @pytest.mark.asyncio
+async def test_trigger_config_backup_via_api(client: AsyncClient, admin_token: str):
+    """Trigger config backup endpoint calls run_config_backup."""
+    with patch(
+        "app.api.backups.BackupService.run_config_backup",
+        new_callable=AsyncMock,
+        return_value={
+            "status": "completed",
+            "filename": "config-test.json",
+            "size_bytes": 512,
+        },
+    ):
+        response = await client.post(
+            "/api/backups/trigger/config",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_get_backup_settings(client: AsyncClient, admin_token: str):
+    response = await client.get(
+        "/api/backups/settings",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "postgres_retention_days" in data
+    assert "postgres_schedule_hours" in data
+    assert "config_retention_days" in data
+    assert "config_schedule_hours" in data
+
+
+@pytest.mark.asyncio
+async def test_update_backup_settings_returns_updated_values(client: AsyncClient, admin_token: str):
+    """Settings update returns the persisted values."""
+    response = await client.put(
+        "/api/backups/settings",
+        json={"postgres_retention_days": 21, "config_schedule_hours": 12},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["settings"]["postgres_retention_days"] == 21
+    assert data["settings"]["config_schedule_hours"] == 12
+
+
+@pytest.mark.asyncio
 async def test_backup_health_check(admin_user, session):
     """Test backup health check does not error."""
     from app.services.backup_service import BackupService

@@ -470,6 +470,107 @@ class BackupService:
             return {"status": "error", "message": str(e)[:500]}
 
     @staticmethod
+    async def run_config_backup(session: AsyncSession, org_id: int) -> dict:
+        """Export platform_config to JSON and upload to GCS."""
+        bucket_name = await _get_backups_bucket(session)
+        if not bucket_name:
+            return {"status": "error", "message": "No backups bucket configured"}
+
+        now = datetime.now(timezone.utc)
+        filename = f"config-{now.strftime(_TIMESTAMP_FMT)}.json"
+        output_path = f"/tmp/{filename}"
+
+        try:
+            import json
+
+            # Export platform_config table
+            result = await session.execute(text("SELECT key, value FROM platform_config"))
+            config_data = {r[0]: r[1] for r in result.fetchall()}
+            config_data["_exported_at"] = now.isoformat()
+
+            with open(output_path, "w") as f:
+                json.dump(config_data, f, indent=2)
+
+            size = os.path.getsize(output_path)
+
+            # Upload to GCS
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(f"config/{filename}")
+            blob.upload_from_filename(output_path)
+
+            os.remove(output_path)
+
+            # Rotate old config backups
+            retention = await BackupService._get_setting(session, "config_retention_days")
+            deleted = _rotate_gcs_blobs(client, bucket_name, "config/", _CONFIG_FILENAME_RE, retention)
+            if deleted:
+                logger.info("Rotated %d old config backups", deleted)
+
+            logger.info("Config backup completed: %s (%d bytes)", filename, size)
+            return {"status": "completed", "filename": filename, "size_bytes": size}
+
+        except Exception as e:
+            logger.error("Config backup failed: %s", e)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            return {"status": "error", "message": str(e)[:500]}
+
+    @staticmethod
+    async def get_backup_settings(session: AsyncSession) -> dict:
+        """Read backup schedule and retention settings from platform_config."""
+        keys = [
+            "backup_postgres_retention_days",
+            "backup_postgres_schedule_hours",
+            "backup_config_retention_days",
+            "backup_config_schedule_hours",
+        ]
+        result = await session.execute(
+            text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=keys)
+        )
+        stored = {r[0]: r[1] for r in result.fetchall()}
+
+        return {
+            "postgres_retention_days": int(
+                stored.get("backup_postgres_retention_days", settings.backup_postgres_retention_days)
+            ),
+            "postgres_schedule_hours": int(
+                stored.get("backup_postgres_schedule_hours", settings.backup_postgres_interval_hours)
+            ),
+            "config_retention_days": int(
+                stored.get("backup_config_retention_days", settings.backup_config_retention_days)
+            ),
+            "config_schedule_hours": int(stored.get("backup_config_schedule_hours", "24")),
+        }
+
+    @staticmethod
+    async def update_backup_settings(session: AsyncSession, updates: dict) -> dict:
+        """Persist backup settings to platform_config."""
+        key_map = {
+            "postgres_retention_days": "backup_postgres_retention_days",
+            "postgres_schedule_hours": "backup_postgres_schedule_hours",
+            "config_retention_days": "backup_config_retention_days",
+            "config_schedule_hours": "backup_config_schedule_hours",
+        }
+        for field, config_key in key_map.items():
+            if field in updates and updates[field] is not None:
+                await session.execute(
+                    text(
+                        "INSERT INTO platform_config (key, value) VALUES (:k, :v) "
+                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()"
+                    ).bindparams(k=config_key, v=str(updates[field]))
+                )
+        await session.flush()
+        return await BackupService.get_backup_settings(session)
+
+    @staticmethod
+    async def _get_setting(session: AsyncSession, key: str) -> int:
+        """Read a single backup setting with fallback to defaults."""
+        s = await BackupService.get_backup_settings(session)
+        return s.get(key, 14)
+
+    @staticmethod
     async def check_backup_health(session: AsyncSession, org_id: int) -> None:
         """Background health check: emit event if any backup is overdue."""
         status = await BackupService.get_backup_status(session, org_id)

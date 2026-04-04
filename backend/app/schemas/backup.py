@@ -62,6 +62,15 @@ class RestoreResponse(BaseModel):
     message: str
 
 
+class BackupSettingsResponse(BaseModel):
+    postgres_retention_days: int
+    postgres_schedule_hours: int
+    config_retention_days: int
+    config_schedule_hours: int
+
+
 class BackupSettingsUpdate(BaseModel):
     postgres_retention_days: int | None = None
+    postgres_schedule_hours: int | None = None
     config_retention_days: int | None = None
+    config_schedule_hours: int | None = None
