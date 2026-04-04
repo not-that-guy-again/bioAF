@@ -250,7 +250,14 @@ class KubernetesNotebookProvider(NotebookProvider):
         """Ensure the notebook namespace and service account exist."""
         from kubernetes.client.rest import ApiException
 
+        # Always patch the SA annotation when a SA email is provided, even if
+        # the namespace was already set up on a previous call.  The annotation
+        # may be missing if the namespace was created before Workload Identity
+        # was configured.
         if self._namespace_ready:
+            if gcp_sa_email:
+                core_v1 = self._get_k8s_core_client()
+                self._patch_sa_annotation(core_v1, namespace, gcp_sa_email)
             return
 
         core_v1 = self._get_k8s_core_client()
@@ -333,7 +340,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                 )
                 logger.info("Patched Workload Identity annotation on bioaf-notebook-runner")
         except Exception:
-            logger.warning("Could not patch SA annotation for Workload Identity")
+            logger.exception("Failed to patch Workload Identity annotation on bioaf-notebook-runner")
 
     # -- K8s API implementations (production) --
 
