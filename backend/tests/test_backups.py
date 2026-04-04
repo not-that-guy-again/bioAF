@@ -243,7 +243,7 @@ async def test_run_postgres_backup_uploads_to_gcs():
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
-    mock_result.fetchone.return_value = ("my-backups-bucket",)
+    mock_result.fetchall.return_value = [("config_backups_bucket_name", "my-backups-bucket")]
     mock_session.execute = AsyncMock(return_value=mock_result)
 
     with (
@@ -269,17 +269,15 @@ async def test_run_postgres_backup_uploads_to_gcs():
 
 @pytest.mark.asyncio
 async def test_run_postgres_backup_no_bucket_configured():
-    """Returns error if no backups bucket is configured."""
+    """Returns error if no backups bucket is configured in platform_config."""
     from app.services.backup_service import BackupService
 
     mock_session = AsyncMock()
     mock_result = MagicMock()
-    mock_result.fetchone.return_value = None
+    mock_result.fetchall.return_value = []
     mock_session.execute = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.backup_service.settings") as mock_settings:
-        mock_settings.backups_bucket_name = ""
-        result = await BackupService.run_postgres_backup(mock_session, org_id=1)
+    result = await BackupService.run_postgres_backup(mock_session, org_id=1)
 
     assert result["status"] == "error"
     assert "bucket" in result["message"].lower()

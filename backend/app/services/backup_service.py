@@ -56,13 +56,30 @@ def _tier_status_from_age(last_backup: datetime | None, interval_hours: int) -> 
 
 
 async def _get_backups_bucket(session: AsyncSession) -> str:
-    """Read backups_bucket_name from platform_config, fall back to settings."""
-    result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'backups_bucket_name'"))
-    row = result.fetchone()
-    bucket = row[0] if row else ""
+    """Read backup bucket from platform_config.
+
+    Checks backups_bucket_name first (persistent bucket from foundation module),
+    then falls back to config_backups_bucket_name (existing bucket from storage
+    deployment). Returns empty string if neither is configured.
+    """
+    result = await session.execute(
+        text(
+            "SELECT key, value FROM platform_config WHERE key IN ('backups_bucket_name', 'config_backups_bucket_name')"
+        )
+    )
+    config = {r[0]: r[1] for r in result.fetchall()}
+
+    # Prefer the persistent backups bucket from foundation module
+    bucket = config.get("backups_bucket_name", "")
     if bucket and bucket != "null":
         return bucket
-    return settings.backups_bucket_name
+
+    # Fall back to the existing config backups bucket from storage module
+    bucket = config.get("config_backups_bucket_name", "")
+    if bucket and bucket != "null":
+        return bucket
+
+    return ""
 
 
 def _get_gcs_client(credentials=None):

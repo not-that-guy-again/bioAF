@@ -67,7 +67,6 @@ class Settings(BaseSettings):
     backup_postgres_interval_hours: int = 24
     backup_postgres_retention_days: int = 14
     backup_config_retention_days: int = 30
-    backups_bucket_name: str = ""
 
     # Bcrypt
     bcrypt_rounds: int = 12
