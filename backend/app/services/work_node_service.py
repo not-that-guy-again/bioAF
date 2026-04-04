@@ -108,6 +108,15 @@ class WorkNodeService:
         session.add(compute_session)
         await session.flush()
 
+        # Look up working bucket and SA email for GCS mounts
+        config_rows = await session.execute(
+            text(
+                "SELECT key, value FROM platform_config "
+                "WHERE key IN ('working_bucket_name', 'notebook_runner_sa_email')"
+            )
+        )
+        config_map = {row[0]: row[1] for row in config_rows.all()}
+
         # Launch via adapter
         try:
             adapter = get_notebook_adapter()
@@ -129,6 +138,14 @@ class WorkNodeService:
                     "password_hash": cred.password_hash,
                 },
             }
+
+            bucket_name = (config_map.get("working_bucket_name") or "").strip()
+            if bucket_name and bucket_name != "null":
+                spec["working_bucket"] = bucket_name
+
+            sa_email = (config_map.get("notebook_runner_sa_email") or "").strip()
+            if sa_email and sa_email != "null":
+                spec["notebook_runner_sa_email"] = sa_email
 
             result = await adapter.launch_session(spec)
 

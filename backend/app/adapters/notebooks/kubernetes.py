@@ -337,20 +337,18 @@ class KubernetesNotebookProvider(NotebookProvider):
 
     # -- K8s API implementations (production) --
 
-    async def _k8s_launch_session(self, session_spec: dict) -> dict:
-        """Launch a notebook pod on the GKE interactive node pool."""
-        # Ensure API client is initialized (handles incluster vs out-of-cluster)
-        await self._get_api_client_async()
+    def _build_pod_manifest(self, session_spec: dict) -> dict:
+        """Build a Kubernetes Pod manifest from a session spec.
 
+        Extracted from _k8s_launch_session so it can be unit-tested without
+        requiring a live K8s API client.
+        """
         session_id = session_spec.get("session_id", 0)
         session_type = session_spec.get("session_type", "jupyter")
         user_id = session_spec.get("user_id", 0)
         namespace = DEFAULT_NOTEBOOK_NAMESPACE
 
-        await self.ensure_notebook_namespace(namespace, gcp_sa_email=session_spec.get("notebook_runner_sa_email", ""))
-
         pod_name = f"bioaf-notebook-{session_id}"
-        service_name = f"bioaf-notebook-svc-{session_id}"
         working_bucket = session_spec.get("working_bucket", "bioaf-working")
         gcs_home_prefix = f"gs://{working_bucket}/notebooks/{user_id}/"
 
@@ -507,6 +505,9 @@ class KubernetesNotebookProvider(NotebookProvider):
             volumes.append({"name": "data", "emptyDir": {"sizeLimit": "50Gi"}})
             volume_mounts.append({"name": "data", "mountPath": "/data", "readOnly": True})
 
+        # Track whether any GCS FUSE CSI volumes are used
+        has_fuse_volumes = False
+
         # SSH work nodes get additional volumes: scratch and data mounts
         if session_type == "ssh":
             volume_mounts.append({"name": "scratch", "mountPath": "/scratch"})
@@ -514,6 +515,8 @@ class KubernetesNotebookProvider(NotebookProvider):
 
             # GCS FUSE data mounts (read-only)
             data_mount_paths = session_spec.get("data_mount_paths", [])
+            if data_mount_paths:
+                has_fuse_volumes = True
             for i, mount_path in enumerate(data_mount_paths):
                 vol_name = f"data-{i}"
                 volume_mounts.append(
@@ -530,7 +533,7 @@ class KubernetesNotebookProvider(NotebookProvider):
                             "driver": "gcsfuse.csi.storage.gke.io",
                             "readOnly": True,
                             "volumeAttributes": {
-                                "bucketName": "bioaf-data",
+                                "bucketName": working_bucket,
                                 "mountOptions": "implicit-dirs,file-cache:max-size-mb:-1",
                                 "gcsfuseLoggingSeverity": "warning",
                             },
@@ -600,20 +603,29 @@ class KubernetesNotebookProvider(NotebookProvider):
                 }
             )
 
+        # Pod annotations -- GCS FUSE CSI driver requires this for sidecar injection
+        annotations: dict[str, str] = {}
+        if has_fuse_volumes:
+            annotations["gke-gcsfuse/volumes"] = "true"
+
         # Pod manifest
+        metadata: dict = {
+            "name": pod_name,
+            "namespace": namespace,
+            "labels": {
+                "bioaf.io/session": str(session_id),
+                "bioaf.io/user": str(user_id),
+                "bioaf.io/type": session_type,
+                "bioaf.io/pool": node_pool,
+            },
+        }
+        if annotations:
+            metadata["annotations"] = annotations
+
         pod_manifest = {
             "apiVersion": "v1",
             "kind": "Pod",
-            "metadata": {
-                "name": pod_name,
-                "namespace": namespace,
-                "labels": {
-                    "bioaf.io/session": str(session_id),
-                    "bioaf.io/user": str(user_id),
-                    "bioaf.io/type": session_type,
-                    "bioaf.io/pool": node_pool,
-                },
-            },
+            "metadata": metadata,
             "spec": {
                 "nodeSelector": {"bioaf.io/pool": node_pool},
                 "tolerations": [
@@ -630,6 +642,34 @@ class KubernetesNotebookProvider(NotebookProvider):
                 "restartPolicy": "Never",
             },
         }
+
+        # Stash gcs_home_prefix on the manifest for the caller to use
+        pod_manifest["_gcs_home_prefix"] = gcs_home_prefix
+
+        return pod_manifest
+
+    async def _k8s_launch_session(self, session_spec: dict) -> dict:
+        """Launch a notebook pod on the GKE interactive node pool."""
+        await self._get_api_client_async()
+
+        session_id = session_spec.get("session_id", 0)
+        namespace = DEFAULT_NOTEBOOK_NAMESPACE
+
+        await self.ensure_notebook_namespace(namespace, gcp_sa_email=session_spec.get("notebook_runner_sa_email", ""))
+
+        pod_manifest = self._build_pod_manifest(session_spec)
+        gcs_home_prefix = pod_manifest.pop("_gcs_home_prefix")
+
+        pod_name = pod_manifest["metadata"]["name"]
+        service_name = f"bioaf-notebook-svc-{session_id}"
+
+        session_type = session_spec.get("session_type", "jupyter")
+        if session_type == "jupyter":
+            container_port = 8888
+        elif session_type == "ssh":
+            container_port = 22
+        else:
+            container_port = 8787
 
         core_client = self._get_k8s_core_client()
         core_client.create_namespaced_pod(namespace=namespace, body=pod_manifest)
