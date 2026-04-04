@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -45,6 +45,14 @@ interface BackupSettings {
   config_schedule_hours: number;
 }
 
+interface RestoreStatus {
+  active: boolean;
+  backup_filename?: string;
+  started_at?: string;
+  expires_at?: string;
+  seconds_remaining?: number;
+}
+
 const statusColors: Record<string, string> = {
   healthy: "bg-green-100 text-green-700",
   warning: "bg-yellow-100 text-yellow-700",
@@ -60,6 +68,13 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / 1073741824).toFixed(1)} GB`;
 }
 
+function formatMinutes(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+}
+
 export default function InfraBackupPage() {
   const router = useRouter();
   const { canAccess, loading: permLoading } = usePermissions();
@@ -69,19 +84,23 @@ export default function InfraBackupPage() {
   const [pgSnapshots, setPgSnapshots] = useState<PostgresSnapshot[]>([]);
   const [tfstateFiles, setTfstateFiles] = useState<TfstateFile[]>([]);
   const [settings, setSettings] = useState<BackupSettings | null>(null);
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus>({ active: false });
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState("");
   const [runningAction, setRunningAction] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [restoringFile, setRestoringFile] = useState("");
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      const [status, snaps, pgSnaps, tfFiles, backupSettings] = await Promise.all([
+      const [status, snaps, pgSnaps, tfFiles, backupSettings, rStatus] = await Promise.all([
         api.get<{ tiers: BackupTier[]; overall_status: string }>("/api/backups/status"),
         api.get<{ snapshots: ConfigSnapshot[] }>("/api/backups/config-snapshots"),
         api.get<{ snapshots: PostgresSnapshot[] }>("/api/backups/postgres-snapshots"),
         api.get<{ files: TfstateFile[] }>("/api/backups/tfstate-files"),
         api.get<BackupSettings>("/api/backups/settings"),
+        api.get<RestoreStatus>("/api/backups/restore/status"),
       ]);
       setTiers(status.tiers);
       setOverallStatus(status.overall_status);
@@ -89,25 +108,44 @@ export default function InfraBackupPage() {
       setPgSnapshots(pgSnaps.snapshots);
       setTfstateFiles(tfFiles.files);
       setSettings(backupSettings);
+      setRestoreStatus(rStatus);
     } catch {
       // ignore
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     if (permLoading) return;
     if (!canAccess("backups", "view")) { router.push("/dashboard"); return; }
     loadData();
-  }, [router, permLoading, canAccess]);
+  }, [router, permLoading, canAccess, loadData]);
 
-  const handleRestore = async (type: string) => {
-    if (!confirm(`Are you sure you want to initiate a ${type} restore?`)) return;
+  // Poll restore status while active
+  useEffect(() => {
+    if (restoreStatus.active) {
+      pollRef.current = setInterval(async () => {
+        try {
+          const rStatus = await api.get<RestoreStatus>("/api/backups/restore/status");
+          setRestoreStatus(rStatus);
+          if (!rStatus.active) {
+            if (pollRef.current) clearInterval(pollRef.current);
+            setActionMessage("Restore review expired. Reverted to original database.");
+            await loadData();
+          }
+        } catch { /* ignore */ }
+      }, 30000);
+      return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }
+  }, [restoreStatus.active, loadData]);
+
+  const handleConfigRestore = async () => {
+    if (!confirm("Are you sure you want to initiate a config restore?")) return;
     try {
       const data = await api.post<{ status: string; message: string }>(
-        `/api/backups/restore/${type}`,
+        "/api/backups/restore/config",
         { confirmation_token: "CONFIRM" }
       );
       setActionMessage(data.message);
@@ -130,6 +168,51 @@ export default function InfraBackupPage() {
       setActionMessage(e instanceof Error ? e.message : "Backup failed");
     } finally {
       setRunningAction("");
+    }
+  };
+
+  const handleStartRestore = async (filename: string) => {
+    const msg = `This will restore the database from "${filename}". The current database will remain available as a fallback. You will have 1 hour to review the restored data before accepting or rejecting.\n\nProceed?`;
+    if (!confirm(msg)) return;
+    setRestoringFile(filename);
+    setActionMessage("");
+    try {
+      const data = await api.post<{ status: string; message: string }>(
+        "/api/backups/restore/postgres",
+        { filename }
+      );
+      setActionMessage(data.message);
+      await loadData();
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setRestoringFile("");
+    }
+  };
+
+  const handleAcceptRestore = async () => {
+    if (!confirm("Accept this restored database? This will permanently replace the previous database. This cannot be undone.")) return;
+    setActionMessage("");
+    try {
+      const data = await api.post<{ status: string; message: string }>("/api/backups/restore/accept", {});
+      setActionMessage(data.message);
+      setRestoreStatus({ active: false });
+      await loadData();
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Accept failed");
+    }
+  };
+
+  const handleRejectRestore = async () => {
+    if (!confirm("Reject this restore and revert to the original database?")) return;
+    setActionMessage("");
+    try {
+      const data = await api.post<{ status: string; message: string }>("/api/backups/restore/reject", {});
+      setActionMessage(data.message);
+      setRestoreStatus({ active: false });
+      await loadData();
+    } catch (e) {
+      setActionMessage(e instanceof Error ? e.message : "Reject failed");
     }
   };
 
@@ -158,6 +241,44 @@ export default function InfraBackupPage() {
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-6">Backup & Recovery</h1>
+
+          {/* Restore review banner */}
+          {restoreStatus.active && (
+            <div className="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-300">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    Reviewing restored database
+                  </p>
+                  <p className="text-sm text-amber-700 mt-1">
+                    Restored from <span className="font-mono">{restoreStatus.backup_filename}</span>.
+                    {restoreStatus.seconds_remaining !== undefined && (
+                      <> Auto-reverts in <span className="font-semibold">{formatMinutes(restoreStatus.seconds_remaining)}</span>.</>
+                    )}
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1">
+                    Browse the application to verify data. Accept to make permanent, or reject to revert.
+                  </p>
+                </div>
+                {canAccess("backups", "restore") && (
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={handleRejectRestore}
+                      className="text-sm px-4 py-2 rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={handleAcceptRestore}
+                      className="text-sm px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
+                    >
+                      Accept
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {actionMessage && (
             <div className="mb-4 p-3 rounded bg-blue-50 text-blue-700 text-sm">
@@ -224,7 +345,7 @@ export default function InfraBackupPage() {
                     {tier.tier === "postgres" && canAccess("backups", "create") && (
                       <button
                         onClick={() => handleTriggerBackup("postgres")}
-                        disabled={runningAction !== ""}
+                        disabled={runningAction !== "" || restoreStatus.active}
                         className="mt-3 w-full text-sm bg-blue-50 text-blue-700 px-3 py-1.5 rounded hover:bg-blue-100 disabled:opacity-50"
                       >
                         {runningAction === "postgres" ? "Running..." : "Run Backup Now"}
@@ -241,7 +362,7 @@ export default function InfraBackupPage() {
                     )}
                     {tier.tier === "platform_config" && canAccess("backups", "restore") && (
                       <button
-                        onClick={() => handleRestore("config")}
+                        onClick={handleConfigRestore}
                         className="mt-1 w-full text-sm bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200"
                       >
                         Restore
@@ -327,12 +448,15 @@ export default function InfraBackupPage() {
                       <th className="text-left px-4 py-3 font-medium text-gray-700">Filename</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-700">Date</th>
                       <th className="text-left px-4 py-3 font-medium text-gray-700">Size</th>
+                      {canAccess("backups", "restore") && (
+                        <th className="text-left px-4 py-3 font-medium text-gray-700"></th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {pgSnapshots.length === 0 ? (
                       <tr>
-                        <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
+                        <td colSpan={canAccess("backups", "restore") ? 4 : 3} className="px-4 py-8 text-center text-gray-500">
                           No snapshots available
                         </td>
                       </tr>
@@ -342,6 +466,17 @@ export default function InfraBackupPage() {
                           <td className="px-4 py-2.5 text-gray-900 font-mono text-xs">{s.filename}</td>
                           <td className="px-4 py-2.5 text-gray-600">{s.date}</td>
                           <td className="px-4 py-2.5 text-gray-600">{formatBytes(s.size_bytes)}</td>
+                          {canAccess("backups", "restore") && (
+                            <td className="px-4 py-2.5">
+                              <button
+                                onClick={() => handleStartRestore(s.filename)}
+                                disabled={restoreStatus.active || restoringFile !== ""}
+                                className="text-xs text-amber-600 hover:text-amber-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {restoringFile === s.filename ? "Restoring..." : "Restore"}
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
