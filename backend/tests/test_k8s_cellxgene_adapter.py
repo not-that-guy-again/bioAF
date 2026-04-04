@@ -31,6 +31,12 @@ def mock_k8s(adapter):
 
     with (
         patch.object(adapter, "_get_api_client_async", new_callable=AsyncMock),
+        patch.object(
+            adapter,
+            "_resolve_image",
+            new_callable=AsyncMock,
+            return_value="us-central1-docker.pkg.dev/p/r/bioaf-cellxgene:latest",
+        ),
         patch.object(adapter, "_get_k8s_apps_client", return_value=mock_apps),
         patch.object(adapter, "_get_k8s_core_client", return_value=mock_core),
         patch.object(adapter, "_get_k8s_rbac_client", return_value=mock_rbac),

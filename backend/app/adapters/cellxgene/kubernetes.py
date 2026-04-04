@@ -55,8 +55,26 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
         self._cluster_config: dict | None = None
         self._namespace_ready = False
 
+    async def _resolve_image(self) -> str:
+        """Read the cellxgene image URI from platform_config."""
+        if not self._session_factory:
+            raise RuntimeError("No session_factory; cannot resolve cellxgene image URI")
+
+        from sqlalchemy import text as sa_text
+
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(sa_text("SELECT value FROM platform_config WHERE key = 'cellxgene_image'"))
+            ).fetchone()
+
+        uri = row[0] if row else None
+        if not uri or uri == "null":
+            raise RuntimeError("Cellxgene image not built yet. Enable the cellxgene component to trigger a build.")
+        return uri
+
     async def deploy(self, publication_id: int, gcs_uri: str, dataset_name: str) -> dict:
         await self._get_api_client_async()
+        image = await self._resolve_image()
 
         namespace = DEFAULT_CELLXGENE_NAMESPACE
         await self.ensure_cellxgene_namespace(namespace)
@@ -92,7 +110,7 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                         containers=[
                             client.V1Container(
                                 name="cellxgene",
-                                image="cellxgene:latest",
+                                image=image,
                                 args=["launch", "--host", "0.0.0.0", gcs_uri],
                                 ports=[client.V1ContainerPort(container_port=5005)],
                                 resources=client.V1ResourceRequirements(
@@ -480,9 +498,7 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
             logger.exception("Background poll failed for cellxgene %s", name)
             await self._update_publication_in_db(publication_id, "failed", None)
 
-    async def _update_publication_in_db(
-        self, publication_id: int, status: str, access_url: str | None
-    ) -> None:
+    async def _update_publication_in_db(self, publication_id: int, status: str, access_url: str | None) -> None:
         if not self._session_factory:
             logger.warning("No session_factory, cannot update publication %s in DB", publication_id)
             return
@@ -509,7 +525,9 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                 await db.commit()
                 logger.info(
                     "Updated publication %s: status=%s access_url=%s",
-                    publication_id, status, access_url,
+                    publication_id,
+                    status,
+                    access_url,
                 )
         except Exception:
             logger.exception("Failed to update publication %s in DB", publication_id)

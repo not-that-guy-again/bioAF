@@ -39,6 +39,8 @@ from app.services.terraform_executor import TerraformExecutor
 
 # Components that require the bioaf-scrna notebook image
 _NOTEBOOK_COMPONENTS = {"rstudio", "jupyterhub"}
+# Components that require the cellxgene image
+_CELLXGENE_COMPONENTS = {"cellxgene"}
 
 logger = logging.getLogger("bioaf.stack_deploy_api")
 
@@ -629,6 +631,28 @@ async def stack_component_toggle(
                     new_status = "provisioning"
                 except Exception as exc:
                     logger.warning("Failed to start notebook image build: %s", exc)
+                    new_status = "build_failed"
+
+        # Cellxgene needs its own image
+        if component_key in _CELLXGENE_COMPONENTS:
+            from app.services.cellxgene_image_service import build_cellxgene_image
+
+            cxg_image = (
+                await session.execute(text("SELECT value FROM platform_config WHERE key = 'cellxgene_image'"))
+            ).scalar_one_or_none()
+            cxg_build_status = (
+                await session.execute(
+                    text("SELECT value FROM platform_config WHERE key = 'cellxgene_image_build_status'")
+                )
+            ).scalar_one_or_none()
+
+            needs_build = not cxg_image or cxg_image == "null" or cxg_build_status not in ("SUCCESS",)
+            if needs_build:
+                try:
+                    await build_cellxgene_image(session)
+                    new_status = "provisioning"
+                except Exception as exc:
+                    logger.warning("Failed to start cellxgene image build: %s", exc)
                     new_status = "build_failed"
 
         await session.execute(
