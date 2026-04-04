@@ -119,8 +119,8 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
             ),
             spec=client.V1ServiceSpec(
                 selector={"app": name},
-                ports=[client.V1ServicePort(port=80, target_port=5005)],
-                type="ClusterIP",
+                ports=[client.V1ServicePort(port=5005, target_port=5005)],
+                type="LoadBalancer",
             ),
         )
         core_v1.create_namespaced_service(namespace=namespace, body=service)
@@ -420,28 +420,69 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
     # -- Background readiness polling --
 
     async def _poll_deployment_ready(self, publication_id: int, name: str, namespace: str) -> None:
-        """Background: poll for deployment readiness, then update the DB."""
+        """Background: poll for deployment readiness and LB IP, then update the DB."""
         try:
+            import httpx
+
             apps_v1 = self._get_k8s_apps_client()
 
+            # Wait for deployment readiness (up to 5 minutes)
+            deployment_ready = False
             for _ in range(60):
                 try:
                     dep = apps_v1.read_namespaced_deployment_status(name=name, namespace=namespace)
                     if dep.status.ready_replicas and dep.status.ready_replicas >= 1:
-                        logger.info("Cellxgene deployment %s is ready", name)
-                        await self._update_publication_status(publication_id, "published")
-                        return
+                        deployment_ready = True
+                        break
                 except Exception:
                     pass
                 await asyncio.sleep(5)
 
-            logger.error("Cellxgene deployment %s not ready after 5 min", name)
-            await self._update_publication_status(publication_id, "failed")
+            if not deployment_ready:
+                logger.error("Cellxgene deployment %s not ready after 5 min", name)
+                await self._update_publication_in_db(publication_id, "failed", None)
+                return
+
+            logger.info("Cellxgene deployment %s is ready, waiting for LB IP", name)
+
+            # Wait for LoadBalancer external IP (up to 3 minutes)
+            api_client = self._get_api_client()
+            k8s_config = api_client.configuration
+            svc_url = f"{k8s_config.host}/api/v1/namespaces/{namespace}/services/{name}"
+            headers = {"Authorization": list(k8s_config.api_key.values())[0]}
+
+            access_url = None
+            for _ in range(36):
+                try:
+                    resp = httpx.get(
+                        svc_url,
+                        headers=headers,
+                        verify=k8s_config.ssl_ca_cert or False,
+                        timeout=10,
+                    )
+                    if resp.status_code == 200:
+                        ingress_list = resp.json().get("status", {}).get("loadBalancer", {}).get("ingress") or []
+                        if ingress_list:
+                            ext_ip = ingress_list[0].get("ip") or ingress_list[0].get("hostname")
+                            access_url = f"http://{ext_ip}:5005"
+                            logger.info("External URL for cellxgene %s: %s", publication_id, access_url)
+                            break
+                except Exception:
+                    pass
+                await asyncio.sleep(5)
+
+            if not access_url:
+                logger.warning("LoadBalancer IP not ready for cellxgene %s after 3 min", name)
+
+            await self._update_publication_in_db(publication_id, "published", access_url)
+
         except Exception:
             logger.exception("Background poll failed for cellxgene %s", name)
-            await self._update_publication_status(publication_id, "failed")
+            await self._update_publication_in_db(publication_id, "failed", None)
 
-    async def _update_publication_status(self, publication_id: int, status: str) -> None:
+    async def _update_publication_in_db(
+        self, publication_id: int, status: str, access_url: str | None
+    ) -> None:
         if not self._session_factory:
             logger.warning("No session_factory, cannot update publication %s in DB", publication_id)
             return
@@ -454,9 +495,11 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                 if status == "published":
                     await db.execute(
                         text(
-                            "UPDATE cellxgene_publications SET status = :status, published_at = :now WHERE id = :id"
+                            "UPDATE cellxgene_publications "
+                            "SET status = :status, published_at = :now, access_url = :url "
+                            "WHERE id = :id"
                         ),
-                        {"status": status, "now": now, "id": publication_id},
+                        {"status": status, "now": now, "url": access_url, "id": publication_id},
                     )
                 else:
                     await db.execute(
@@ -464,6 +507,9 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                         {"status": status, "id": publication_id},
                     )
                 await db.commit()
-                logger.info("Updated publication %s: status=%s", publication_id, status)
+                logger.info(
+                    "Updated publication %s: status=%s access_url=%s",
+                    publication_id, status, access_url,
+                )
         except Exception:
             logger.exception("Failed to update publication %s in DB", publication_id)

@@ -30,6 +30,7 @@ def _pub_response(pub) -> CellxgenePublicationResponse:
         id=pub.id,
         dataset_name=pub.dataset_name,
         stable_url=pub.stable_url,
+        access_url=pub.access_url,
         status=pub.status,
         file=file_resp,
         experiment_id=pub.experiment_id,

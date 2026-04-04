@@ -16,6 +16,7 @@ class CellxgenePublicationResponse(BaseModel):
     id: int
     dataset_name: str
     stable_url: str | None
+    access_url: str | None
     status: str
     file: FileResponse | None = None
     experiment_id: int | None

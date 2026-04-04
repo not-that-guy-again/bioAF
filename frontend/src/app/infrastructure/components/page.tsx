@@ -14,6 +14,7 @@ import { DeployRecoveryModal } from "@/components/infrastructure/DeployRecoveryM
 import { useDeploymentProgress } from "@/hooks/useDeploymentProgress";
 import { isAuthenticated } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { invalidateComponentCache } from "@/hooks/useComponents";
 
 interface TerraformStatus {
   terraform_initialized: boolean;
@@ -364,6 +365,7 @@ export default function InfraComponentsPage() {
     setTogglingComponent(componentKey);
     try {
       await api.post(`/api/v1/infrastructure/stack/components/${componentKey}/toggle`);
+      invalidateComponentCache();
       setRefreshKey((k) => k + 1);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Toggle failed";
@@ -394,6 +396,7 @@ export default function InfraComponentsPage() {
       // Disable then re-enable to trigger a fresh build
       await api.post(`/api/v1/infrastructure/stack/components/${componentKey}/toggle`);
       await api.post(`/api/v1/infrastructure/stack/components/${componentKey}/toggle`);
+      invalidateComponentCache();
       setRefreshKey((k) => k + 1);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Retry failed";

@@ -69,6 +69,12 @@ class TestCellxgeneDeploy:
         call_kwargs = mock_k8s["apps"].create_namespaced_deployment.call_args[1]
         assert call_kwargs["namespace"] == "bioaf-cellxgene"
 
+    @pytest.mark.asyncio
+    async def test_deploy_creates_loadbalancer_service(self, adapter, mock_k8s):
+        await adapter.deploy(1, "gs://bucket/data.h5ad", "Dataset")
+        svc_body = mock_k8s["core"].create_namespaced_service.call_args[1]["body"]
+        assert svc_body.spec.type == "LoadBalancer"
+
 
 class TestCellxgeneTeardown:
     @pytest.mark.asyncio

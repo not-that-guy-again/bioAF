@@ -818,6 +818,7 @@ export interface CellxgenePublicationResponse {
   id: number;
   dataset_name: string;
   stable_url: string | null;
+  access_url: string | null;
   status: string;
   file: FileResponse | null;
   experiment_id: number | null;

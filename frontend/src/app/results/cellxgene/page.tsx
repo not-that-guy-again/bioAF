@@ -190,15 +190,20 @@ function PublicationCard({
         </div>
       </div>
       <div className="flex gap-3 items-center ml-4 shrink-0">
-        {isActive && pub.stable_url && (
+        {isActive && pub.access_url && (
           <a
-            href={pub.stable_url}
+            href={pub.access_url}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3 py-1 text-sm font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
           >
             Open
           </a>
+        )}
+        {isActive && !pub.access_url && (
+          <span className="px-3 py-1 text-sm text-gray-400">
+            Starting...
+          </span>
         )}
         {isActive && (
           <button
