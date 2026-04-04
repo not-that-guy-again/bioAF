@@ -77,16 +77,49 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
             raise RuntimeError("Cellxgene image not built yet. Enable the cellxgene component to trigger a build.")
         return uri
 
+    async def _ensure_gcp_secret(self, namespace: str) -> None:
+        """Create or update a K8s Secret with the GCP service account key."""
+        from kubernetes.client.rest import ApiException
+
+        config = await self._read_platform_config("gcp_service_account_key")
+        sa_key = config.get("gcp_service_account_key", "")
+        if not sa_key or sa_key == "null":
+            logger.warning("No GCP service account key in platform_config; skipping secret")
+            return
+
+        core_v1 = self._get_k8s_core_client()
+        secret_name = "gcp-sa-key"
+
+        secret = client.V1Secret(
+            metadata=client.V1ObjectMeta(
+                name=secret_name,
+                namespace=namespace,
+                labels={"bioaf.io/managed": "true"},
+            ),
+            string_data={"key.json": sa_key},
+        )
+
+        try:
+            core_v1.read_namespaced_secret(name=secret_name, namespace=namespace)
+            core_v1.replace_namespaced_secret(name=secret_name, namespace=namespace, body=secret)
+            logger.info("Updated GCP SA secret in %s", namespace)
+        except ApiException as e:
+            if e.status == 404:
+                core_v1.create_namespaced_secret(namespace=namespace, body=secret)
+                logger.info("Created GCP SA secret in %s", namespace)
+            else:
+                raise
+
     async def deploy(self, publication_id: int, gcs_uri: str, dataset_name: str) -> dict:
         await self._get_api_client_async()
         image = await self._resolve_image()
 
         namespace = DEFAULT_CELLXGENE_NAMESPACE
-        config = await self._read_platform_config("notebook_runner_sa_email")
-        sa_email = (config.get("notebook_runner_sa_email") or "").strip()
-        await self.ensure_cellxgene_namespace(namespace, gcp_sa_email=sa_email)
+        await self.ensure_cellxgene_namespace(namespace)
+        await self._ensure_gcp_secret(namespace)
 
         name = f"cellxgene-{publication_id}"
+        local_path = "/data/dataset.h5ad"
         apps_v1 = self._get_k8s_apps_client()
         core_v1 = self._get_k8s_core_client()
 
@@ -114,17 +147,47 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                                 effect="NoSchedule",
                             )
                         ],
+                        init_containers=[
+                            client.V1Container(
+                                name="gcs-download",
+                                image="google/cloud-sdk:slim",
+                                command=["/bin/sh", "-c", f"gsutil cp '{gcs_uri}' {local_path}"],
+                                env=[
+                                    client.V1EnvVar(
+                                        name="GOOGLE_APPLICATION_CREDENTIALS",
+                                        value="/gcp/key.json",
+                                    )
+                                ],
+                                volume_mounts=[
+                                    client.V1VolumeMount(name="data", mount_path="/data"),
+                                    client.V1VolumeMount(name="gcp-sa", mount_path="/gcp", read_only=True),
+                                ],
+                            )
+                        ],
                         containers=[
                             client.V1Container(
                                 name="cellxgene",
                                 image=image,
-                                args=["launch", "--host", "0.0.0.0", gcs_uri],
+                                args=["launch", "--host", "0.0.0.0", local_path],
                                 ports=[client.V1ContainerPort(container_port=5005)],
+                                volume_mounts=[
+                                    client.V1VolumeMount(name="data", mount_path="/data", read_only=True),
+                                ],
                                 resources=client.V1ResourceRequirements(
                                     requests={"cpu": "1", "memory": "4Gi"},
                                     limits={"cpu": "2", "memory": "8Gi"},
                                 ),
                             )
+                        ],
+                        volumes=[
+                            client.V1Volume(
+                                name="data",
+                                empty_dir=client.V1EmptyDirVolumeSource(size_limit="20Gi"),
+                            ),
+                            client.V1Volume(
+                                name="gcp-sa",
+                                secret=client.V1SecretVolumeSource(secret_name="gcp-sa-key"),
+                            ),
                         ],
                     ),
                 ),
@@ -354,9 +417,7 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
 
     # -- Namespace setup --
 
-    async def ensure_cellxgene_namespace(
-        self, namespace: str = DEFAULT_CELLXGENE_NAMESPACE, gcp_sa_email: str = ""
-    ) -> None:
+    async def ensure_cellxgene_namespace(self, namespace: str = DEFAULT_CELLXGENE_NAMESPACE) -> None:
         """Ensure the cellxgene namespace and service account exist."""
         from kubernetes.client.rest import ApiException
 
@@ -369,9 +430,6 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
         try:
             core_v1.read_namespace(name=namespace)
             logger.info("Namespace %s already exists, skipping setup", namespace)
-            if gcp_sa_email:
-                self._patch_sa_annotation(core_v1, namespace, gcp_sa_email)
-                await self._ensure_workload_identity_binding(gcp_sa_email, namespace)
             self._namespace_ready = True
             return
         except ApiException as e:
@@ -388,17 +446,12 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
         )
         logger.info("Created namespace %s", namespace)
 
-        sa_annotations = {}
-        if gcp_sa_email:
-            sa_annotations["iam.gke.io/gcp-service-account"] = gcp_sa_email
-
         core_v1.create_namespaced_service_account(
             namespace=namespace,
             body=client.V1ServiceAccount(
                 metadata=client.V1ObjectMeta(
                     name="bioaf-cellxgene-runner",
                     labels={"bioaf.io/managed": "true"},
-                    annotations=sa_annotations or None,
                 )
             ),
         )
@@ -426,102 +479,7 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
             ),
         )
         logger.info("Created role binding in %s", namespace)
-
-        # Bind the KSA to the GCP SA for Workload Identity
-        if gcp_sa_email:
-            await self._ensure_workload_identity_binding(gcp_sa_email, namespace)
-
         self._namespace_ready = True
-
-    async def _ensure_workload_identity_binding(self, gcp_sa_email: str, namespace: str) -> None:
-        """Grant the cellxgene KSA permission to impersonate the GCP SA."""
-        try:
-            import google.auth
-            import google.auth.transport.requests
-            import json as _json
-            import urllib.request
-
-            config = await self._read_platform_config("gcp_credential_source", "gcp_service_account_key")
-            sa_key = config.get("gcp_service_account_key", "")
-            if sa_key and sa_key != "null":
-                from google.oauth2 import service_account as sa_mod
-
-                credentials = sa_mod.Credentials.from_service_account_info(
-                    _json.loads(sa_key),
-                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
-                )
-            else:
-                credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-
-            auth_req = google.auth.transport.requests.Request()
-            credentials.refresh(auth_req)
-
-            member = f"serviceAccount:{gcp_sa_email.split('@')[1].split('.')[0]}.svc.id.goog[{namespace}/bioaf-cellxgene-runner]"
-
-            # Get current IAM policy
-            url = f"https://iam.googleapis.com/v1/projects/-/serviceAccounts/{gcp_sa_email}:getIamPolicy"
-            req = urllib.request.Request(
-                url,
-                data=b"{}",
-                headers={
-                    "Authorization": f"Bearer {credentials.token}",
-                    "Content-Type": "application/json",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req) as resp:
-                policy = _json.loads(resp.read().decode())
-
-            # Check if binding already exists
-            bindings = policy.get("bindings", [])
-            wi_binding = None
-            for b in bindings:
-                if b["role"] == "roles/iam.workloadIdentityUser":
-                    wi_binding = b
-                    break
-
-            if wi_binding and member in wi_binding.get("members", []):
-                logger.info("Workload Identity binding already exists for %s", member)
-                return
-
-            if wi_binding:
-                wi_binding["members"].append(member)
-            else:
-                bindings.append({"role": "roles/iam.workloadIdentityUser", "members": [member]})
-            policy["bindings"] = bindings
-
-            # Set updated policy
-            set_url = f"https://iam.googleapis.com/v1/projects/-/serviceAccounts/{gcp_sa_email}:setIamPolicy"
-            set_req = urllib.request.Request(
-                set_url,
-                data=_json.dumps({"policy": policy}).encode(),
-                headers={
-                    "Authorization": f"Bearer {credentials.token}",
-                    "Content-Type": "application/json",
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(set_req) as resp:
-                resp.read()
-
-            logger.info("Added Workload Identity binding for %s on %s", member, gcp_sa_email)
-        except Exception:
-            logger.exception("Failed to set Workload Identity binding for cellxgene")
-
-    @staticmethod
-    def _patch_sa_annotation(core_v1, namespace: str, gcp_sa_email: str) -> None:
-        try:
-            sa = core_v1.read_namespaced_service_account(name="bioaf-cellxgene-runner", namespace=namespace)
-            current = (sa.metadata.annotations or {}).get("iam.gke.io/gcp-service-account", "")
-            if current != gcp_sa_email:
-                core_v1.patch_namespaced_service_account(
-                    name="bioaf-cellxgene-runner",
-                    namespace=namespace,
-                    body={"metadata": {"annotations": {"iam.gke.io/gcp-service-account": gcp_sa_email}}},
-                )
-                logger.info("Patched Workload Identity annotation on bioaf-cellxgene-runner")
-        except Exception:
-            logger.warning("Could not patch SA annotation for Workload Identity")
 
     # -- Background readiness polling --
 

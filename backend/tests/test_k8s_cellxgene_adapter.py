@@ -37,6 +37,7 @@ def mock_k8s(adapter):
             new_callable=AsyncMock,
             return_value="us-central1-docker.pkg.dev/p/r/bioaf-cellxgene:latest",
         ),
+        patch.object(adapter, "_ensure_gcp_secret", new_callable=AsyncMock),
         patch.object(adapter, "_get_k8s_apps_client", return_value=mock_apps),
         patch.object(adapter, "_get_k8s_core_client", return_value=mock_core),
         patch.object(adapter, "_get_k8s_rbac_client", return_value=mock_rbac),
@@ -80,6 +81,22 @@ class TestCellxgeneDeploy:
         await adapter.deploy(1, "gs://bucket/data.h5ad", "Dataset")
         svc_body = mock_k8s["core"].create_namespaced_service.call_args[1]["body"]
         assert svc_body.spec.type == "LoadBalancer"
+
+    @pytest.mark.asyncio
+    async def test_deploy_uses_init_container_for_gcs_download(self, adapter, mock_k8s):
+        await adapter.deploy(1, "gs://bucket/data.h5ad", "Dataset")
+        dep_body = mock_k8s["apps"].create_namespaced_deployment.call_args[1]["body"]
+        init_containers = dep_body.spec.template.spec.init_containers
+        assert len(init_containers) == 1
+        assert init_containers[0].name == "gcs-download"
+        assert "gsutil cp" in init_containers[0].command[2]
+
+    @pytest.mark.asyncio
+    async def test_deploy_cellxgene_serves_local_path(self, adapter, mock_k8s):
+        await adapter.deploy(1, "gs://bucket/data.h5ad", "Dataset")
+        dep_body = mock_k8s["apps"].create_namespaced_deployment.call_args[1]["body"]
+        main_container = dep_body.spec.template.spec.containers[0]
+        assert "/data/dataset.h5ad" in main_container.args
 
 
 class TestCellxgeneTeardown:
