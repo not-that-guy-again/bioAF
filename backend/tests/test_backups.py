@@ -1,6 +1,5 @@
-import os
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -93,7 +92,12 @@ async def test_trigger_postgres_backup_via_api(client: AsyncClient, admin_token:
     with patch(
         "app.api.backups.BackupService.run_postgres_backup",
         new_callable=AsyncMock,
-        return_value={"status": "completed", "filename": "pgdump-test.dump", "size_bytes": 1024, "duration_seconds": 1.5},
+        return_value={
+            "status": "completed",
+            "filename": "pgdump-test.dump",
+            "size_bytes": 1024,
+            "duration_seconds": 1.5,
+        },
     ):
         response = await client.post(
             "/api/backups/trigger/postgres",

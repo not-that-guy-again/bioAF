@@ -104,7 +104,6 @@ class BackupService:
     def _local_status() -> list[dict]:
         """Build tier status by scanning the local backup directory."""
         tiers = []
-        now = datetime.now(timezone.utc)
 
         # PostgreSQL
         pg_dir = os.path.join(settings.backup_local_dir, "postgres")
@@ -275,12 +274,17 @@ class BackupService:
         try:
             process = await asyncio.create_subprocess_exec(
                 "pg_dump",
-                "-h", host,
-                "-p", port,
-                "-U", user,
-                "-d", dbname,
+                "-h",
+                host,
+                "-p",
+                port,
+                "-U",
+                user,
+                "-d",
+                dbname,
                 "-Fc",
-                "-f", output_path,
+                "-f",
+                output_path,
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -299,9 +303,7 @@ class BackupService:
 
             # Rotate old backups
             if settings.compute_mode == "local":
-                BackupService.rotate_local_backups(
-                    pg_dir, _PG_FILENAME_RE, settings.backup_postgres_retention_days
-                )
+                BackupService.rotate_local_backups(pg_dir, _PG_FILENAME_RE, settings.backup_postgres_retention_days)
 
             logger.info("pg_dump completed: %s (%d bytes, %.1fs)", filename, size, duration)
             return {
