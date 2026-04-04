@@ -29,7 +29,7 @@ IMAGE_TAG = "latest"
 DOCKERFILE_CONTENT = """\
 FROM python:3.11-slim
 
-RUN pip install --no-cache-dir cellxgene google-cloud-storage
+RUN pip install --no-cache-dir cellxgene gcsfs
 
 EXPOSE 5005
 
