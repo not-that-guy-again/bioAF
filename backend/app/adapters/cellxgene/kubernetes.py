@@ -151,12 +151,11 @@ class KubernetesCellxgeneProvider(CellxgeneProvider):
                             client.V1Container(
                                 name="gcs-download",
                                 image="google/cloud-sdk:slim",
-                                command=["/bin/sh", "-c", f"gsutil cp '{gcs_uri}' {local_path}"],
-                                env=[
-                                    client.V1EnvVar(
-                                        name="GOOGLE_APPLICATION_CREDENTIALS",
-                                        value="/gcp/key.json",
-                                    )
+                                command=[
+                                    "/bin/sh",
+                                    "-c",
+                                    f"gcloud auth activate-service-account --key-file=/gcp/key.json "
+                                    f"&& gsutil cp '{gcs_uri}' {local_path}",
                                 ],
                                 volume_mounts=[
                                     client.V1VolumeMount(name="data", mount_path="/data"),
