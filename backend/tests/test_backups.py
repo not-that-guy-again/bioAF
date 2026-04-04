@@ -169,6 +169,25 @@ async def test_update_backup_settings_returns_updated_values(client: AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_list_tfstate_files(client: AsyncClient, admin_token: str):
+    response = await client.get(
+        "/api/backups/tfstate-files",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 200
+    assert "files" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_download_tfstate_not_found(client: AsyncClient, admin_token: str):
+    response = await client.get(
+        "/api/backups/tfstate-download/nonexistent.tfstate",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_backup_health_check(admin_user, session):
     """Test backup health check does not error."""
     from app.services.backup_service import BackupService

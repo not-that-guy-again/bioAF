@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission
@@ -111,6 +112,33 @@ async def trigger_config_backup(
     if result["status"] == "error":
         raise HTTPException(500, detail=result.get("message", "Backup failed"))
     return result
+
+
+@router.get("/tfstate-files")
+async def list_tfstate_files(
+    current_user: dict = require_permission("backups", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    """List terraform state files available for download."""
+    files = await BackupService.list_tfstate_files(session)
+    return {"files": files}
+
+
+@router.get("/tfstate-download/{filename:path}")
+async def download_tfstate(
+    filename: str,
+    current_user: dict = require_permission("backups", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Download a terraform state file."""
+    data = await BackupService.download_tfstate(session, filename)
+    if data is None:
+        raise HTTPException(404, detail="Terraform state file not found")
+    return Response(
+        content=data,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename.split("/")[-1]}"'},
+    )
 
 
 @router.get("/settings", response_model=BackupSettingsResponse)

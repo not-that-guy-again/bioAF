@@ -470,6 +470,56 @@ class BackupService:
             return {"status": "error", "message": str(e)[:500]}
 
     @staticmethod
+    async def list_tfstate_files(session: AsyncSession) -> list[dict]:
+        """List terraform state files in the tfstate bucket."""
+        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'terraform_state_bucket'"))
+        row = result.fetchone()
+        bucket_name = row[0] if row else ""
+        if not bucket_name or bucket_name == "null":
+            return []
+
+        try:
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            blobs = list(client.list_blobs(bucket_name))
+            files = []
+            for blob in blobs:
+                if blob.name.endswith(".tfstate") or blob.name.endswith(".tflock"):
+                    files.append(
+                        {
+                            "name": blob.name,
+                            "size_bytes": blob.size or 0,
+                            "updated": blob.updated.isoformat() if blob.updated else None,
+                        }
+                    )
+            files.sort(key=lambda x: x.get("updated") or "", reverse=True)
+            return files
+        except Exception as e:
+            logger.warning("Failed to list tfstate files: %s", e)
+            return []
+
+    @staticmethod
+    async def download_tfstate(session: AsyncSession, filename: str) -> bytes | None:
+        """Download a terraform state file from the tfstate bucket."""
+        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'terraform_state_bucket'"))
+        row = result.fetchone()
+        bucket_name = row[0] if row else ""
+        if not bucket_name or bucket_name == "null":
+            return None
+
+        try:
+            credentials = await _get_gcs_credentials(session)
+            client = _get_gcs_client(credentials)
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(filename)
+            if not blob.exists():
+                return None
+            return blob.download_as_bytes()
+        except Exception as e:
+            logger.warning("Failed to download tfstate %s: %s", filename, e)
+            return None
+
+    @staticmethod
     async def run_config_backup(session: AsyncSession, org_id: int) -> dict:
         """Export platform_config to JSON and upload to GCS."""
         bucket_name = await _get_backups_bucket(session)
