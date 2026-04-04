@@ -557,6 +557,7 @@ async def stack_components_list(
 @router.post("/api/v1/infrastructure/stack/components/{component_key}/toggle")
 async def stack_component_toggle(
     component_key: str,
+    force_rebuild: bool = False,
     current_user: dict = require_permission("infrastructure", "configure"),
     session: AsyncSession = Depends(get_session),
 ) -> ComponentToggleResponse:
@@ -622,9 +623,7 @@ async def stack_component_toggle(
                 )
             ).scalar_one_or_none()
 
-            # Trigger a build if: no image URI, or image URI is set but the
-            # build never succeeded (stale URI from a pre-fix attempt).
-            needs_build = not scrna_image or scrna_image == "null" or build_status not in ("SUCCESS",)
+            needs_build = force_rebuild or not scrna_image or scrna_image == "null" or build_status not in ("SUCCESS",)
             if needs_build:
                 try:
                     await build_notebook_image(session)
@@ -646,7 +645,7 @@ async def stack_component_toggle(
                 )
             ).scalar_one_or_none()
 
-            needs_build = not cxg_image or cxg_image == "null" or cxg_build_status not in ("SUCCESS",)
+            needs_build = force_rebuild or not cxg_image or cxg_image == "null" or cxg_build_status not in ("SUCCESS",)
             if needs_build:
                 try:
                     await build_cellxgene_image(session)

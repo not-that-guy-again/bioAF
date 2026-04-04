@@ -380,11 +380,47 @@ export default function InfraComponentsPage() {
     }
   }
 
+  // Components that have a built image
+  const imageComponents = new Set(["rstudio", "jupyterhub", "cellxgene"]);
+
   async function handleComponentToggle(componentKey: string) {
     setComponentErrors((prev) => ({ ...prev, [componentKey]: "" }));
+
+    // When re-enabling an image component, check if it already has a
+    // successful build and ask the user whether to rebuild.
+    const comp = componentsData?.components.find((c) => c.key === componentKey);
+    const isEnabling = comp && comp.status === "disabled";
+    let forceRebuild = false;
+
+    if (isEnabling && imageComponents.has(componentKey)) {
+      // Check if there's already a successful image for this component
+      const buildType = cellxgeneKeys.has(componentKey) ? "cellxgene" : "notebook";
+      const statusUrl = buildType === "cellxgene"
+        ? "/api/v1/infrastructure/cellxgene-image/build-status"
+        : "/api/v1/infrastructure/notebook-image/build-status";
+      try {
+        const status = await api.get<{
+          build_id: string | null;
+          build_status: string | null;
+          image_uri: string | null;
+        }>(statusUrl);
+        if (status.image_uri) {
+          forceRebuild = confirm(
+            "An existing image is available. Rebuild with the latest definition?\n\n"
+            + "Choose OK to rebuild, or Cancel to use the existing image."
+          );
+        }
+      } catch {
+        // No existing build -- proceed normally
+      }
+    }
+
     setTogglingComponent(componentKey);
     try {
-      await api.post(`/api/v1/infrastructure/stack/components/${componentKey}/toggle`);
+      const url = forceRebuild
+        ? `/api/v1/infrastructure/stack/components/${componentKey}/toggle?force_rebuild=true`
+        : `/api/v1/infrastructure/stack/components/${componentKey}/toggle`;
+      await api.post(url);
       invalidateComponentCache();
       setRefreshKey((k) => k + 1);
     } catch (e) {
