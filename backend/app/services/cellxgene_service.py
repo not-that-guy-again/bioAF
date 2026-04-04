@@ -55,12 +55,12 @@ class CellxgeneService:
             details={"dataset_name": dataset_name, "file_id": file_id},
         )
 
-        # Deploy cellxgene via adapter
+        # Deploy cellxgene via adapter. Status stays "publishing" until the
+        # background poller confirms the deployment is ready and sets
+        # "published" with the access_url.
         try:
             adapter = get_cellxgene_adapter()
             await adapter.deploy(pub.id, file.gcs_uri, dataset_name)
-            pub.status = "published"
-            pub.published_at = datetime.now(timezone.utc)
         except Exception as e:
             logger.error("Failed to deploy cellxgene pod for publication %d: %s", pub.id, e)
             pub.status = "failed"

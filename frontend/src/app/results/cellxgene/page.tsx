@@ -27,7 +27,7 @@ function StatusBadge({ status }: { status: string }) {
       case "running":
         return "bg-green-100 text-green-700";
       case "publishing":
-        return "bg-blue-100 text-blue-700";
+        return "bg-yellow-100 text-yellow-700";
       case "unpublished":
         return "bg-gray-100 text-gray-500";
       case "failed":
@@ -37,9 +37,11 @@ function StatusBadge({ status }: { status: string }) {
     }
   })();
 
+  const label = status === "publishing" ? "publishing..." : status;
+
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -243,6 +245,14 @@ export default function CellxgenePage() {
   useEffect(() => {
     fetchPublications();
   }, [fetchPublications]);
+
+  // Auto-refresh while any publication is still publishing
+  const hasPublishing = publications.some((p) => p.status === "publishing");
+  useEffect(() => {
+    if (!hasPublishing) return;
+    const interval = setInterval(fetchPublications, 5000);
+    return () => clearInterval(interval);
+  }, [hasPublishing, fetchPublications]);
 
   // Load experiment names for display
   useEffect(() => {
