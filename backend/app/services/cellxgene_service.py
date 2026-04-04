@@ -134,8 +134,13 @@ class CellxgeneService:
 
     @staticmethod
     async def list_publishable_files(session: AsyncSession, org_id: int) -> list[File]:
-        """Return h5ad files that have no active cellxgene publication."""
-        # Subquery: file IDs with active publications
+        """Return h5ad files that have no active cellxgene publication.
+
+        Eagerly loads project, experiment, and sample relationships for
+        display in the publish form.
+        """
+        from app.models.sample import Sample, sample_files
+
         active_pub_file_ids = (
             select(CellxgenePublication.file_id)
             .where(
@@ -148,6 +153,10 @@ class CellxgeneService:
 
         result = await session.execute(
             select(File)
+            .options(
+                selectinload(File.project),
+                selectinload(File.experiment),
+            )
             .where(
                 File.organization_id == org_id,
                 File.file_type == "h5ad",
@@ -155,4 +164,26 @@ class CellxgeneService:
             )
             .order_by(File.created_at.desc())
         )
-        return list(result.scalars().all())
+        files = list(result.scalars().all())
+
+        # Load sample names for each file via the join table
+        if files:
+            file_ids = [f.id for f in files]
+            sample_rows = (
+                await session.execute(
+                    select(sample_files.c.file_id, Sample.sample_id_external)
+                    .join(Sample, Sample.id == sample_files.c.sample_id)
+                    .where(sample_files.c.file_id.in_(file_ids))
+                )
+            ).fetchall()
+            file_samples: dict[int, list[str]] = {}
+            for fid, sid_ext in sample_rows:
+                if sid_ext:
+                    file_samples.setdefault(fid, []).append(sid_ext)
+            for f in files:
+                f._sample_names = file_samples.get(f.id, [])  # type: ignore[attr-defined]
+        else:
+            for f in files:
+                f._sample_names = []  # type: ignore[attr-defined]
+
+        return files
