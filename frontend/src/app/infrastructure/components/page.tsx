@@ -146,11 +146,9 @@ export default function InfraComponentsPage() {
   const [configError, setConfigError] = useState("");
   const [componentErrors, setComponentErrors] = useState<Record<string, string>>({});
   const [togglingComponent, setTogglingComponent] = useState<string | null>(null);
-  const [buildStatus, setBuildStatus] = useState<{
-    build_id: string | null;
-    build_status: string | null;
-    image_uri: string | null;
-  } | null>(null);
+  const [buildStatusMap, setBuildStatusMap] = useState<
+    Record<string, { build_id: string | null; build_status: string | null; image_uri: string | null }>
+  >({});
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [abandonLoading, setAbandonLoading] = useState(false);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -216,35 +214,57 @@ export default function InfraComponentsPage() {
   }, [stackStatus, deployProgress.active, recoveryCheckedOnLoad]);
 
   // Fetch build status when any component is provisioning or build_failed
-  const hasBuildRelated = componentsData?.components.some(
+  const buildRelatedComponents = componentsData?.components.filter(
     (c) => c.status === "provisioning" || c.status === "build_failed",
-  );
+  ) ?? [];
+  const hasBuildRelated = buildRelatedComponents.length > 0;
+
+  // Map component keys to their build status endpoints
+  const notebookKeys = new Set(["rstudio", "jupyterhub"]);
+  const cellxgeneKeys = new Set(["cellxgene"]);
+
   useEffect(() => {
     if (!hasBuildRelated) {
-      setBuildStatus(null);
+      setBuildStatusMap({});
       return;
     }
     let cancelled = false;
+
     async function pollBuild() {
-      try {
-        const status = await api.get<{
-          build_id: string | null;
-          build_status: string | null;
-          image_uri: string | null;
-        }>("/api/v1/infrastructure/notebook-image/build-status");
-        if (!cancelled) {
-          setBuildStatus(status);
-          // Build finished -- refresh component list
+      const endpoints: { type: string; url: string }[] = [];
+      if (buildRelatedComponents.some((c) => notebookKeys.has(c.key))) {
+        endpoints.push({ type: "notebook", url: "/api/v1/infrastructure/notebook-image/build-status" });
+      }
+      if (buildRelatedComponents.some((c) => cellxgeneKeys.has(c.key))) {
+        endpoints.push({ type: "cellxgene", url: "/api/v1/infrastructure/cellxgene-image/build-status" });
+      }
+
+      const results: Record<string, { build_id: string | null; build_status: string | null; image_uri: string | null }> = {};
+      let anyFinished = false;
+      for (const ep of endpoints) {
+        try {
+          const status = await api.get<{
+            build_id: string | null;
+            build_status: string | null;
+            image_uri: string | null;
+          }>(ep.url);
+          results[ep.type] = status;
           if (status.build_status && !["WORKING", "QUEUED"].includes(status.build_status)) {
-            setRefreshKey((k) => k + 1);
+            anyFinished = true;
           }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+      }
+      if (!cancelled) {
+        setBuildStatusMap(results);
+        if (anyFinished) {
+          setRefreshKey((k) => k + 1);
+        }
       }
     }
+
     pollBuild();
-    // Only poll repeatedly if actively building
     const isActive = componentsData?.components.some((c) => c.status === "provisioning");
     if (isActive) {
       const interval = setInterval(pollBuild, 15000);
@@ -790,6 +810,11 @@ export default function InfraComponentsPage() {
                               key={comp.key}
                               className="bg-white rounded-lg shadow p-5 border border-gray-200"
                             >
+                              {(() => {
+                                // Resolve the right build status for this component
+                                const buildType = cellxgeneKeys.has(comp.key) ? "cellxgene" : "notebook";
+                                const buildStatus = buildStatusMap[buildType] ?? null;
+                                return (<>
                               <div className="flex items-start justify-between mb-2">
                                 <h3 className="font-semibold text-sm">{comp.name}</h3>
                                 {(() => {
@@ -828,7 +853,7 @@ export default function InfraComponentsPage() {
                               {comp.status === "provisioning" && buildStatus && !["FAILURE", "CANCELLED", "TIMEOUT"].includes(buildStatus.build_status ?? "") && (
                                 <div className="bg-amber-50 border border-amber-200 rounded p-2 mb-2">
                                   <p className="text-xs font-medium text-amber-800">
-                                    Building notebook image...
+                                    Building image...
                                   </p>
                                   <p className="text-xs text-amber-600 mt-0.5">
                                     Status: {buildStatus.build_status ?? "Starting"}
@@ -854,7 +879,7 @@ export default function InfraComponentsPage() {
                               {(comp.status === "build_failed" || (comp.status === "provisioning" && buildStatus && ["FAILURE", "CANCELLED", "TIMEOUT"].includes(buildStatus.build_status ?? ""))) && (
                                 <div className="bg-red-50 border border-red-200 rounded p-2 mb-2">
                                   <p className="text-xs font-medium text-red-800">
-                                    Notebook image build failed
+                                    Image build failed
                                   </p>
                                   {buildStatus?.build_id && (
                                     <p className="text-xs text-red-600 mt-0.5">
@@ -902,6 +927,8 @@ export default function InfraComponentsPage() {
                                   {componentErrors[comp.key]}
                                 </p>
                               )}
+                              </>);
+                              })()}
                             </div>
                           ))}
                       </div>

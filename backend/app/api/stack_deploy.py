@@ -726,6 +726,32 @@ async def notebook_image_build_status(
     )
 
 
+@router.get("/api/v1/infrastructure/cellxgene-image/build-status")
+async def cellxgene_image_build_status(
+    current_user: dict = require_permission("infrastructure", "view"),
+    session: AsyncSession = Depends(get_session),
+) -> NotebookImageBuildStatus:
+    """Return current cellxgene image build status."""
+    rows = (
+        await session.execute(
+            text(
+                "SELECT key, value FROM platform_config "
+                "WHERE key IN ('cellxgene_image_build_id', 'cellxgene_image_build_status', 'cellxgene_image')"
+            )
+        )
+    ).fetchall()
+    config = {r[0]: r[1] for r in rows}
+
+    def _non_null(val: str | None) -> str | None:
+        return val if val and val != "null" else None
+
+    return NotebookImageBuildStatus(
+        build_id=_non_null(config.get("cellxgene_image_build_id")),
+        build_status=_non_null(config.get("cellxgene_image_build_status")),
+        image_uri=_non_null(config.get("cellxgene_image")),
+    )
+
+
 @router.post("/api/v1/infrastructure/notebook-image/cancel")
 async def notebook_image_cancel(
     current_user: dict = require_permission("infrastructure", "configure"),
