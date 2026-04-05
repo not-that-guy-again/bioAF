@@ -24,9 +24,6 @@ from app.adapters.base import NotebookProvider
 from app.services.session_persistence import (
     generate_sync_in_command,
     generate_sync_out_command,
-    generate_outputs_sync_command,
-    generate_script_capture_command,
-    generate_list_outputs_command,
 )
 
 logger = logging.getLogger("bioaf.adapters.notebooks.k8s")
@@ -684,6 +681,27 @@ class KubernetesNotebookProvider(NotebookProvider):
             notebook_container["volumeMounts"].append(gcs_vol_mount)
             volumes.append({"name": "gcp-sa-key", "secret": {"secretName": "bioaf-gcs-sa-key"}})
 
+        # GCS sync sidecar: sleeps until exec'd at shutdown to sync /outputs/
+        # and capture scripts. Uses google/cloud-sdk:slim which has gsutil.
+        gcs_sync_mounts = [
+            {"name": "outputs", "mountPath": "/outputs"},
+            {"name": "home", "mountPath": home_dir},
+        ]
+        gcs_sync_env: list[dict] = []
+        if has_gcs_secret:
+            gcs_sync_mounts.append({"name": "gcp-sa-key", "mountPath": "/secrets/gcp", "readOnly": True})
+            gcs_sync_env.append({"name": "GOOGLE_APPLICATION_CREDENTIALS", "value": _GCS_KEY_PATH})
+        containers.append(
+            {
+                "name": "gcs-sync",
+                "image": "google/cloud-sdk:slim",
+                "command": ["/bin/sh", "-c", "trap 'exit 0' TERM; while true; do sleep 3600; done"],
+                "volumeMounts": gcs_sync_mounts,
+                "env": gcs_sync_env,
+                "resources": {"requests": {"cpu": "50m", "memory": "128Mi"}},
+            }
+        )
+
         # Pod annotations -- GCS FUSE CSI driver requires this for sidecar injection
         annotations: dict[str, str] = {}
         if has_fuse_volumes:
@@ -996,7 +1014,12 @@ class KubernetesNotebookProvider(NotebookProvider):
             except Exception as e:
                 logger.warning("GCS sync-out failed for pod %s: %s", pod_name, e)
 
-        # Sync /outputs/ and capture scripts to GCS (ADR-040)
+        # Sync /outputs/ and capture scripts to GCS via the gcs-sync sidecar (ADR-040).
+        # The sidecar has google/cloud-sdk:slim with gsutil; the main container may not.
+        _SYNC_CONTAINER = "gcs-sync"
+        _GCS_KEY = "/secrets/gcp/key.json"
+        _AUTH_CMD = f"gcloud auth activate-service-account --key-file={_GCS_KEY} 2>/dev/null; "
+
         output_files: list[dict] = []
         gcs_output_prefix = ""
         if working_bucket and pod_name:
@@ -1005,19 +1028,23 @@ class KubernetesNotebookProvider(NotebookProvider):
 
             # Determine home directory based on session type
             if session_type == "ssh":
-                # SSH sessions create a user-specific home; fall back to generic
                 exec_home = "/home"
             else:
                 exec_home = HOME_DIR
 
             # 1. Sync /outputs/ to working bucket
             try:
-                outputs_cmd = generate_outputs_sync_command("/outputs", gcs_output_prefix)
+                outputs_shell = (
+                    f"{_AUTH_CMD}"
+                    f'if [ -d /outputs ] && [ "$(ls -A /outputs)" ]; then '
+                    f"gsutil -m rsync -r /outputs {gcs_output_prefix}; fi"
+                )
                 stream(
                     core_client.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=namespace,
-                    command=outputs_cmd,
+                    container=_SYNC_CONTAINER,
+                    command=["/bin/sh", "-c", outputs_shell],
                     stderr=True,
                     stdin=False,
                     stdout=True,
@@ -1030,12 +1057,19 @@ class KubernetesNotebookProvider(NotebookProvider):
 
             # 2. Capture notebook/script files
             try:
-                scripts_cmd = generate_script_capture_command(exec_home, gcs_scripts_prefix)
+                scripts_shell = (
+                    f"{_AUTH_CMD}"
+                    f"find {exec_home} -maxdepth 3 "
+                    r"\( -name '*.ipynb' -o -name '*.Rmd' -o -name '*.R' -o -name '*.py' \) "
+                    "-type f "
+                    f'| while read f; do gsutil cp "$f" {gcs_scripts_prefix}"$(basename "$f")"; done'
+                )
                 stream(
                     core_client.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=namespace,
-                    command=scripts_cmd,
+                    container=_SYNC_CONTAINER,
+                    command=["/bin/sh", "-c", scripts_shell],
                     stderr=True,
                     stdin=False,
                     stdout=True,
@@ -1049,12 +1083,13 @@ class KubernetesNotebookProvider(NotebookProvider):
             # 3. List all output files for registration
             try:
                 list_prefix = f"gs://{working_bucket}/sessions/{session_id}/"
-                list_cmd = generate_list_outputs_command(list_prefix)
+                list_shell = f"{_AUTH_CMD}gsutil ls -l -r {list_prefix}** 2>/dev/null || true"
                 raw_output = stream(
                     core_client.connect_get_namespaced_pod_exec,
                     name=pod_name,
                     namespace=namespace,
-                    command=list_cmd,
+                    container=_SYNC_CONTAINER,
+                    command=["/bin/sh", "-c", list_shell],
                     stderr=True,
                     stdin=False,
                     stdout=True,
