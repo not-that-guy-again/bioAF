@@ -14,7 +14,9 @@ from app.database import Base
 # Import all models so their metadata is registered with Base
 from app.models import (  # noqa: F401
     AuditLog,
-    Batch,
+    SampleBatch,
+    SequencingBatch,
+    ManifestEntry,
     CellxgenePublication,
     ComponentState,
     Document,
