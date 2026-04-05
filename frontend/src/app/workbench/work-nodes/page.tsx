@@ -58,6 +58,7 @@ export default function WorkNodesPage() {
   const [selectedMachineType, setSelectedMachineType] = useState<string>("");
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [stoppingNodes, setStoppingNodes] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -157,12 +158,20 @@ export default function WorkNodesPage() {
   }
 
   async function handleStop(nodeId: number) {
-    if (!confirm("Stop this work node? Data in /scratch will be lost.")) return;
+    if (!confirm("Stop this work node? Files in /outputs/ will be synced to GCS. Data in /scratch will be lost.")) return;
+    setStoppingNodes((prev) => new Set(prev).add(nodeId));
     try {
       await api.post(`/api/v1/work-nodes/sessions/${nodeId}/stop`);
       loadNodes();
       if (viewingNode?.id === nodeId) setViewingNode(null);
-    } catch {}
+    } catch {
+    } finally {
+      setStoppingNodes((prev) => {
+        const next = new Set(prev);
+        next.delete(nodeId);
+        return next;
+      });
+    }
   }
 
   function formatUptime(startedAt: string | null): string {
@@ -235,9 +244,16 @@ export default function WorkNodesPage() {
                   {nodes.map((node) => (
                     <tr key={node.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[node.status] || "bg-gray-100"}`}>
-                          {node.status}
-                        </span>
+                        {stoppingNodes.has(node.id) ? (
+                          <span className="flex items-center gap-1 text-xs text-orange-700">
+                            <LoadingSpinner size="sm" />
+                            Syncing outputs...
+                          </span>
+                        ) : (
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[node.status] || "bg-gray-100"}`}>
+                            {node.status}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900">{node.machine_type || "-"}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{node.cpu_cores} CPU / {node.memory_gb} GB</td>
@@ -340,7 +356,7 @@ export default function WorkNodesPage() {
                     >
                       Stop Work Node
                     </button>
-                    <p className="text-xs text-gray-400 mt-1 text-center">Data in /scratch will be lost</p>
+                    <p className="text-xs text-gray-400 mt-1 text-center">Files in /outputs/ will be synced. Data in /scratch will be lost.</p>
                   </div>
                 )}
               </div>
@@ -451,7 +467,7 @@ export default function WorkNodesPage() {
                           {envDetail.versions
                             .filter((v) => v.status === "ready" && v.image_uri)
                             .map((v) => (
-                              <option key={v.id} value={v.id}>v{v.version_number} (ready)</option>
+                              <option key={v.id} value={v.id}>v{v.version_number}.{v.build_number} (ready)</option>
                             ))}
                         </select>
                       </div>
