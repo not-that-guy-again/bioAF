@@ -428,20 +428,37 @@ export default function NotebooksPage() {
                   <button onClick={() => { setViewingSession(null); setProvenance(null); }} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
                 </div>
                 <div className="p-6 space-y-3">
-                  {[
-                    { label: "Type", value: viewingSession.session_type },
-                    { label: "Status", value: viewingSession.status },
-                    { label: "User", value: viewingSession.user?.name || viewingSession.user?.email },
-                    { label: "Resource Profile", value: viewingSession.resource_profile },
-                    { label: "CPU Cores", value: viewingSession.cpu_cores },
-                    { label: "Memory (GB)", value: viewingSession.memory_gb },
-                    { label: "Experiment", value: viewingSession.experiment?.name },
-                    { label: "Started", value: viewingSession.started_at ? new Date(viewingSession.started_at).toLocaleString() : null },
-                    { label: "Access URL", value: viewingSession.proxy_url || null },
-                    { label: "Idle Since", value: viewingSession.idle_since ? new Date(viewingSession.idle_since).toLocaleString() : null },
-                    { label: "Git Branch", value: viewingSession.git_branch_name || null },
-                    { label: "Git Commit", value: viewingSession.git_commit_hash || null },
-                  ].filter((f) => f.value != null).map((f) => (
+                  {(() => {
+                    // Resolve environment name from loaded environments
+                    let envLabel: string | null = null;
+                    if (viewingSession.environment_version_id) {
+                      for (const env of environments) {
+                        const v = env.latest_version;
+                        if (v && v.id === viewingSession.environment_version_id) {
+                          envLabel = `${env.name} v${v.version_number}.${v.build_number}`;
+                          break;
+                        }
+                      }
+                      if (!envLabel) {
+                        envLabel = `Version ID ${viewingSession.environment_version_id}`;
+                      }
+                    }
+                    return [
+                      { label: "Type", value: viewingSession.session_type },
+                      { label: "Status", value: viewingSession.status },
+                      { label: "User", value: viewingSession.user?.name || viewingSession.user?.email },
+                      { label: "Environment", value: envLabel },
+                      { label: "Resource Profile", value: viewingSession.resource_profile },
+                      { label: "CPU Cores", value: viewingSession.cpu_cores },
+                      { label: "Memory (GB)", value: viewingSession.memory_gb },
+                      { label: "Experiment", value: viewingSession.experiment?.name },
+                      { label: "Started", value: viewingSession.started_at ? new Date(viewingSession.started_at).toLocaleString() : null },
+                      { label: "Access URL", value: viewingSession.proxy_url || null },
+                      { label: "Idle Since", value: viewingSession.idle_since ? new Date(viewingSession.idle_since).toLocaleString() : null },
+                      { label: "Git Branch", value: viewingSession.git_branch_name || null },
+                      { label: "Git Commit", value: viewingSession.git_commit_hash || null },
+                    ];
+                  })().filter((f) => f.value != null).map((f) => (
                     <div key={f.label} className="flex justify-between text-sm">
                       <span className="text-gray-500">{f.label}</span>
                       <span className="font-medium">{String(f.value)}</span>
