@@ -77,6 +77,12 @@ export default function NotebooksPage() {
   const [sampleNames, setSampleNames] = useState<Record<number, string>>({});
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
   const [activeBranchCount, setActiveBranchCount] = useState(0);
+  const [showGuide, setShowGuide] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("bioaf_notebooks_guide_dismissed") !== "true";
+    }
+    return true;
+  });
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -289,6 +295,34 @@ export default function NotebooksPage() {
               Launch Session
             </button>
           </div>
+
+          {/* Quick Start Guide */}
+          {showGuide && (
+            <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 text-sm text-blue-800 space-y-2">
+                  <p className="font-semibold">Working with notebook sessions</p>
+                  <ul className="space-y-1.5 text-blue-700">
+                    <li><strong>Input files</strong> are mounted at <code className="bg-blue-100 px-1 rounded">/data/</code>, organized by project, experiment, sample, and pipeline. Select files when launching a session.</li>
+                    <li><strong>Output files</strong> should be saved to <code className="bg-blue-100 px-1 rounded">/outputs/</code>. Everything in this directory is automatically synced to GCS and registered when you stop the session.</li>
+                    <li><strong>Environments</strong> control the packages available in your session. Choose an environment and version when launching. Admins can create and build new environments from the <a href="/environments" className="underline font-medium">Environments</a> page.</li>
+                    <li><strong>Git integration</strong> can be configured per-session via SSH keys in your <a href="/profile" className="underline font-medium">Profile Settings</a>. Notebooks are auto-committed every 15 minutes when a git repo is configured.</li>
+                    <li><strong>Session credentials</strong> (username and password for RStudio) are set in your <a href="/profile" className="underline font-medium">Profile Settings</a>.</li>
+                  </ul>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowGuide(false);
+                    localStorage.setItem("bioaf_notebooks_guide_dismissed", "true");
+                  }}
+                  className="shrink-0 text-blue-600 hover:text-blue-900 text-lg leading-none"
+                  aria-label="Dismiss guide"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Build Status Banner */}
           {imageBuildStatus?.build_status && ["WORKING", "QUEUED"].includes(imageBuildStatus.build_status) && (
