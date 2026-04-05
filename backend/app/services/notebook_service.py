@@ -46,6 +46,7 @@ class NotebookService:
         project_id: int | None = None,
         image: str | None = None,
         input_file_ids: list[int] | None = None,
+        environment_version_id: int | None = None,
     ) -> NotebookSession:
         # Check quota
         allowed, message = await QuotaService.check_quota(session, user_id, estimated_hours=1.0)
@@ -60,6 +61,7 @@ class NotebookService:
             session_type=session_type,
             experiment_id=experiment_id,
             project_id=project_id,
+            environment_version_id=environment_version_id,
             resource_profile=resource_profile,
             cpu_cores=cpu_cores,
             memory_gb=memory_gb,
