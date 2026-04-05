@@ -479,6 +479,52 @@ async def create_sample_batch(
     )
 
 
+@router.get("/{experiment_id}/sequencing-batches")
+async def list_experiment_sequencing_batches(
+    experiment_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """List sequencing batches that contain samples from this experiment."""
+    from sqlalchemy import distinct, select as sa_select
+
+    from app.models.sample import Sample as SampleModel
+    from app.models.sequencing_batch import SequencingBatch
+    from app.schemas.sequencing_batch import SequencingBatchResponse
+
+    # Find sequencing batch IDs via samples in this experiment
+    batch_ids_q = sa_select(distinct(SampleModel.sequencing_batch_id)).where(
+        SampleModel.experiment_id == experiment_id,
+        SampleModel.sequencing_batch_id.is_not(None),
+    )
+    result = await session.execute(
+        sa_select(SequencingBatch)
+        .where(SequencingBatch.id.in_(batch_ids_q))
+        .order_by(SequencingBatch.created_at.desc())
+    )
+    batches = result.scalars().all()
+    return [
+        SequencingBatchResponse(
+            id=b.id,
+            organization_id=b.organization_id,
+            name=b.name,
+            batch_number=b.batch_number,
+            status=b.status,
+            instrument_model=b.instrument_model,
+            instrument_platform=b.instrument_platform,
+            quality_score_encoding=b.quality_score_encoding,
+            sequencer_run_id=b.sequencer_run_id,
+            manifest_received_at=b.manifest_received_at,
+            expected_file_count=b.expected_file_count,
+            ingested_file_count=b.ingested_file_count,
+            notes=b.notes,
+            created_at=b.created_at,
+            updated_at=b.updated_at,
+        )
+        for b in batches
+    ]
+
+
 @router.get("/{experiment_id}/files")
 async def list_experiment_files(
     experiment_id: int,
