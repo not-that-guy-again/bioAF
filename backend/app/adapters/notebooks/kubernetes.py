@@ -531,13 +531,21 @@ class KubernetesNotebookProvider(NotebookProvider):
         # Input file data sync init container
         input_files = session_spec.get("input_files", [])
         if input_files:
-            copy_cmds = [f"gsutil cp {f['gcs_uri']} /data/{f['relative_path']}" for f in input_files]
-            # Generate FILE_INVENTORY.md
+            # Create subdirectories and copy files preserving hierarchy
+            copy_cmds: list[str] = []
+            for f in input_files:
+                dest_path = f"/data/{f['relative_path']}"
+                dest_dir = "/".join(dest_path.split("/")[:-1])
+                copy_cmds.append(f"mkdir -p {dest_dir} && gsutil cp {f['gcs_uri']} {dest_path}")
+            # Generate FILE_INVENTORY.md using a heredoc to avoid backtick
+            # interpretation by the shell (backticks in markdown trigger
+            # command substitution inside double-quoted printf)
             inventory_lines = ["# File Inventory", "", "Files mounted at session start:", ""]
             for f in input_files:
-                inventory_lines.append(f"- `/data/{f['relative_path']}` (source: `{f['gcs_uri']}`)")
-            inventory_content = "\\n".join(inventory_lines)
-            copy_cmds.append(f'printf "{inventory_content}" > /data/FILE_INVENTORY.md')
+                inventory_lines.append(f"- /data/{f['relative_path']} (source: {f['gcs_uri']})")
+            inventory_content = "\n".join(inventory_lines)
+            # Use heredoc with single-quoted delimiter to prevent all expansion
+            copy_cmds.append(f"cat > /data/FILE_INVENTORY.md << 'INVENTORY_EOF'\n{inventory_content}\nINVENTORY_EOF")
             data_sync_cmd = " && ".join(copy_cmds)
             init_containers.append(
                 {
@@ -549,6 +557,10 @@ class KubernetesNotebookProvider(NotebookProvider):
             )
             volumes.append({"name": "data", "emptyDir": {"sizeLimit": "50Gi"}})
             volume_mounts.append({"name": "data", "mountPath": "/data", "readOnly": True})
+
+        # Writable /outputs/ directory for all session types (ADR-040)
+        volume_mounts.append({"name": "outputs", "mountPath": "/outputs"})
+        volumes.append({"name": "outputs", "emptyDir": {"sizeLimit": "50Gi"}})
 
         # Track whether any GCS FUSE CSI volumes are used
         has_fuse_volumes = False
