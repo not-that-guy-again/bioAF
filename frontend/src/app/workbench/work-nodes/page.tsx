@@ -59,12 +59,7 @@ export default function WorkNodesPage() {
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [stoppingNodes, setStoppingNodes] = useState<Set<number>>(new Set());
-  const [showGuide, setShowGuide] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("bioaf_worknodes_guide_dismissed") !== "true";
-    }
-    return true;
-  });
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -227,11 +222,19 @@ export default function WorkNodesPage() {
           </div>
 
           {/* Quick Start Guide */}
-          {showGuide && (
-            <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 text-sm text-blue-800 space-y-2">
-                  <p className="font-semibold">Working with SSH work nodes</p>
+          <div className="mb-6">
+            <button
+              onClick={() => setShowGuide(!showGuide)}
+              className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              How work nodes work
+            </button>
+            {showGuide && (
+              <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <div className="text-sm text-blue-800 space-y-2">
                   <ul className="space-y-1.5 text-blue-700">
                     <li><strong>Input files</strong> are mounted at <code className="bg-blue-100 px-1 rounded">/data/</code>. Select data mounts during launch to access pipeline outputs, uploads, and shared results for your project.</li>
                     <li><strong>Output files</strong> should be saved to <code className="bg-blue-100 px-1 rounded">/outputs/</code>. Everything in this directory is automatically synced to GCS and registered when you stop the node.</li>
@@ -241,19 +244,9 @@ export default function WorkNodesPage() {
                     <li><strong>Machine types</strong> range from standard (4 CPU) to high-memory (128 GB) and GPU. Choose based on your workload.</li>
                   </ul>
                 </div>
-                <button
-                  onClick={() => {
-                    setShowGuide(false);
-                    localStorage.setItem("bioaf_worknodes_guide_dismissed", "true");
-                  }}
-                  className="shrink-0 text-blue-600 hover:text-blue-900 text-lg leading-none"
-                  aria-label="Dismiss guide"
-                >
-                  &times;
-                </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Node list */}
           {nodes.length === 0 ? (
