@@ -18,7 +18,7 @@ def _sample_response(s) -> SampleResponse:
         donor_source=s.donor_source,
         treatment_condition=s.treatment_condition,
         chemistry_version=s.chemistry_version,
-        batch={"id": s.batch.id, "name": s.batch.name} if s.batch else None,
+        sample_batch={"id": s.sample_batch.id, "name": s.sample_batch.name} if s.sample_batch else None,
         viability_pct=float(s.viability_pct) if s.viability_pct is not None else None,
         cell_count=s.cell_count,
         prep_notes=s.prep_notes,

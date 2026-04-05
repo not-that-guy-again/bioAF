@@ -115,7 +115,9 @@ class GeoExportService:
             raise ValueError("Experiment not found")
 
         # 2. Samples with batches
-        sample_query = select(Sample).options(selectinload(Sample.batch)).where(Sample.experiment_id == experiment_id)
+        sample_query = (
+            select(Sample).options(selectinload(Sample.sample_batch)).where(Sample.experiment_id == experiment_id)
+        )
         if qc_status_filter == "exclude_failed":
             sample_query = sample_query.where((Sample.qc_status != "fail") | (Sample.qc_status.is_(None)))
         sample_result = await session.execute(sample_query)
@@ -192,12 +194,12 @@ class GeoExportService:
                 "prep_notes": s.prep_notes,
                 "chemistry_version": s.chemistry_version,
                 "qc_status": s.qc_status,
-                "batch": {},
+                "sample_batch": None,
             }
-            if s.batch:
-                sample_dict["batch"] = {
-                    "instrument_model": s.batch.instrument_model,
-                    "instrument_platform": getattr(s.batch, "instrument_platform", None),
+            if s.sample_batch:
+                sample_dict["sample_batch"] = {
+                    "id": s.sample_batch.id,
+                    "name": s.sample_batch.name,
                 }
             samples_data.append(sample_dict)
 

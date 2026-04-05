@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, field_validator
 
 
-class BatchSummary(BaseModel):
+class SampleBatchSummary(BaseModel):
     id: int
     name: str
 
@@ -17,7 +17,7 @@ class SampleCreate(BaseModel):
     donor_source: str | None = None
     treatment_condition: str | None = None
     chemistry_version: str | None = None
-    batch_id: int | None = None
+    sample_batch_id: int | None = None
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
@@ -52,7 +52,7 @@ class SampleUpdate(BaseModel):
     donor_source: str | None = None
     treatment_condition: str | None = None
     chemistry_version: str | None = None
-    batch_id: int | None = None
+    sample_batch_id: int | None = None
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
@@ -113,7 +113,7 @@ class SampleResponse(BaseModel):
     donor_source: str | None
     treatment_condition: str | None
     chemistry_version: str | None
-    batch: BatchSummary | None = None
+    sample_batch: SampleBatchSummary | None = None
     viability_pct: float | None
     cell_count: int | None
     prep_notes: str | None

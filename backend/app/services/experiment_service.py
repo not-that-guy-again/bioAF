@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
 from app.models.audit_log import AuditLog
-from app.models.batch import Batch
+from app.models.sample_batch import SampleBatch
 from app.models.experiment import Experiment, EXPERIMENT_STATUS_TRANSITIONS
 from app.models.experiment_custom_field import ExperimentCustomField
 from app.models.experiment_field_default import ExperimentFieldDefault
@@ -204,7 +204,7 @@ class ExperimentService:
             select(Experiment)
             .options(
                 selectinload(Experiment.samples),
-                selectinload(Experiment.batches),
+                selectinload(Experiment.sample_batches),
                 selectinload(Experiment.custom_fields),
                 selectinload(Experiment.field_defaults),
                 selectinload(Experiment.project),
@@ -253,7 +253,7 @@ class ExperimentService:
                 selectinload(Experiment.project),
                 selectinload(Experiment.owner),
                 selectinload(Experiment.samples),
-                selectinload(Experiment.batches),
+                selectinload(Experiment.sample_batches),
                 selectinload(Experiment.template),
             )
             .order_by(Experiment.created_at.desc())
@@ -321,8 +321,8 @@ class ExperimentService:
         if sample_ids:
             conditions.append((AuditLog.entity_type == "sample") & (AuditLog.entity_id.in_(sample_ids)))
         conditions.append(
-            (AuditLog.entity_type == "batch")
-            & (AuditLog.entity_id.in_(select(Batch.id).where(Batch.experiment_id == experiment_id)))
+            (AuditLog.entity_type.in_(["batch", "sample_batch"]))
+            & (AuditLog.entity_id.in_(select(SampleBatch.id).where(SampleBatch.experiment_id == experiment_id)))
         )
 
         base_query = select(AuditLog).where(or_(*conditions))

@@ -7,7 +7,7 @@ from app.models.project_sample import ProjectSample
 from app.models.analysis_snapshot import AnalysisSnapshot
 from app.models.experiment import Experiment
 from app.models.sample import Sample
-from app.models.batch import Batch
+from app.models.sample_batch import SampleBatch
 from app.models.experiment_template import ExperimentTemplate
 from app.models.experiment_custom_field import ExperimentCustomField
 from app.models.experiment_field_default import ExperimentFieldDefault
@@ -69,7 +69,7 @@ __all__ = [
     "AnalysisSnapshot",
     "Experiment",
     "Sample",
-    "Batch",
+    "SampleBatch",
     "ExperimentTemplate",
     "ExperimentCustomField",
     "ExperimentFieldDefault",

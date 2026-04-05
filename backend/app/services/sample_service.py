@@ -96,7 +96,7 @@ class SampleService:
 
         sample = Sample(
             experiment_id=experiment_id,
-            batch_id=data.batch_id,
+            sample_batch_id=data.sample_batch_id,
             sample_id_external=data.sample_id_external,
             organism=data.organism,
             tissue_type=data.tissue_type,
@@ -164,7 +164,7 @@ class SampleService:
         for data in samples_data:
             sample = Sample(
                 experiment_id=experiment_id,
-                batch_id=data.batch_id,
+                sample_batch_id=data.sample_batch_id,
                 sample_id_external=data.sample_id_external,
                 organism=data.organism,
                 tissue_type=data.tissue_type,
@@ -203,7 +203,9 @@ class SampleService:
 
     @staticmethod
     async def update_sample(session: AsyncSession, sample_id: int, user_id: int, data: SampleUpdate) -> Sample | None:
-        result = await session.execute(select(Sample).options(selectinload(Sample.batch)).where(Sample.id == sample_id))
+        result = await session.execute(
+            select(Sample).options(selectinload(Sample.sample_batch)).where(Sample.id == sample_id)
+        )
         sample = result.scalar_one_or_none()
         if not sample:
             return None
@@ -227,7 +229,7 @@ class SampleService:
             "donor_source",
             "treatment_condition",
             "chemistry_version",
-            "batch_id",
+            "sample_batch_id",
             "viability_pct",
             "cell_count",
             "prep_notes",
@@ -317,13 +319,13 @@ class SampleService:
     async def list_samples(
         session: AsyncSession,
         experiment_id: int,
-        batch_id: int | None = None,
+        sample_batch_id: int | None = None,
         qc_status: str | None = None,
         status: str | None = None,
     ) -> list[Sample]:
-        query = select(Sample).options(selectinload(Sample.batch)).where(Sample.experiment_id == experiment_id)
-        if batch_id is not None:
-            query = query.where(Sample.batch_id == batch_id)
+        query = select(Sample).options(selectinload(Sample.sample_batch)).where(Sample.experiment_id == experiment_id)
+        if sample_batch_id is not None:
+            query = query.where(Sample.sample_batch_id == sample_batch_id)
         if qc_status is not None:
             query = query.where(Sample.qc_status == qc_status)
         if status is not None:
@@ -334,5 +336,7 @@ class SampleService:
 
     @staticmethod
     async def get_sample(session: AsyncSession, sample_id: int) -> Sample | None:
-        result = await session.execute(select(Sample).options(selectinload(Sample.batch)).where(Sample.id == sample_id))
+        result = await session.execute(
+            select(Sample).options(selectinload(Sample.sample_batch)).where(Sample.id == sample_id)
+        )
         return result.scalar_one_or_none()

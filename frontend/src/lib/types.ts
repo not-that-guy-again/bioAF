@@ -262,11 +262,9 @@ export interface SampleBrief {
   created_at: string;
 }
 
-export interface BatchBrief {
+export interface SampleBatchBrief {
   id: number;
   name: string;
-  instrument_model: string | null;
-  instrument_platform: string | null;
   sample_count: number;
   created_at: string;
 }
@@ -286,13 +284,13 @@ export interface FieldDefaultResponse {
 
 export interface ExperimentDetail extends Experiment {
   samples: SampleBrief[];
-  batches: BatchBrief[];
+  sample_batches: SampleBatchBrief[];
   custom_fields: CustomFieldResponse[];
   field_defaults: FieldDefaultResponse[];
   audit_trail_count: number;
 }
 
-export interface BatchSummary {
+export interface SampleBatchSummary {
   id: number;
   name: string;
 }
@@ -305,7 +303,7 @@ export interface Sample {
   donor_source: string | null;
   treatment_condition: string | null;
   chemistry_version: string | null;
-  batch: BatchSummary | null;
+  sample_batch: SampleBatchSummary | null;
   viability_pct: number | null;
   cell_count: number | null;
   prep_notes: string | null;
@@ -319,15 +317,11 @@ export interface Sample {
   updated_at: string;
 }
 
-export interface Batch {
+export interface SampleBatch {
   id: number;
   name: string;
   prep_date: string | null;
   operator: UserSummary | null;
-  sequencer_run_id: string | null;
-  instrument_model: string | null;
-  instrument_platform: string | null;
-  quality_score_encoding: string | null;
   notes: string | null;
   sample_count: number;
   created_at: string;
@@ -382,7 +376,7 @@ export interface SampleCreateRequest {
   donor_source?: string | null;
   treatment_condition?: string | null;
   chemistry_version?: string | null;
-  batch_id?: number | null;
+  sample_batch_id?: number | null;
   viability_pct?: number | null;
   cell_count?: number | null;
   prep_notes?: string | null;
@@ -400,7 +394,7 @@ export interface SampleUpdateRequest {
   donor_source?: string | null;
   treatment_condition?: string | null;
   chemistry_version?: string | null;
-  batch_id?: number | null;
+  sample_batch_id?: number | null;
   viability_pct?: number | null;
   cell_count?: number | null;
   prep_notes?: string | null;
@@ -414,14 +408,10 @@ export interface SampleBulkUpdateRequest {
   update: SampleUpdateRequest;
 }
 
-export interface BatchCreateRequest {
+export interface SampleBatchCreateRequest {
   name: string;
   prep_date?: string | null;
   operator_user_id?: number | null;
-  sequencer_run_id?: string | null;
-  instrument_model?: string | null;
-  instrument_platform?: string | null;
-  quality_score_encoding?: string | null;
   notes?: string | null;
 }
 

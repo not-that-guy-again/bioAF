@@ -26,13 +26,13 @@ import type {
   ExperimentUpdateRequest,
   FieldDefaultValue,
   Sample,
-  Batch,
+  SampleBatch,
   AuditLogResponse,
   AuditLogEntry,
   SampleCreateRequest,
   SampleUpdateRequest,
   SampleBulkUpdateRequest,
-  BatchCreateRequest,
+  SampleBatchCreateRequest,
   ExperimentStatus,
   QCStatus,
   NotebookSession,
@@ -56,7 +56,7 @@ export default function ExperimentDetailPage() {
 
   const [experiment, setExperiment] = useState<ExperimentDetail | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batches, setBatches] = useState<SampleBatch[]>([]);
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -74,7 +74,7 @@ export default function ExperimentDetailPage() {
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [sampleForm, setSampleForm] = useState<SampleCreateRequest>({});
   const [sampleFormError, setSampleFormError] = useState("");
-  const [batchForm, setBatchForm] = useState<BatchCreateRequest>({ name: "" });
+  const [batchForm, setBatchForm] = useState<SampleBatchCreateRequest>({ name: "" });
   const [editFieldDefaults, setEditFieldDefaults] = useState<FieldDefaultValue[]>([]);
 
   // Sample viewing/editing state
@@ -136,7 +136,7 @@ export default function ExperimentDetailPage() {
 
   async function loadBatches() {
     try {
-      const data = await api.get<Batch[]>(`/api/experiments/${id}/batches`);
+      const data = await api.get<SampleBatch[]>(`/api/experiments/${id}/sample-batches`);
       setBatches(data);
     } catch {}
   }
@@ -191,7 +191,7 @@ export default function ExperimentDetailPage() {
 
   async function handleAddBatch() {
     try {
-      await api.post(`/api/experiments/${id}/batches`, batchForm);
+      await api.post(`/api/experiments/${id}/sample-batches`, batchForm);
       setBatchForm({ name: "" });
       setShowBatchForm(false);
       loadBatches();
@@ -371,7 +371,7 @@ export default function ExperimentDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "samples", label: `Samples (${experiment.sample_count})` },
-    { key: "batches", label: `Batches (${experiment.batch_count})` },
+    { key: "batches", label: `Sample Batches (${experiment.batch_count})` },
     { key: "files", label: "Files" },
     { key: "analysis", label: "Analysis" },
     { key: "pipelines", label: "Pipeline Runs" },
@@ -725,7 +725,7 @@ export default function ExperimentDetailPage() {
                         <td className="px-4 py-3 text-sm">{s.treatment_condition || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.library_prep_method || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.library_layout || "---"}</td>
-                        <td className="px-4 py-3 text-sm">{s.batch?.name || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.sample_batch?.name || "---"}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={s.qc_status ?? ""}
@@ -774,7 +774,7 @@ export default function ExperimentDetailPage() {
                     { label: "Chemistry Version", value: viewingSample.chemistry_version },
                     { label: "Cell Count", value: viewingSample.cell_count?.toLocaleString() },
                     { label: "Viability %", value: viewingSample.viability_pct != null ? `${viewingSample.viability_pct}%` : null },
-                    { label: "Batch", value: viewingSample.batch?.name },
+                    { label: "Sample Batch", value: viewingSample.sample_batch?.name },
                     { label: "QC Status", value: viewingSample.qc_status },
                     { label: "QC Notes", value: viewingSample.qc_notes },
                     { label: "Prep Notes", value: viewingSample.prep_notes },
@@ -866,7 +866,7 @@ export default function ExperimentDetailPage() {
                 onClick={() => setShowBatchForm(!showBatchForm)}
                 className="bg-bioaf-600 text-white px-4 py-2 rounded-md text-sm hover:bg-bioaf-700 mb-4"
               >
-                Create Batch
+                Create Sample Batch
               </button>
 
               {showBatchForm && (
@@ -874,9 +874,6 @@ export default function ExperimentDetailPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <input placeholder="Batch Name *" value={batchForm.name} onChange={(e) => setBatchForm({ ...batchForm, name: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input type="date" placeholder="Prep Date" value={batchForm.prep_date ?? ""} onChange={(e) => setBatchForm({ ...batchForm, prep_date: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
-                    <input placeholder="Sequencer Run ID" value={batchForm.sequencer_run_id ?? ""} onChange={(e) => setBatchForm({ ...batchForm, sequencer_run_id: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
-                    <VocabularySelect fieldName="instrument_model" value={batchForm.instrument_model} onChange={(v) => setBatchForm({ ...batchForm, instrument_model: v })} placeholder="Instrument Model..." />
-                    <VocabularySelect fieldName="quality_score_encoding" value={batchForm.quality_score_encoding} onChange={(v) => setBatchForm({ ...batchForm, quality_score_encoding: v })} placeholder="Quality Encoding..." />
                     <input placeholder="Notes" value={batchForm.notes ?? ""} onChange={(e) => setBatchForm({ ...batchForm, notes: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
                   </div>
                   <div className="flex gap-2 mt-3">
@@ -896,16 +893,13 @@ export default function ExperimentDetailPage() {
                       </div>
                       <div className="text-sm text-gray-500 flex flex-wrap gap-x-4">
                         {b.prep_date && <span>Prep: {b.prep_date}</span>}
-                        {b.sequencer_run_id && <span>Run: {b.sequencer_run_id}</span>}
-                        {b.instrument_model && <span>{b.instrument_model}</span>}
-                        {b.instrument_platform && <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">{b.instrument_platform}</span>}
                       </div>
                     </div>
                     {b.notes && <p className="text-sm text-gray-500 mt-2">{b.notes}</p>}
                   </div>
                 ))}
                 {batches.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400">No batches yet</div>
+                  <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400">No sample batches yet</div>
                 )}
               </div>
             </div>
