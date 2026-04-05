@@ -27,6 +27,7 @@ import type {
   FieldDefaultValue,
   Sample,
   SampleBatch,
+  SequencingBatch,
   AuditLogResponse,
   AuditLogEntry,
   SampleCreateRequest,
@@ -57,6 +58,7 @@ export default function ExperimentDetailPage() {
   const [experiment, setExperiment] = useState<ExperimentDetail | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [batches, setBatches] = useState<SampleBatch[]>([]);
+  const [seqBatches, setSeqBatches] = useState<SequencingBatch[]>([]);
   const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -136,8 +138,12 @@ export default function ExperimentDetailPage() {
 
   async function loadBatches() {
     try {
-      const data = await api.get<SampleBatch[]>(`/api/experiments/${id}/sample-batches`);
-      setBatches(data);
+      const [sampleBatchData, seqBatchData] = await Promise.all([
+        api.get<SampleBatch[]>(`/api/experiments/${id}/sample-batches`),
+        api.get<SequencingBatch[]>(`/api/experiments/${id}/sequencing-batches`),
+      ]);
+      setBatches(sampleBatchData);
+      setSeqBatches(seqBatchData);
     } catch {}
   }
 
@@ -861,46 +867,103 @@ export default function ExperimentDetailPage() {
           )}
 
           {activeTab === "batches" && (
-            <div>
-              <button
-                onClick={() => setShowBatchForm(!showBatchForm)}
-                className="bg-bioaf-600 text-white px-4 py-2 rounded-md text-sm hover:bg-bioaf-700 mb-4"
-              >
-                Create Sample Batch
-              </button>
-
-              {showBatchForm && (
-                <div className="bg-white rounded-lg shadow p-4 mb-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <input placeholder="Batch Name *" value={batchForm.name} onChange={(e) => setBatchForm({ ...batchForm, name: e.target.value })} className="border rounded px-3 py-2 text-sm" />
-                    <input type="date" placeholder="Prep Date" value={batchForm.prep_date ?? ""} onChange={(e) => setBatchForm({ ...batchForm, prep_date: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
-                    <input placeholder="Notes" value={batchForm.notes ?? ""} onChange={(e) => setBatchForm({ ...batchForm, notes: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={handleAddBatch} className="bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm">Save</button>
-                    <button onClick={() => setShowBatchForm(false)} className="border px-4 py-1.5 rounded text-sm">Cancel</button>
-                  </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Sample Batches */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Sample Batches</h3>
+                  <button
+                    onClick={() => setShowBatchForm(!showBatchForm)}
+                    className="bg-bioaf-600 text-white px-3 py-1.5 rounded text-sm hover:bg-bioaf-700"
+                  >
+                    Create Sample Batch
+                  </button>
                 </div>
-              )}
 
-              <div className="grid gap-4">
-                {batches.map((b) => (
-                  <div key={b.id} className="bg-white rounded-lg shadow p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold">{b.name}</h3>
-                        <p className="text-sm text-gray-500">{b.sample_count} samples</p>
-                      </div>
-                      <div className="text-sm text-gray-500 flex flex-wrap gap-x-4">
-                        {b.prep_date && <span>Prep: {b.prep_date}</span>}
-                      </div>
+                {showBatchForm && (
+                  <div className="bg-white rounded-lg shadow p-4 mb-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <input placeholder="Batch Name *" value={batchForm.name} onChange={(e) => setBatchForm({ ...batchForm, name: e.target.value })} className="border rounded px-3 py-2 text-sm" />
+                      <input type="date" placeholder="Prep Date" value={batchForm.prep_date ?? ""} onChange={(e) => setBatchForm({ ...batchForm, prep_date: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
+                      <input placeholder="Notes" value={batchForm.notes ?? ""} onChange={(e) => setBatchForm({ ...batchForm, notes: e.target.value || null })} className="border rounded px-3 py-2 text-sm col-span-2" />
                     </div>
-                    {b.notes && <p className="text-sm text-gray-500 mt-2">{b.notes}</p>}
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={handleAddBatch} className="bg-bioaf-600 text-white px-4 py-1.5 rounded text-sm">Save</button>
+                      <button onClick={() => setShowBatchForm(false)} className="border px-4 py-1.5 rounded text-sm">Cancel</button>
+                    </div>
                   </div>
-                ))}
-                {batches.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-8 text-center text-gray-400">No sample batches yet</div>
                 )}
+
+                <div className="grid gap-3">
+                  {batches.map((b) => (
+                    <div key={b.id} className="bg-white rounded-lg shadow p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold">{b.name}</h4>
+                          <p className="text-sm text-gray-500">{b.sample_count} samples</p>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {b.prep_date && <span>Prep: {b.prep_date}</span>}
+                        </div>
+                      </div>
+                      {b.notes && <p className="text-sm text-gray-500 mt-2">{b.notes}</p>}
+                    </div>
+                  ))}
+                  {batches.length === 0 && (
+                    <div className="bg-white rounded-lg shadow p-6 text-center text-gray-400 text-sm">No sample batches yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sequencing Batches */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Sequencing Batches</h3>
+                <div className="grid gap-3">
+                  {seqBatches.map((sb) => {
+                    const statusColors: Record<string, string> = {
+                      pending: "bg-gray-100 text-gray-700",
+                      ingesting: "bg-blue-100 text-blue-700",
+                      complete: "bg-green-100 text-green-700",
+                      partial_complete: "bg-yellow-100 text-yellow-700",
+                      failed: "bg-red-100 text-red-700",
+                    };
+                    const progress = sb.expected_file_count ? Math.round((sb.ingested_file_count / sb.expected_file_count) * 100) : 0;
+
+                    return (
+                      <div key={sb.id} className="bg-white rounded-lg shadow p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <h4 className="font-semibold">{sb.batch_number}</h4>
+                            {sb.instrument_model && <p className="text-sm text-gray-500">{sb.instrument_model}</p>}
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[sb.status] || "bg-gray-100"}`}>
+                            {sb.status.replace("_", " ")}
+                          </span>
+                        </div>
+                        {sb.expected_file_count && (
+                          <div className="mt-2">
+                            <div className="flex justify-between text-xs text-gray-500 mb-1">
+                              <span>Files: {sb.ingested_file_count}/{sb.expected_file_count}</span>
+                              <span>{progress}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-1.5">
+                              <div
+                                className={`h-1.5 rounded-full ${sb.status === "complete" ? "bg-green-500" : sb.status === "failed" ? "bg-red-500" : "bg-blue-500"}`}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {sb.manifest_received_at && (
+                          <p className="text-xs text-gray-400 mt-2">Received: {new Date(sb.manifest_received_at).toLocaleString()}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {seqBatches.length === 0 && (
+                    <div className="bg-white rounded-lg shadow p-6 text-center text-gray-400 text-sm">No sequencing batches linked to this experiment</div>
+                  )}
+                </div>
               </div>
             </div>
           )}

@@ -328,6 +328,45 @@ export interface SampleBatch {
   updated_at: string;
 }
 
+export type SequencingBatchStatus = "pending" | "ingesting" | "complete" | "partial_complete" | "failed";
+
+export interface SequencingBatch {
+  id: number;
+  organization_id: number;
+  name: string;
+  batch_number: string;
+  status: SequencingBatchStatus;
+  instrument_model: string | null;
+  instrument_platform: string | null;
+  quality_score_encoding: string | null;
+  sequencer_run_id: string | null;
+  manifest_received_at: string | null;
+  expected_file_count: number | null;
+  ingested_file_count: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManifestEntry {
+  id: number;
+  expected_filename: string;
+  expected_md5: string;
+  resolved_sample_id: number | null;
+  resolved_experiment_id: number | null;
+  resolved_project_id: number | null;
+  file_id: number | null;
+  status: "pending" | "verified" | "checksum_mismatch" | "missing" | "failed";
+  last_check_at: string | null;
+  retry_count: number;
+  error_message: string | null;
+  created_at: string;
+}
+
+export interface SequencingBatchDetail extends SequencingBatch {
+  manifest_entries: ManifestEntry[];
+}
+
 export interface ExperimentTemplate {
   id: number;
   name: string;
