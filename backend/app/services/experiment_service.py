@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from app.models.audit_log import AuditLog
 from app.models.sample_batch import SampleBatch
+from app.services.snapshot_utils import serialize_entity
 from app.models.experiment import Experiment, EXPERIMENT_STATUS_TRANSITIONS
 from app.models.experiment_custom_field import ExperimentCustomField
 from app.models.experiment_field_default import ExperimentFieldDefault
@@ -72,6 +73,7 @@ class ExperimentService:
             entity_id=experiment.id,
             action="create",
             details={"name": data.name, "status": "registered"},
+            snapshot=serialize_entity(experiment),
         )
         return experiment
 
@@ -131,6 +133,7 @@ class ExperimentService:
             ]
 
         if updates:
+            snap = serialize_entity(experiment)
             await session.flush()
             await log_action(
                 session,
@@ -140,6 +143,7 @@ class ExperimentService:
                 action="update",
                 details=updates,
                 previous_value=previous,
+                snapshot=snap,
             )
         return experiment
 
@@ -167,6 +171,7 @@ class ExperimentService:
 
         old_status = experiment.status
         experiment.status = new_status
+        snap = serialize_entity(experiment)
         await session.flush()
 
         await log_action(
@@ -177,6 +182,7 @@ class ExperimentService:
             action="status_change",
             details={"status": new_status},
             previous_value={"status": old_status},
+            snapshot=snap,
         )
 
         asyncio.create_task(
@@ -279,6 +285,7 @@ class ExperimentService:
 
         old_status = experiment.status
         experiment.status = "deleted"
+        snap = serialize_entity(experiment)
         await session.flush()
 
         await log_action(
@@ -289,6 +296,7 @@ class ExperimentService:
             action="delete",
             details={"status": "deleted"},
             previous_value={"status": old_status},
+            snapshot=snap,
         )
         return experiment
 

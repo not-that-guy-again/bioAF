@@ -9,6 +9,7 @@ from app.models.experiment_template import ExperimentTemplate
 from app.models.sample import Sample
 from app.schemas.sample import SampleCreate, SampleUpdate
 from app.services.audit_service import log_action
+from app.services.snapshot_utils import serialize_entity
 from app.services.vocabulary_validator import VocabularyValidator
 
 
@@ -129,6 +130,7 @@ class SampleService:
                 "experiment_id": experiment_id,
                 "sample_id_external": data.sample_id_external,
             },
+            snapshot=serialize_entity(sample),
         )
         return sample
 
@@ -197,6 +199,7 @@ class SampleService:
                     "experiment_id": experiment_id,
                     "sample_id_external": data.sample_id_external,
                 },
+                snapshot=serialize_entity(sample),
             )
             created.append(sample)
         return created
@@ -248,6 +251,8 @@ class SampleService:
                 updates[field] = str(new_val) if new_val is not None else None
 
         if updates:
+            # Capture snapshot before flush to avoid lazy-load issues
+            snap = serialize_entity(sample)
             await session.flush()
             await log_action(
                 session,
@@ -257,6 +262,7 @@ class SampleService:
                 action="update",
                 details=updates,
                 previous_value=previous,
+                snapshot=snap,
             )
         return sample
 
@@ -272,6 +278,7 @@ class SampleService:
         previous = {"qc_status": sample.qc_status, "qc_notes": sample.qc_notes}
         sample.qc_status = qc_status
         sample.qc_notes = qc_notes
+        snap = serialize_entity(sample)
         await session.flush()
 
         await log_action(
@@ -282,6 +289,7 @@ class SampleService:
             action="qc_update",
             details={"qc_status": qc_status, "qc_notes": qc_notes},
             previous_value=previous,
+            snapshot=snap,
         )
         return sample
 
@@ -302,6 +310,7 @@ class SampleService:
 
         old_status = sample.status
         sample.status = new_status
+        snap = serialize_entity(sample)
         await session.flush()
 
         await log_action(
@@ -312,6 +321,7 @@ class SampleService:
             action="status_change",
             details={"status": new_status},
             previous_value={"status": old_status},
+            snapshot=snap,
         )
         return sample
 
