@@ -24,6 +24,9 @@ from app.adapters.base import NotebookProvider
 from app.services.session_persistence import (
     generate_sync_in_command,
     generate_sync_out_command,
+    generate_outputs_sync_command,
+    generate_script_capture_command,
+    generate_list_outputs_command,
 )
 
 logger = logging.getLogger("bioaf.adapters.notebooks.k8s")
@@ -911,8 +914,10 @@ class KubernetesNotebookProvider(NotebookProvider):
         pod_name: str = "",
         namespace: str = DEFAULT_NOTEBOOK_NAMESPACE,
         gcs_home_prefix: str = "",
+        working_bucket: str = "",
+        session_type: str = "jupyter",
     ) -> dict:
-        """Final git commit, sync to GCS, then delete pod and service."""
+        """Final git commit, sync outputs to GCS, then delete pod and service."""
         from kubernetes.stream import stream
 
         core_client = self._get_k8s_core_client()
@@ -991,6 +996,79 @@ class KubernetesNotebookProvider(NotebookProvider):
             except Exception as e:
                 logger.warning("GCS sync-out failed for pod %s: %s", pod_name, e)
 
+        # Sync /outputs/ and capture scripts to GCS (ADR-040)
+        output_files: list[dict] = []
+        gcs_output_prefix = ""
+        if working_bucket and pod_name:
+            gcs_output_prefix = f"gs://{working_bucket}/sessions/{session_id}/outputs/"
+            gcs_scripts_prefix = f"gs://{working_bucket}/sessions/{session_id}/scripts/"
+
+            # Determine home directory based on session type
+            if session_type == "ssh":
+                # SSH sessions create a user-specific home; fall back to generic
+                exec_home = "/home"
+            else:
+                exec_home = HOME_DIR
+
+            # 1. Sync /outputs/ to working bucket
+            try:
+                outputs_cmd = generate_outputs_sync_command("/outputs", gcs_output_prefix)
+                stream(
+                    core_client.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=namespace,
+                    command=outputs_cmd,
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                    _request_timeout=1800,
+                )
+                logger.info("Outputs sync complete for pod %s", pod_name)
+            except Exception as e:
+                logger.warning("Outputs sync failed for pod %s: %s", pod_name, e)
+
+            # 2. Capture notebook/script files
+            try:
+                scripts_cmd = generate_script_capture_command(exec_home, gcs_scripts_prefix)
+                stream(
+                    core_client.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=namespace,
+                    command=scripts_cmd,
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                    _request_timeout=300,
+                )
+                logger.info("Script capture complete for pod %s", pod_name)
+            except Exception as e:
+                logger.warning("Script capture failed for pod %s: %s", pod_name, e)
+
+            # 3. List all output files for registration
+            try:
+                list_prefix = f"gs://{working_bucket}/sessions/{session_id}/"
+                list_cmd = generate_list_outputs_command(list_prefix)
+                raw_output = stream(
+                    core_client.connect_get_namespaced_pod_exec,
+                    name=pod_name,
+                    namespace=namespace,
+                    command=list_cmd,
+                    stderr=True,
+                    stdin=False,
+                    stdout=True,
+                    tty=False,
+                    _request_timeout=60,
+                )
+                if raw_output:
+                    from app.services.session_output_service import parse_gsutil_ls_output
+
+                    output_files = parse_gsutil_ls_output(str(raw_output))
+                    logger.info("Found %d output files for session %s", len(output_files), session_id)
+            except Exception as e:
+                logger.warning("Output file listing failed for pod %s: %s", pod_name, e)
+
         # Delete pod
         try:
             core_client.delete_namespaced_pod(name=pod_name, namespace=namespace)
@@ -1010,6 +1088,8 @@ class KubernetesNotebookProvider(NotebookProvider):
             "session_id": session_id,
             "status": "stopped",
             "stopped_at": datetime.now(timezone.utc).isoformat(),
+            "output_files": output_files,
+            "gcs_output_prefix": gcs_output_prefix,
         }
 
     async def _k8s_get_session_status(
@@ -1122,6 +1202,8 @@ class KubernetesNotebookProvider(NotebookProvider):
             "session_id": session_id,
             "status": "stopped",
             "stopped_at": datetime.now(timezone.utc).isoformat(),
+            "output_files": [],
+            "gcs_output_prefix": "",
         }
 
     def _local_get_session_status(self, session_id: str) -> dict:

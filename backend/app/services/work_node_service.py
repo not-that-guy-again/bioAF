@@ -212,17 +212,53 @@ class WorkNodeService:
 
         old_status = compute_session.status
 
+        # Look up working bucket for output sync
+        working_bucket_row = await session.execute(
+            text("SELECT value FROM platform_config WHERE key = 'working_bucket_name'")
+        )
+        working_bucket = ""
+        wb_row = working_bucket_row.first()
+        if wb_row:
+            val = (wb_row[0] or "").strip()
+            if val and val != "null":
+                working_bucket = val
+
+        terminate_result: dict = {}
         if compute_session.k8s_pod_name:
             try:
                 adapter = get_notebook_adapter()
-                await adapter.terminate_session(
+                terminate_result = await adapter.terminate_session(
                     compute_session.slurm_job_id or "",
                     pod_name=compute_session.k8s_pod_name or "",
                     namespace=compute_session.k8s_namespace or "bioaf-notebooks",
                     gcs_home_prefix=compute_session.gcs_home_prefix or "",
+                    working_bucket=working_bucket,
+                    session_type="ssh",
                 )
             except Exception as e:
                 logger.warning("Failed to terminate work node %d: %s", session_id, e)
+
+        # Register output files (ADR-040)
+        output_files = terminate_result.get("output_files", [])
+        if output_files:
+            try:
+                from app.services.session_output_service import SessionOutputService
+
+                await SessionOutputService.register_outputs(
+                    session,
+                    session_id=compute_session.id,
+                    organization_id=compute_session.organization_id,
+                    project_id=compute_session.project_id,
+                    experiment_id=compute_session.experiment_id,
+                    user_id=compute_session.user_id,
+                    gcs_files=output_files,
+                )
+            except Exception as e:
+                logger.warning("Output registration failed for work node %d: %s", session_id, e)
+
+        gcs_output_prefix = terminate_result.get("gcs_output_prefix", "")
+        if gcs_output_prefix:
+            compute_session.gcs_output_prefix = gcs_output_prefix
 
         compute_session.status = "stopped"
         compute_session.stopped_at = datetime.now(timezone.utc)
