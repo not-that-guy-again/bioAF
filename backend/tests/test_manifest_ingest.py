@@ -130,7 +130,7 @@ async def test_manifest_creates_sequencing_batch(session, org_and_experiment):
     )
     await session.commit()
 
-    result = await session.execute(select(SequencingBatch).where(SequencingBatch.batch_number == "SEQ-2026-0042"))
+    result = await session.execute(select(SequencingBatch).where(SequencingBatch.code == "SEQ-2026-0042"))
     batch = result.scalar_one_or_none()
     assert batch is not None
     assert batch.status == "ingesting"
@@ -211,6 +211,6 @@ async def test_batch_status_ingesting_when_all_pending(session, org_and_experime
     )
     await session.commit()
 
-    result = await session.execute(select(SequencingBatch).where(SequencingBatch.batch_number == "SEQ-2026-0042"))
+    result = await session.execute(select(SequencingBatch).where(SequencingBatch.code == "SEQ-2026-0042"))
     batch = result.scalar_one()
     assert batch.status == "ingesting"

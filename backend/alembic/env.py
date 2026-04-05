@@ -17,6 +17,7 @@ from app.models import (  # noqa: F401
     SampleBatch,
     SequencingBatch,
     ManifestEntry,
+    EntitySnapshot,
     CellxgenePublication,
     ComponentState,
     Document,

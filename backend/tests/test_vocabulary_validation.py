@@ -81,14 +81,13 @@ async def test_create_sample_with_null_molecule_type(client, admin_token, experi
 
 
 @pytest.mark.asyncio
-async def test_create_sample_batch_without_instrument_fields(client, admin_token, experiment_id, seeded_vocab):
-    """SampleBatch no longer has instrument fields (moved to POBatch)."""
+async def test_create_sample_batch_with_instrument_fields(client, admin_token, experiment_id, seeded_vocab):
+    """SampleBatch retains instrument fields for prep equipment tracking."""
     response = await client.post(
         f"/api/experiments/{experiment_id}/sample-batches",
-        json={"name": "Simple Batch"},
+        json={"name": "Simple Batch", "instrument_model": "Illumina NovaSeq 6000"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert response.status_code == 200
     data = response.json()
-    assert "instrument_model" not in data
-    assert "instrument_platform" not in data
+    assert data["instrument_model"] == "Illumina NovaSeq 6000"

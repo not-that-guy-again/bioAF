@@ -24,7 +24,7 @@ async def _setup_batch_with_entries(session: AsyncSession) -> tuple[int, list[in
     batch = SequencingBatch(
         organization_id=org.id,
         name="Retry Batch",
-        batch_number="SEQ-RETRY-001",
+        code="SEQ-RETRY-001",
         status="ingesting",
         expected_file_count=3,
     )

@@ -46,7 +46,7 @@ async def process_manifest_ingest(
     # Step 2: Create or find SequencingBatch
     existing = await db.execute(
         select(SequencingBatch).where(
-            SequencingBatch.batch_number == batch_number,
+            SequencingBatch.code == batch_number,
             SequencingBatch.organization_id == org_id,
         )
     )
@@ -64,7 +64,7 @@ async def process_manifest_ingest(
         seq_batch = SequencingBatch(
             organization_id=org_id,
             name=f"Sequencing batch {batch_number}",
-            batch_number=batch_number,
+            code=batch_number,
             status="ingesting",
             expected_file_count=len(parse_result.entries),
         )

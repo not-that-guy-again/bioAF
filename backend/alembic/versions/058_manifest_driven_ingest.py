@@ -3,10 +3,10 @@
 Revision ID: 058
 Revises: 057
 
-Renames batches -> sample_batches, removes sequencer fields from
-sample_batches, renames samples.batch_id -> sample_batch_id, adds
-sequencing_batches and manifest_entries tables, adds
-sequencing_batch_id to samples and files.
+Additive-only migration. Creates new tables for sample batches,
+sequencing batches, manifest entries, and entity snapshots. Adds
+FK columns to samples and files. Does NOT modify or drop any
+existing tables or columns.
 """
 
 from alembic import op
@@ -17,34 +17,32 @@ down_revision = "057"
 
 
 def upgrade() -> None:
-    # --- Step 1: Rename batches table to sample_batches ---
-    op.rename_table("batches", "sample_batches")
-
-    # Rename samples.batch_id -> sample_batch_id and update FK
-    op.alter_column("samples", "batch_id", new_column_name="sample_batch_id")
-    # Drop old FK and create new one pointing to sample_batches
-    op.drop_constraint("samples_batch_id_fkey", "samples", type_="foreignkey")
-    op.create_foreign_key(
-        "samples_sample_batch_id_fkey",
-        "samples",
+    # --- New table: sample_batches ---
+    # Mirrors the original batches table structure with all columns preserved.
+    # The legacy 'batches' table and 'batch_id' FK on samples remain untouched.
+    op.create_table(
         "sample_batches",
-        ["sample_batch_id"],
-        ["id"],
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("experiment_id", sa.Integer(), sa.ForeignKey("experiments.id"), nullable=False),
+        sa.Column("name", sa.String(255), nullable=False),
+        sa.Column("prep_date", sa.Date(), nullable=True),
+        sa.Column("operator_user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=True),
+        sa.Column("sequencer_run_id", sa.String(255), nullable=True),
+        sa.Column("instrument_model", sa.String(200), nullable=True),
+        sa.Column("instrument_platform", sa.String(100), nullable=True),
+        sa.Column("quality_score_encoding", sa.String(50), server_default="Phred+33", nullable=True),
+        sa.Column("notes", sa.Text(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
-    # Remove sequencer fields from sample_batches (moved to sequencing_batches)
-    op.drop_column("sample_batches", "sequencer_run_id")
-    op.drop_column("sample_batches", "instrument_model")
-    op.drop_column("sample_batches", "instrument_platform")
-    op.drop_column("sample_batches", "quality_score_encoding")
-
-    # --- Step 2: Create sequencing_batches table ---
+    # --- New table: sequencing_batches ---
     op.create_table(
         "sequencing_batches",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("organization_id", sa.Integer(), sa.ForeignKey("organizations.id"), nullable=False),
-        sa.Column("name", sa.String(255), nullable=False),
-        sa.Column("batch_number", sa.String(255), nullable=False),
+        sa.Column("code", sa.String(255), nullable=False),
+        sa.Column("name", sa.String(255), nullable=True),
         sa.Column("status", sa.String(50), nullable=False, server_default="pending"),
         sa.Column("instrument_model", sa.String(200), nullable=True),
         sa.Column("instrument_platform", sa.String(100), nullable=True),
@@ -58,7 +56,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
-    # --- Step 3: Create manifest_entries table ---
+    # --- New table: manifest_entries ---
     op.create_table(
         "manifest_entries",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
@@ -76,11 +74,29 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
 
-    # --- Step 4: Add sequencing_batch_id FK to samples and files ---
+    # --- New table: entity_snapshots ---
+    op.create_table(
+        "entity_snapshots",
+        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("entity_type", sa.String(50), nullable=False),
+        sa.Column("entity_id", sa.Integer(), nullable=False),
+        sa.Column("snapshot_json", sa.dialects.postgresql.JSONB(), nullable=False),
+        sa.Column("audit_log_id", sa.BigInteger(), sa.ForeignKey("audit_log.id"), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+    )
+    op.create_index("ix_entity_snapshots_type_id", "entity_snapshots", ["entity_type", "entity_id"])
+
+    # --- Add FK columns to samples (leave existing batch_id untouched) ---
+    op.add_column(
+        "samples",
+        sa.Column("sample_batch_id", sa.Integer(), sa.ForeignKey("sample_batches.id"), nullable=True),
+    )
     op.add_column(
         "samples",
         sa.Column("sequencing_batch_id", sa.Integer(), sa.ForeignKey("sequencing_batches.id"), nullable=True),
     )
+
+    # --- Add FK column to files ---
     op.add_column(
         "files",
         sa.Column("sequencing_batch_id", sa.Integer(), sa.ForeignKey("sequencing_batches.id"), nullable=True),
@@ -88,30 +104,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Remove sequencing_batch_id from files and samples
     op.drop_column("files", "sequencing_batch_id")
     op.drop_column("samples", "sequencing_batch_id")
-
-    # Drop new tables
+    op.drop_column("samples", "sample_batch_id")
+    op.drop_index("ix_entity_snapshots_type_id", "entity_snapshots")
+    op.drop_table("entity_snapshots")
     op.drop_table("manifest_entries")
     op.drop_table("sequencing_batches")
-
-    # Add sequencer fields back to sample_batches
-    op.add_column("sample_batches", sa.Column("quality_score_encoding", sa.String(50), server_default="Phred+33"))
-    op.add_column("sample_batches", sa.Column("instrument_platform", sa.String(100)))
-    op.add_column("sample_batches", sa.Column("instrument_model", sa.String(200)))
-    op.add_column("sample_batches", sa.Column("sequencer_run_id", sa.String(255)))
-
-    # Rename sample_batch_id back to batch_id
-    op.drop_constraint("samples_sample_batch_id_fkey", "samples", type_="foreignkey")
-    op.alter_column("samples", "sample_batch_id", new_column_name="batch_id")
-    op.create_foreign_key(
-        "samples_batch_id_fkey",
-        "samples",
-        "sample_batches",
-        ["batch_id"],
-        ["id"],
-    )
-
-    # Rename table back
-    op.rename_table("sample_batches", "batches")
+    op.drop_table("sample_batches")

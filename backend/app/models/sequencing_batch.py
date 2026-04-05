@@ -20,8 +20,8 @@ class SequencingBatch(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    batch_number: Mapped[str] = mapped_column(String(255), nullable=False)
+    code: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
     instrument_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     instrument_platform: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -933,7 +933,7 @@ export default function ExperimentDetailPage() {
                       <div key={sb.id} className="bg-white rounded-lg shadow p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div>
-                            <h4 className="font-semibold">{sb.batch_number}</h4>
+                            <h4 className="font-semibold">{sb.code}</h4>
                             {sb.instrument_model && <p className="text-sm text-gray-500">{sb.instrument_model}</p>}
                           </div>
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[sb.status] || "bg-gray-100"}`}>

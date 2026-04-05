@@ -46,7 +46,7 @@ async def _setup_scenario(session: AsyncSession) -> dict:
     batch = SequencingBatch(
         organization_id=org.id,
         name="Trigger Batch",
-        batch_number="SEQ-TRIG-001",
+        code="SEQ-TRIG-001",
         status="ingesting",
         expected_file_count=4,
     )

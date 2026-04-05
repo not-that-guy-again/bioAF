@@ -21,20 +21,20 @@ async def _create_experiment(client, token) -> int:
 async def test_create_sequencing_batch(client, admin_token, session):
     resp = await client.post(
         "/api/sequencing-batches",
-        json={"name": "Run 2026-04-01", "batch_number": "SEQ-2026-0042"},
+        json={"name": "Run 2026-04-01", "code": "SEQ-2026-0042"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["name"] == "Run 2026-04-01"
-    assert data["batch_number"] == "SEQ-2026-0042"
+    assert data["code"] == "SEQ-2026-0042"
     assert data["status"] == "pending"
 
 
 async def test_get_sequencing_batch(client, admin_token):
     create_resp = await client.post(
         "/api/sequencing-batches",
-        json={"name": "Run 2", "batch_number": "SEQ-002"},
+        json={"name": "Run 2", "code": "SEQ-002"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     batch_id = create_resp.json()["id"]
@@ -44,14 +44,14 @@ async def test_get_sequencing_batch(client, admin_token):
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
-    assert resp.json()["batch_number"] == "SEQ-002"
+    assert resp.json()["code"] == "SEQ-002"
     assert "manifest_entries" in resp.json()
 
 
 async def test_list_sequencing_batches(client, admin_token):
     await client.post(
         "/api/sequencing-batches",
-        json={"name": "List Run", "batch_number": "SEQ-LIST-001"},
+        json={"name": "List Run", "code": "SEQ-LIST-001"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
@@ -61,13 +61,13 @@ async def test_list_sequencing_batches(client, admin_token):
     )
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
-    assert any(b["batch_number"] == "SEQ-LIST-001" for b in resp.json())
+    assert any(b["code"] == "SEQ-LIST-001" for b in resp.json())
 
 
 async def test_update_sequencing_batch(client, admin_token):
     create_resp = await client.post(
         "/api/sequencing-batches",
-        json={"name": "Upd Run", "batch_number": "SEQ-UPD-001"},
+        json={"name": "Upd Run", "code": "SEQ-UPD-001"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     batch_id = create_resp.json()["id"]
@@ -86,7 +86,7 @@ async def test_sequencing_batch_status_transitions(client, admin_token):
     """POBatch status should be settable."""
     create_resp = await client.post(
         "/api/sequencing-batches",
-        json={"name": "Status Run", "batch_number": "SEQ-ST-001"},
+        json={"name": "Status Run", "code": "SEQ-ST-001"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     batch_id = create_resp.json()["id"]
@@ -117,7 +117,7 @@ async def test_experiment_sequencing_batches(client, admin_token, session):
     # Create a sequencing batch
     batch_resp = await client.post(
         "/api/sequencing-batches",
-        json={"name": "Exp Run", "batch_number": "SEQ-EXP-001"},
+        json={"name": "Exp Run", "code": "SEQ-EXP-001"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     batch_id = batch_resp.json()["id"]

@@ -35,7 +35,7 @@ async def test_old_batches_table_gone(session: AsyncSession):
 
 
 async def test_sample_batch_model_fields(session: AsyncSession):
-    """SampleBatch should have the expected columns (no sequencer fields)."""
+    """SampleBatch should have all expected columns including instrument fields."""
     result = await session.execute(
         text(
             "SELECT column_name FROM information_schema.columns "
@@ -43,22 +43,20 @@ async def test_sample_batch_model_fields(session: AsyncSession):
         )
     )
     columns = {row[0] for row in result.fetchall()}
-    # Must have these
     assert {
         "id",
         "experiment_id",
         "name",
         "prep_date",
         "operator_user_id",
+        "sequencer_run_id",
+        "instrument_model",
+        "instrument_platform",
+        "quality_score_encoding",
         "notes",
         "created_at",
         "updated_at",
     }.issubset(columns)
-    # Must NOT have sequencer fields (moved to POBatch)
-    assert "sequencer_run_id" not in columns
-    assert "instrument_model" not in columns
-    assert "instrument_platform" not in columns
-    assert "quality_score_encoding" not in columns
 
 
 async def test_sample_has_sample_batch_id_fk(session: AsyncSession):
@@ -127,9 +125,9 @@ async def test_new_sample_batch_create_endpoint(client: AsyncClient, admin_token
     data = resp.json()
     assert data["name"] == "SB-001"
     assert "id" in data
-    # Should not have sequencer fields
-    assert "sequencer_run_id" not in data
-    assert "instrument_model" not in data
+    # Instrument fields should be present (nullable)
+    assert "instrument_model" in data
+    assert "sequencer_run_id" in data
 
 
 async def test_new_sample_batch_get_endpoint(client: AsyncClient, admin_token: str):

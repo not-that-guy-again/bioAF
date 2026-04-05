@@ -334,7 +334,7 @@ export interface SequencingBatch {
   id: number;
   organization_id: number;
   name: string;
-  batch_number: string;
+  code: string;
   status: SequencingBatchStatus;
   instrument_model: string | null;
   instrument_platform: string | null;

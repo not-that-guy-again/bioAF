@@ -23,7 +23,7 @@ def _batch_response(batch: SequencingBatch) -> SequencingBatchResponse:
         id=batch.id,
         organization_id=batch.organization_id,
         name=batch.name,
-        batch_number=batch.batch_number,
+        code=batch.code,
         status=batch.status,
         instrument_model=batch.instrument_model,
         instrument_platform=batch.instrument_platform,
@@ -105,7 +105,7 @@ async def create_sequencing_batch(
     batch = SequencingBatch(
         organization_id=org_id,
         name=body.name,
-        batch_number=body.batch_number,
+        code=body.code,
         status="pending",
         instrument_model=body.instrument_model,
         instrument_platform=body.instrument_platform,
@@ -122,7 +122,7 @@ async def create_sequencing_batch(
         entity_type="sequencing_batch",
         entity_id=batch.id,
         action="create",
-        details={"name": body.name, "batch_number": body.batch_number},
+        details={"name": body.name, "code": body.code},
     )
     await session.commit()
     return _batch_response(batch)
@@ -144,7 +144,7 @@ async def update_sequencing_batch(
     updates = {}
     for field in [
         "name",
-        "batch_number",
+        "code",
         "status",
         "instrument_model",
         "instrument_platform",

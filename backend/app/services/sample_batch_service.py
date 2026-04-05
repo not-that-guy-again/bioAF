@@ -18,6 +18,10 @@ class SampleBatchService:
             name=data.name,
             prep_date=data.prep_date,
             operator_user_id=data.operator_user_id,
+            sequencer_run_id=data.sequencer_run_id,
+            instrument_model=data.instrument_model,
+            instrument_platform=data.instrument_platform,
+            quality_score_encoding=data.quality_score_encoding,
             notes=data.notes,
         )
         session.add(batch)
@@ -44,7 +48,16 @@ class SampleBatchService:
 
         previous = {}
         updates = {}
-        for field in ["name", "prep_date", "operator_user_id", "notes"]:
+        for field in [
+            "name",
+            "prep_date",
+            "operator_user_id",
+            "sequencer_run_id",
+            "instrument_model",
+            "instrument_platform",
+            "quality_score_encoding",
+            "notes",
+        ]:
             new_val = getattr(data, field, None)
             if new_val is not None:
                 old_val = getattr(batch, field)

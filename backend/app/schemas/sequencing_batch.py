@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 class SequencingBatchCreate(BaseModel):
     name: str
-    batch_number: str
+    code: str
     instrument_model: str | None = None
     instrument_platform: str | None = None
     quality_score_encoding: str | None = None
@@ -15,7 +15,7 @@ class SequencingBatchCreate(BaseModel):
 
 class SequencingBatchUpdate(BaseModel):
     name: str | None = None
-    batch_number: str | None = None
+    code: str | None = None
     status: str | None = None
     instrument_model: str | None = None
     instrument_platform: str | None = None
@@ -47,7 +47,7 @@ class SequencingBatchResponse(BaseModel):
     id: int
     organization_id: int
     name: str
-    batch_number: str
+    code: str
     status: str
     instrument_model: str | None = None
     instrument_platform: str | None = None
