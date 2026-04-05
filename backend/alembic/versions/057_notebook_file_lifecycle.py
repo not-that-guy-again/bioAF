@@ -1,5 +1,8 @@
 """Notebook file lifecycle (ADR-040, ADR-041).
 
+Revision ID: 057
+Revises: 056
+
 Adds build_number to environment_versions for rebuild versioning (v1 -> v1.1).
 Adds gcs_output_prefix to compute_sessions for output persistence tracking.
 Adds unique constraint on (environment_id, version_number, build_number).
@@ -7,6 +10,11 @@ Adds unique constraint on (environment_id, version_number, build_number).
 
 from alembic import op
 import sqlalchemy as sa
+
+revision = "057"
+down_revision = "056"
+branch_labels = None
+depends_on = None
 
 
 def upgrade() -> None:
