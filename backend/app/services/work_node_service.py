@@ -260,6 +260,27 @@ class WorkNodeService:
         if gcs_output_prefix:
             compute_session.gcs_output_prefix = gcs_output_prefix
 
+        # Move outputs from working to results bucket (ADR-040: two-phase)
+        if working_bucket and output_files:
+            try:
+                results_row = await session.execute(
+                    text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'")
+                )
+                r_row = results_row.first()
+                results_bucket = (r_row[0] or "").strip() if r_row else ""
+                if results_bucket and results_bucket != "null":
+                    from app.services.session_output_service import SessionOutputService
+
+                    final_prefix = await SessionOutputService.move_outputs_to_results_bucket(
+                        session,
+                        session_id=compute_session.id,
+                        working_bucket=working_bucket,
+                        results_bucket=results_bucket,
+                    )
+                    compute_session.gcs_output_prefix = final_prefix
+            except Exception as e:
+                logger.warning("Failed to move outputs to results bucket for work node %d: %s", session_id, e)
+
         compute_session.status = "stopped"
         compute_session.stopped_at = datetime.now(timezone.utc)
         await session.flush()

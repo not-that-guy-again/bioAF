@@ -126,3 +126,76 @@ class SessionOutputService:
             logger.info("Registered %d output files for session %d", registered, session_id)
 
         return registered
+
+    @staticmethod
+    async def move_outputs_to_results_bucket(
+        db: AsyncSession,
+        session_id: int,
+        working_bucket: str,
+        results_bucket: str,
+    ) -> str:
+        """Copy session outputs from working to results bucket, then delete from working.
+
+        Updates File.gcs_uri for all output files to point to the results bucket.
+        Returns the new GCS output prefix in the results bucket.
+        """
+        from google.cloud import storage
+        from sqlalchemy import text as sa_text
+
+        # Load GCS credentials
+        config_result = await db.execute(
+            sa_text(
+                "SELECT key, value FROM platform_config "
+                "WHERE key IN ('gcp_credential_source', 'gcp_service_account_key')"
+            )
+        )
+        config = {r[0]: r[1] for r in config_result.fetchall()}
+
+        from app.services.credential_injector import load_gcp_credentials
+
+        credentials = load_gcp_credentials(config)
+        client = storage.Client(credentials=credentials)
+
+        src_prefix = f"sessions/{session_id}/"
+        dst_prefix = f"sessions/{session_id}/"
+
+        src_bucket = client.bucket(working_bucket)
+        dst_bucket = client.bucket(results_bucket)
+
+        copied = 0
+        blobs = list(src_bucket.list_blobs(prefix=src_prefix))
+        for blob in blobs:
+            dst_name = dst_prefix + blob.name[len(src_prefix) :]
+            src_bucket.copy_blob(blob, dst_bucket, new_name=dst_name)
+            copied += 1
+
+        # Update File.gcs_uri to point to results bucket
+        if copied:
+            old_uri_prefix = f"gs://{working_bucket}/{src_prefix}"
+            new_uri_prefix = f"gs://{results_bucket}/{dst_prefix}"
+            await db.execute(
+                sa_text(
+                    "UPDATE files SET gcs_uri = REPLACE(gcs_uri, :old, :new) "
+                    "WHERE source_notebook_session_id = :sid AND gcs_uri LIKE :pattern"
+                ),
+                {
+                    "old": old_uri_prefix,
+                    "new": new_uri_prefix,
+                    "sid": session_id,
+                    "pattern": f"{old_uri_prefix}%",
+                },
+            )
+
+        # Delete from working bucket
+        for blob in blobs:
+            blob.delete()
+
+        logger.info(
+            "Moved %d output files for session %d from %s to %s",
+            copied,
+            session_id,
+            working_bucket,
+            results_bucket,
+        )
+
+        return f"gs://{results_bucket}/{dst_prefix}"
