@@ -2,30 +2,132 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+interface Highlight {
+  /** Position and size as percentages of the image */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Short label shown on the highlight border */
+  label: string;
+}
+
 interface Slide {
   title: string;
   description: string;
   image: string;
+  highlights?: Highlight[];
 }
 
 const SLIDES: Slide[] = [
-  { title: "Dashboard", description: "Your home base. See project activity, infrastructure status, and pipeline runs at a glance.", image: "/getting-started/01-dashboard.png" },
-  { title: "Active Projects", description: "Track how many projects are currently active and their overall health.", image: "/getting-started/02-active-projects.png" },
-  { title: "Recent Pipeline Runs", description: "See the latest pipeline executions and their completion status.", image: "/getting-started/03-recent-pipeline-runs.png" },
-  { title: "Infrastructure Status", description: "Monitor your cluster and storage at a glance.", image: "/getting-started/04-infrastructure-status.png" },
-  { title: "Cost Tracking", description: "Keep an eye on cloud spending with real-time cost estimates.", image: "/getting-started/05-cost-tracking.png" },
-  { title: "Infrastructure Components", description: "View and manage the services running in your cluster.", image: "/getting-started/06-infrastructure-components.png" },
-  { title: "Cost Center", description: "Break down cloud costs by service, project, and time period.", image: "/getting-started/07-cost-center.png" },
-  { title: "Backup & Recovery", description: "Set up automated backups and test your recovery procedures.", image: "/getting-started/08-backup-recovery.png" },
-  { title: "User Management", description: "See who has access and invite new team members.", image: "/getting-started/09-user-management.png" },
-  { title: "Roles & Permissions", description: "Control what each role can see and do.", image: "/getting-started/10-roles-permissions.png" },
-  { title: "Your Profile", description: "Update your account settings, session credentials, and GitHub integration.", image: "/getting-started/11-your-profile.png" },
-  { title: "Projects", description: "Create and manage your research projects.", image: "/getting-started/12-projects.png" },
-  { title: "Experiments", description: "Organize your work into experiments within projects.", image: "/getting-started/13-experiments.png" },
-  { title: "Pipeline Catalog", description: "Browse and configure available analysis pipelines.", image: "/getting-started/14-pipeline-catalog.png" },
-  { title: "Pipeline Runs", description: "Monitor running pipelines and review completed ones.", image: "/getting-started/15-pipeline-runs.png" },
-  { title: "QC Dashboards", description: "Review quality control metrics for your data.", image: "/getting-started/16-qc-dashboards.png" },
-  { title: "CellxGene", description: "Explore single-cell datasets with the interactive visualizer.", image: "/getting-started/17-cellxgene.png" },
+  {
+    title: "Dashboard",
+    description: "Your home base after logging in. Everything you need at a glance.",
+    image: "/getting-started/dashboard.png",
+    highlights: [
+      { x: 0, y: 0, w: 12.5, h: 100, label: "Sidebar" },
+      { x: 13, y: 5, w: 42, h: 22, label: "Infrastructure Health" },
+      { x: 56, y: 5, w: 21, h: 22, label: "Running Jobs" },
+      { x: 78, y: 5, w: 21, h: 22, label: "Queue Depth" },
+      { x: 13, y: 29, w: 42, h: 22, label: "Cost vs. Budget" },
+      { x: 56, y: 29, w: 43, h: 22, label: "File Inventory" },
+      { x: 13, y: 53, w: 86, h: 44, label: "Recent Activity" },
+    ],
+  },
+  {
+    title: "Experiments",
+    description: "Organize samples, track status, and manage metadata within experiments.",
+    image: "/getting-started/experiments.png",
+    highlights: [
+      { x: 13, y: 5, w: 30, h: 7, label: "Experiment Header" },
+      { x: 13, y: 13, w: 50, h: 5, label: "Tab Navigation" },
+      { x: 13, y: 19, w: 20, h: 6, label: "Add / Upload" },
+      { x: 13, y: 26, w: 86, h: 18, label: "Samples Table" },
+      { x: 82, y: 5, w: 17, h: 7, label: "Export Actions" },
+    ],
+  },
+  {
+    title: "Pipeline Catalog",
+    description: "Browse available analysis pipelines and launch them with one click.",
+    image: "/getting-started/pipeline-catalog.png",
+    highlights: [
+      { x: 13, y: 8, w: 40, h: 28, label: "Pipeline Card" },
+      { x: 55, y: 8, w: 22, h: 28, label: "Pipeline Card" },
+      { x: 79, y: 8, w: 20, h: 28, label: "Pipeline Card" },
+      { x: 82, y: 2, w: 17, h: 5, label: "Add Custom" },
+    ],
+  },
+  {
+    title: "Pipeline Runs",
+    description: "Monitor running pipelines and review outputs from completed ones.",
+    image: "/getting-started/pipeline-runs.png",
+  },
+  {
+    title: "Files & Data",
+    description: "Browse, preview, and download all files across your projects.",
+    image: "/getting-started/files.png",
+  },
+  {
+    title: "QC Dashboards",
+    description: "Review quality control metrics generated by your pipeline runs.",
+    image: "/getting-started/qc-dashboards.png",
+  },
+  {
+    title: "CellxGene",
+    description: "Explore single-cell datasets with the interactive CellxGene visualizer.",
+    image: "/getting-started/cellxgene.png",
+  },
+  {
+    title: "Notebooks",
+    description: "Launch RStudio or Jupyter sessions connected to your project data.",
+    image: "/getting-started/notebooks.png",
+  },
+  {
+    title: "Infrastructure",
+    description: "Deploy and manage your compute cluster and storage resources.",
+    image: "/getting-started/infrastructure.png",
+    highlights: [
+      { x: 5, y: 4, w: 40, h: 18, label: "Storage Status" },
+      { x: 5, y: 23, w: 40, h: 15, label: "Compute Stack" },
+      { x: 30, y: 12, w: 42, h: 70, label: "Deploy Progress" },
+    ],
+  },
+  {
+    title: "Cost Center",
+    description: "Break down cloud costs by service, project, and time period.",
+    image: "/getting-started/cost-center.png",
+  },
+  {
+    title: "Backup & Recovery",
+    description: "Configure automated backups and verify your recovery procedures.",
+    image: "/getting-started/backup-recovery.png",
+  },
+  {
+    title: "User Management",
+    description: "See who has access, invite new team members, and manage accounts.",
+    image: "/getting-started/users.png",
+    highlights: [
+      { x: 13, y: 6, w: 75, h: 6, label: "User Table" },
+      { x: 83, y: 2, w: 16, h: 5, label: "Invite Users" },
+      { x: 0, y: 48, w: 12.5, h: 40, label: "Settings Menu" },
+    ],
+  },
+  {
+    title: "Roles & Permissions",
+    description: "Control what each role can see and do across the platform.",
+    image: "/getting-started/roles.png",
+  },
+];
+
+// Colors for highlight borders, cycled per slide
+const HIGHLIGHT_COLORS = [
+  "rgba(59, 130, 246, 0.8)",   // blue
+  "rgba(16, 185, 129, 0.8)",   // emerald
+  "rgba(245, 158, 11, 0.8)",   // amber
+  "rgba(168, 85, 247, 0.8)",   // purple
+  "rgba(239, 68, 68, 0.8)",    // red
+  "rgba(6, 182, 212, 0.8)",    // cyan
+  "rgba(234, 88, 12, 0.8)",    // orange
 ];
 
 interface GettingStartedProps {
@@ -59,14 +161,54 @@ export function GettingStarted({ onComplete, standalone }: GettingStartedProps) 
   const finishLabel = standalone ? "Close" : "Go to Dashboard";
 
   return (
-    <div className="flex flex-col items-center max-w-3xl mx-auto">
+    <div className="flex flex-col items-center max-w-4xl mx-auto">
       {/* Slide content */}
       <div className="w-full mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">{slide.title}</h3>
         <p className="text-sm text-gray-600 mb-4">{slide.description}</p>
-        <div className="bg-gray-100 border rounded-lg overflow-hidden flex items-center justify-center" style={{ minHeight: 320 }}>
+
+        {/* Screenshot with highlight overlays */}
+        <div className="relative bg-gray-100 border rounded-lg overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={slide.image} alt={slide.title} className="max-w-full max-h-80 object-contain" />
+          <img
+            src={slide.image}
+            alt={slide.title}
+            className="w-full h-auto block"
+          />
+
+          {slide.highlights?.map((hl, i) => {
+            const color = HIGHLIGHT_COLORS[i % HIGHLIGHT_COLORS.length];
+            return (
+              <div
+                key={`${current}-${i}`}
+                data-testid="highlight"
+                className="absolute pointer-events-none"
+                style={{
+                  left: `${hl.x}%`,
+                  top: `${hl.y}%`,
+                  width: `${hl.w}%`,
+                  height: `${hl.h}%`,
+                  border: `2px solid ${color}`,
+                  borderRadius: 4,
+                  backgroundColor: `${color.replace(/[\d.]+\)$/, "0.08)")}`,
+                }}
+              >
+                <span
+                  className="absolute text-xs font-medium px-1.5 py-0.5 rounded-sm whitespace-nowrap"
+                  style={{
+                    top: -1,
+                    left: -1,
+                    backgroundColor: color,
+                    color: "#fff",
+                    fontSize: "0.65rem",
+                    lineHeight: "1rem",
+                  }}
+                >
+                  {hl.label}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
