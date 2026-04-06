@@ -23,8 +23,8 @@ SAMPLE_FIELDS = [
     "qc_notes",
     "collection_timestamp",
     "collection_method",
-    "sample_batch_code",
-    "sequencing_batch_code",
+    "sample_batch",
+    "sequencing_batch",
 ]
 
 # Maps common CSV header names to sample model field names
