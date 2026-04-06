@@ -309,11 +309,13 @@ for v in cfg.get('volumes', {}).values():
 full_install() {
     local non_interactive=false
     local force=false
+    local quiet=false
 
     for arg in "$@"; do
         case "$arg" in
             --non-interactive) non_interactive=true ;;
             --force)           force=true ;;
+            --quiet)           quiet=true ;;
         esac
     done
 
@@ -335,20 +337,22 @@ full_install() {
     generate_certs || exit 1
     echo ""
 
-    # Step 4: Show next steps
-    bold "=== Installation Complete ==="
-    echo ""
-    echo "Next steps:"
-    echo "  1. Review docker/.env and adjust if needed"
-    echo "  2. Run './bioaf setup' to build, migrate, and create your admin account"
-    echo ""
-    echo "Or run individual commands:"
-    echo "  ./bioaf build      Build container images"
-    echo "  ./bioaf start      Start all services"
-    echo "  ./bioaf migrate    Run database migrations"
-    echo "  ./bioaf status     Check service status"
-    echo "  ./bioaf help       Show all commands"
-    echo ""
+    # Step 4: Show next steps (skip when called from ./bioaf setup)
+    if [ "$quiet" = false ]; then
+        bold "=== Installation Complete ==="
+        echo ""
+        echo "Next steps:"
+        echo "  1. Review docker/.env and adjust if needed"
+        echo "  2. Run './bioaf setup' to build, migrate, and create your admin account"
+        echo ""
+        echo "Or run individual commands:"
+        echo "  ./bioaf build      Build container images"
+        echo "  ./bioaf start      Start all services"
+        echo "  ./bioaf migrate    Run database migrations"
+        echo "  ./bioaf status     Check service status"
+        echo "  ./bioaf help       Show all commands"
+        echo ""
+    fi
 }
 
 # ---------------------------------------------------------------------------

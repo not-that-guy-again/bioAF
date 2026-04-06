@@ -95,7 +95,7 @@ cmd_setup() {
     # Auto-run install.sh if it hasn't been run yet
     if [ ! -f "$ENV_FILE" ] || [ ! -f "$SCRIPT_DIR/docker/certs/tls.crt" ]; then
         bold "Running installer (first time)..."
-        "$SCRIPT_DIR/install.sh" --non-interactive
+        "$SCRIPT_DIR/install.sh" --non-interactive --quiet
         echo ""
     else
         # .env and certs exist -- just ensure they're current (idempotent)
