@@ -173,7 +173,7 @@ snapshot dict is provided. Only samples and experiments capture snapshots.
 The first line is a header comment containing the batch number. Remaining lines are
 standard md5sum output. Example:
 
-```
+```text
 # batch: SEQ-2026-0042
 d41d8cd98f00b204e9800998ecf8427e  EXP015_SAMPLE0003_S3_L001_R1_001.fastq.gz
 a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6  EXP015_SAMPLE0003_S3_L001_R2_001.fastq.gz
@@ -210,19 +210,19 @@ When auto-ingest is enabled and a new file notification arrives from GCS Pub/Sub
 
 ### 3.2 Manifest Ingest Flow
 
-**Step 1: Parse manifest**
+#### Step 1: Parse manifest
 
 - Download manifest from ingest bucket
 - Parse using configured format parser
 - Extract batch code and file list
 
-**Step 2: Create or find SequencingBatch**
+#### Step 2: Create or find SequencingBatch
 
 - Look up existing SequencingBatch by `code` + `organization_id`
 - If not found, create one with status "ingesting"
 - If found and status is "complete", log a warning (duplicate manifest)
 
-**Step 3: Resolve samples from filenames**
+#### Step 3: Resolve samples from filenames
 
 For each manifest entry:
 
@@ -233,7 +233,7 @@ For each manifest entry:
 - Create a `ManifestEntry` with resolved IDs and status "pending"
 - Set `sample.sequencing_batch_id` if not already set
 
-**Step 4: Check files and verify**
+#### Step 4: Check files and verify
 
 For each manifest entry with status "pending":
 
@@ -245,7 +245,7 @@ For each manifest entry with status "pending":
   (file may still be uploading)
 - If not present: increment `retry_count`, update `last_check_at`, keep status "pending"
 
-**Step 5: Update batch status**
+#### Step 5: Update batch status
 
 After processing all entries:
 
@@ -254,7 +254,7 @@ After processing all entries:
 - Some verified, some exhausted retries -> status "partial_complete"
 - All failed -> status "failed"
 
-**Step 6: Emit events**
+#### Step 6: Emit events
 
 - `SEQUENCING_BATCH_DETECTED` -- when manifest first parsed
 - `SEQUENCING_BATCH_FILE_VERIFIED` -- per file, includes sample/experiment/project info
