@@ -243,16 +243,6 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Getting Started Guide */}
-          <div className="max-w-lg mb-8">
-            <button
-              onClick={() => router.push("/getting-started")}
-              className="text-sm text-bioaf-600 hover:text-bioaf-700 font-medium"
-            >
-              Getting Started Guide &rarr;
-            </button>
-          </div>
-
           {/* Divider */}
           <hr className="max-w-lg mb-8 border-gray-200" />
 
