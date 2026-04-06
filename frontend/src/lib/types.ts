@@ -298,6 +298,17 @@ export interface SampleBatchSummary {
   name: string;
 }
 
+export interface SampleCustomFieldValue {
+  field_name: string;
+  field_value: string;
+}
+
+export interface SampleCustomFieldResponse {
+  id: number;
+  field_name: string;
+  field_value: string | null;
+}
+
 export interface Sample {
   id: number;
   sample_id_external: string | null;
@@ -319,6 +330,7 @@ export interface Sample {
   status: SampleStatus;
   created_at: string;
   updated_at: string;
+  custom_fields: SampleCustomFieldResponse[];
 }
 
 export interface SampleBatch {
@@ -429,6 +441,7 @@ export interface SampleCreateRequest {
   library_layout?: string | null;
   qc_status?: string | null;
   qc_notes?: string | null;
+  custom_fields?: SampleCustomFieldValue[];
 }
 
 export interface SampleUpdateRequest {
@@ -446,6 +459,7 @@ export interface SampleUpdateRequest {
   molecule_type?: string | null;
   library_prep_method?: string | null;
   library_layout?: string | null;
+  custom_fields?: SampleCustomFieldValue[];
 }
 
 export interface SampleBulkUpdateRequest {

@@ -8,6 +8,7 @@ from app.models.experiment_field_default import ExperimentFieldDefault, DEFAULTA
 from app.models.experiment_template import ExperimentTemplate
 from app.models.sample import Sample
 from app.models.sample_batch import SampleBatch
+from app.models.sample_custom_field import SampleCustomField
 from app.models.sequencing_batch import SequencingBatch
 from app.schemas.sample import SampleCreate, SampleUpdate
 from app.services.audit_service import log_action
@@ -163,6 +164,15 @@ class SampleService:
         session.add(sample)
         await session.flush()
 
+        if data.custom_fields:
+            for cf in data.custom_fields:
+                session.add(SampleCustomField(
+                    sample_id=sample.id,
+                    field_name=cf.field_name,
+                    field_value=cf.field_value,
+                ))
+            await session.flush()
+
         await log_action(
             session,
             user_id=user_id,
@@ -249,6 +259,15 @@ class SampleService:
             session.add(sample)
             await session.flush()
 
+            if data.custom_fields:
+                for cf in data.custom_fields:
+                    session.add(SampleCustomField(
+                        sample_id=sample.id,
+                        field_name=cf.field_name,
+                        field_value=cf.field_value,
+                    ))
+                await session.flush()
+
             await log_action(
                 session,
                 user_id=user_id,
@@ -268,7 +287,7 @@ class SampleService:
     async def update_sample(session: AsyncSession, sample_id: int, user_id: int, data: SampleUpdate) -> Sample | None:
         result = await session.execute(
             select(Sample)
-            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch))
+            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch), selectinload(Sample.custom_fields))
             .where(Sample.id == sample_id)
         )
         sample = result.scalar_one_or_none()
@@ -325,6 +344,24 @@ class SampleService:
                 previous[field] = str(old_val) if old_val is not None else None
                 setattr(sample, field, new_val)
                 updates[field] = str(new_val) if new_val is not None else None
+
+        # Handle custom fields (delete-and-replace)
+        if data.custom_fields is not None:
+            existing = await session.execute(
+                select(SampleCustomField).where(SampleCustomField.sample_id == sample_id)
+            )
+            for row in existing.scalars().all():
+                await session.delete(row)
+            await session.flush()
+            for cf in data.custom_fields:
+                session.add(SampleCustomField(
+                    sample_id=sample_id,
+                    field_name=cf.field_name,
+                    field_value=cf.field_value,
+                ))
+            updates["custom_fields"] = [
+                {"field_name": cf.field_name, "field_value": cf.field_value} for cf in data.custom_fields
+            ]
 
         if updates:
             # Capture snapshot before flush to avoid lazy-load issues
@@ -411,7 +448,7 @@ class SampleService:
     ) -> list[Sample]:
         query = (
             select(Sample)
-            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch))
+            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch), selectinload(Sample.custom_fields))
             .where(Sample.experiment_id == experiment_id)
         )
         if sample_batch_id is not None:
@@ -428,7 +465,7 @@ class SampleService:
     async def get_sample(session: AsyncSession, sample_id: int) -> Sample | None:
         result = await session.execute(
             select(Sample)
-            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch))
+            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch), selectinload(Sample.custom_fields))
             .where(Sample.id == sample_id)
         )
         return result.scalar_one_or_none()

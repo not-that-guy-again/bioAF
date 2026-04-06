@@ -76,6 +76,7 @@ export default function ExperimentDetailPage() {
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [sampleForm, setSampleForm] = useState<SampleCreateRequest>({});
   const [sampleFormError, setSampleFormError] = useState("");
+  const [sampleCustomFieldValues, setSampleCustomFieldValues] = useState<Record<string, string>>({});
   const [batchForm, setBatchForm] = useState<SampleBatchCreateRequest>({ name: "" });
   const [editFieldDefaults, setEditFieldDefaults] = useState<FieldDefaultValue[]>([]);
   const [editCustomFields, setEditCustomFields] = useState<{ field_name: string; field_value: string; is_required: boolean }[]>([]);
@@ -86,6 +87,7 @@ export default function ExperimentDetailPage() {
   const [editingSampleId, setEditingSampleId] = useState<number | null>(null);
   const [editSampleForm, setEditSampleForm] = useState<SampleUpdateRequest>({});
   const [editSampleError, setEditSampleError] = useState("");
+  const [editSampleCustomFields, setEditSampleCustomFields] = useState<Record<string, string>>({});
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [bulkEditForm, setBulkEditForm] = useState<SampleUpdateRequest>({});
   const [bulkEditError, setBulkEditError] = useState("");
@@ -188,8 +190,13 @@ export default function ExperimentDetailPage() {
   async function handleAddSample() {
     setSampleFormError("");
     try {
-      await api.post(`/api/experiments/${id}/samples`, sampleForm);
+      const cfPayload = Object.entries(sampleCustomFieldValues)
+        .filter(([, v]) => v.trim())
+        .map(([name, value]) => ({ field_name: name, field_value: value }));
+      const payload = { ...sampleForm, custom_fields: cfPayload.length > 0 ? cfPayload : undefined };
+      await api.post(`/api/experiments/${id}/samples`, payload);
       setSampleForm({});
+      setSampleCustomFieldValues({});
       setShowSampleForm(false);
       loadSamples();
       loadExperiment();
@@ -296,6 +303,11 @@ export default function ExperimentDetailPage() {
       sample_batch_code: sample.sample_batch?.name ?? null,
       sequencing_batch_code: sample.sequencing_batch?.code ?? null,
     });
+    const cfValues: Record<string, string> = {};
+    for (const cf of sample.custom_fields ?? []) {
+      cfValues[cf.field_name] = cf.field_value ?? "";
+    }
+    setEditSampleCustomFields(cfValues);
     setEditSampleError("");
   }
 
@@ -303,7 +315,11 @@ export default function ExperimentDetailPage() {
     if (!editingSampleId) return;
     setEditSampleError("");
     try {
-      await api.patch(`/api/samples/${editingSampleId}`, editSampleForm);
+      const cfPayload = Object.entries(editSampleCustomFields)
+        .filter(([, v]) => v.trim())
+        .map(([name, value]) => ({ field_name: name, field_value: value }));
+      const payload = { ...editSampleForm, custom_fields: cfPayload };
+      await api.patch(`/api/samples/${editingSampleId}`, payload);
       setEditingSampleId(null);
       setEditSampleForm({});
       loadSamples();
@@ -680,6 +696,12 @@ export default function ExperimentDetailPage() {
                         if (fd.default_value) prefill[fd.field_name] = fd.default_value;
                       }
                       setSampleForm(prefill as unknown as SampleCreateRequest);
+                      // Initialize custom field values from experiment-level defaults
+                      const cfDefaults: Record<string, string> = {};
+                      for (const cf of experiment.custom_fields) {
+                        cfDefaults[cf.field_name] = cf.field_value ?? "";
+                      }
+                      setSampleCustomFieldValues(cfDefaults);
                     }
                     setShowSampleForm(!showSampleForm);
                   }}
@@ -719,6 +741,15 @@ export default function ExperimentDetailPage() {
                     <VocabularySelect fieldName="library_layout" value={sampleForm.library_layout} onChange={(v) => setSampleForm({ ...sampleForm, library_layout: v })} placeholder="Library Layout..." />
                     <input placeholder="Sample Batch" value={sampleForm.sample_batch_code ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, sample_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Sequencing Batch" value={sampleForm.sequencing_batch_code ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, sequencing_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
+                    {experiment?.custom_fields.map((cf) => (
+                      <input
+                        key={cf.id}
+                        placeholder={cf.field_name}
+                        value={sampleCustomFieldValues[cf.field_name] ?? ""}
+                        onChange={(e) => setSampleCustomFieldValues((prev) => ({ ...prev, [cf.field_name]: e.target.value }))}
+                        className="border rounded px-3 py-2 text-sm"
+                      />
+                    ))}
                   </div>
                   {sampleFormError && (
                     <p className="text-red-600 text-sm mt-2">{sampleFormError}</p>
@@ -853,6 +884,10 @@ export default function ExperimentDetailPage() {
                     { label: "QC Status", value: viewingSample.qc_status },
                     { label: "QC Notes", value: viewingSample.qc_notes },
                     { label: "Prep Notes", value: viewingSample.prep_notes },
+                    ...(viewingSample.custom_fields ?? []).map((cf) => ({
+                      label: cf.field_name,
+                      value: cf.field_value,
+                    })),
                     { label: "Created", value: new Date(viewingSample.created_at).toLocaleString() },
                     { label: "Updated", value: new Date(viewingSample.updated_at).toLocaleString() },
                   ]}
@@ -929,6 +964,16 @@ export default function ExperimentDetailPage() {
                         <label className="block text-xs font-medium text-gray-500 mb-1">Sequencing Batch</label>
                         <input value={editSampleForm.sequencing_batch_code ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sequencing_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm w-full" />
                       </div>
+                      {experiment?.custom_fields.map((cf) => (
+                        <div key={cf.id}>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">{cf.field_name}{cf.is_required ? " *" : ""}</label>
+                          <input
+                            value={editSampleCustomFields[cf.field_name] ?? ""}
+                            onChange={(e) => setEditSampleCustomFields((prev) => ({ ...prev, [cf.field_name]: e.target.value }))}
+                            className="border rounded px-3 py-2 text-sm w-full"
+                          />
+                        </div>
+                      ))}
                     </div>
                     {editSampleError && (
                       <p className="text-red-600 text-sm mt-3">{editSampleError}</p>

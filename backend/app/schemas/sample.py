@@ -17,6 +17,19 @@ class SequencingBatchSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SampleCustomFieldValue(BaseModel):
+    field_name: str
+    field_value: str
+
+
+class SampleCustomFieldResponse(BaseModel):
+    id: int
+    field_name: str
+    field_value: str | None
+
+    model_config = {"from_attributes": True}
+
+
 class SampleCreate(BaseModel):
     sample_id_external: str | None = None
     organism: str | None = None
@@ -37,6 +50,7 @@ class SampleCreate(BaseModel):
     parent_sample_id: int | None = None
     collection_timestamp: datetime | None = None
     collection_method: str | None = None
+    custom_fields: list[SampleCustomFieldValue] | None = None
 
     @field_validator("viability_pct")
     @classmethod
@@ -71,6 +85,7 @@ class SampleUpdate(BaseModel):
     parent_sample_id: int | None = None
     collection_timestamp: datetime | None = None
     collection_method: str | None = None
+    custom_fields: list[SampleCustomFieldValue] | None = None
 
     @field_validator("viability_pct")
     @classmethod
@@ -138,5 +153,6 @@ class SampleResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    custom_fields: list[SampleCustomFieldResponse] = []
 
     model_config = {"from_attributes": True}
