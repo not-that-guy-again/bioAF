@@ -561,12 +561,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                   Recommended
                 </span>
               </div>
-              <p className="text-sm text-gray-600 mb-2">
+              <p className="text-sm text-gray-600">
                 Cloud-native autoscaling with Google Kubernetes Engine and Cloud Storage.
               </p>
-              <div className="text-xs text-gray-500">
-                Estimated: $50-200/month depending on workload
-              </div>
             </div>
 
             <div
