@@ -107,6 +107,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
   // Step 6: Compute stack
   const [computeStack, setComputeStack] = useState("kubernetes");
+  const [stackDeploying, setStackDeploying] = useState(false);
 
   // --- Handlers ---
 
@@ -228,6 +229,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
   const handleSelectStack = async () => {
     setError("");
+    setStackDeploying(true);
     try {
       await api.post("/api/v1/infrastructure/terraform/init");
       try {
@@ -245,6 +247,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       setStep(7);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to initialize infrastructure");
+    } finally {
+      setStackDeploying(false);
     }
   };
 
@@ -583,8 +587,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           </div>
 
           <button onClick={handleSelectStack}
-            className="w-full bg-bioaf-600 text-white py-2 rounded hover:bg-bioaf-700">
-            Continue with {computeStack === "kubernetes" ? "Kubernetes + GCS" : "SLURM + NFS"}
+            disabled={stackDeploying}
+            className="w-full bg-bioaf-600 text-white py-2 rounded hover:bg-bioaf-700 disabled:opacity-50">
+            {stackDeploying ? "Initializing infrastructure..." : `Continue with ${computeStack === "kubernetes" ? "Kubernetes + GCS" : "SLURM + NFS"}`}
           </button>
         </div>
       )}
