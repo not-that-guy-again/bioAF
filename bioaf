@@ -135,7 +135,7 @@ print(json.dumps(result))
     echo ""
     echo "  Your one-time setup code is:"
     echo ""
-    bold "    $setup_code"
+    green "    $setup_code"
     echo ""
     echo "  Open the setup wizard in your browser:"
     echo ""
