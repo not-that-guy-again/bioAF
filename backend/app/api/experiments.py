@@ -243,6 +243,9 @@ async def list_experiment_samples(
             treatment_condition=s.treatment_condition,
             chemistry_version=s.chemistry_version,
             sample_batch={"id": s.sample_batch.id, "name": s.sample_batch.name} if s.sample_batch else None,
+            sequencing_batch={"id": s.sequencing_batch.id, "code": s.sequencing_batch.code}
+            if s.sequencing_batch
+            else None,
             viability_pct=float(s.viability_pct) if s.viability_pct is not None else None,
             cell_count=s.cell_count,
             prep_notes=s.prep_notes,
@@ -283,6 +286,9 @@ async def create_sample(
         treatment_condition=sample.treatment_condition,
         chemistry_version=sample.chemistry_version,
         sample_batch={"id": sample.sample_batch.id, "name": sample.sample_batch.name} if sample.sample_batch else None,
+        sequencing_batch={"id": sample.sequencing_batch.id, "code": sample.sequencing_batch.code}
+        if sample.sequencing_batch
+        else None,
         viability_pct=float(sample.viability_pct) if sample.viability_pct is not None else None,
         cell_count=sample.cell_count,
         prep_notes=sample.prep_notes,

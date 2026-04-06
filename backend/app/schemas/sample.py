@@ -10,6 +10,13 @@ class SampleBatchSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SequencingBatchSummary(BaseModel):
+    id: int
+    code: str
+
+    model_config = {"from_attributes": True}
+
+
 class SampleCreate(BaseModel):
     sample_id_external: str | None = None
     organism: str | None = None
@@ -17,7 +24,8 @@ class SampleCreate(BaseModel):
     donor_source: str | None = None
     treatment_condition: str | None = None
     chemistry_version: str | None = None
-    sample_batch_id: int | None = None
+    sample_batch_code: str | None = None
+    sequencing_batch_code: str | None = None
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
@@ -52,7 +60,8 @@ class SampleUpdate(BaseModel):
     donor_source: str | None = None
     treatment_condition: str | None = None
     chemistry_version: str | None = None
-    sample_batch_id: int | None = None
+    sample_batch_code: str | None = None
+    sequencing_batch_code: str | None = None
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
@@ -114,6 +123,7 @@ class SampleResponse(BaseModel):
     treatment_condition: str | None
     chemistry_version: str | None
     sample_batch: SampleBatchSummary | None = None
+    sequencing_batch: SequencingBatchSummary | None = None
     viability_pct: float | None
     cell_count: int | None
     prep_notes: str | None
