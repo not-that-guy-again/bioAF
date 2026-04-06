@@ -304,6 +304,7 @@ export interface Sample {
   treatment_condition: string | null;
   chemistry_version: string | null;
   sample_batch: SampleBatchSummary | null;
+  sequencing_batch: { id: number; code: string } | null;
   viability_pct: number | null;
   cell_count: number | null;
   prep_notes: string | null;
@@ -415,7 +416,8 @@ export interface SampleCreateRequest {
   donor_source?: string | null;
   treatment_condition?: string | null;
   chemistry_version?: string | null;
-  sample_batch_id?: number | null;
+  sample_batch_code?: string | null;
+  sequencing_batch_code?: string | null;
   viability_pct?: number | null;
   cell_count?: number | null;
   prep_notes?: string | null;
@@ -433,7 +435,8 @@ export interface SampleUpdateRequest {
   donor_source?: string | null;
   treatment_condition?: string | null;
   chemistry_version?: string | null;
-  sample_batch_id?: number | null;
+  sample_batch_code?: string | null;
+  sequencing_batch_code?: string | null;
   viability_pct?: number | null;
   cell_count?: number | null;
   prep_notes?: string | null;

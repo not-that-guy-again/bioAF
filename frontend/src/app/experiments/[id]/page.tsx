@@ -280,6 +280,8 @@ export default function ExperimentDetailPage() {
       molecule_type: sample.molecule_type,
       library_prep_method: sample.library_prep_method,
       library_layout: sample.library_layout,
+      sample_batch_code: sample.sample_batch?.name ?? null,
+      sequencing_batch_code: sample.sequencing_batch?.code ?? null,
     });
     setEditSampleError("");
   }
@@ -653,6 +655,8 @@ export default function ExperimentDetailPage() {
                     <VocabularySelect fieldName="molecule_type" value={sampleForm.molecule_type} onChange={(v) => setSampleForm({ ...sampleForm, molecule_type: v })} placeholder="Molecule Type..." />
                     <VocabularySelect fieldName="library_prep_method" value={sampleForm.library_prep_method} onChange={(v) => setSampleForm({ ...sampleForm, library_prep_method: v })} placeholder="Library Prep Method..." />
                     <VocabularySelect fieldName="library_layout" value={sampleForm.library_layout} onChange={(v) => setSampleForm({ ...sampleForm, library_layout: v })} placeholder="Library Layout..." />
+                    <input placeholder="Sample Batch" value={sampleForm.sample_batch_code ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, sample_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
+                    <input placeholder="Sequencing Batch" value={sampleForm.sequencing_batch_code ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, sequencing_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm" />
                   </div>
                   {sampleFormError && (
                     <p className="text-red-600 text-sm mt-2">{sampleFormError}</p>
@@ -707,7 +711,8 @@ export default function ExperimentDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Treatment</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Prep</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Layout</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sample Batch</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Seq. Batch</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QC</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3"></th>
@@ -732,6 +737,7 @@ export default function ExperimentDetailPage() {
                         <td className="px-4 py-3 text-sm">{s.library_prep_method || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.library_layout || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.sample_batch?.name || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.sequencing_batch?.code || "---"}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={s.qc_status ?? ""}
@@ -781,6 +787,7 @@ export default function ExperimentDetailPage() {
                     { label: "Cell Count", value: viewingSample.cell_count?.toLocaleString() },
                     { label: "Viability %", value: viewingSample.viability_pct != null ? `${viewingSample.viability_pct}%` : null },
                     { label: "Sample Batch", value: viewingSample.sample_batch?.name },
+                    { label: "Sequencing Batch", value: viewingSample.sequencing_batch?.code },
                     { label: "QC Status", value: viewingSample.qc_status },
                     { label: "QC Notes", value: viewingSample.qc_notes },
                     { label: "Prep Notes", value: viewingSample.prep_notes },
@@ -848,9 +855,17 @@ export default function ExperimentDetailPage() {
                         <label className="block text-xs font-medium text-gray-500 mb-1">Library Prep Method</label>
                         <VocabularySelect fieldName="library_prep_method" value={editSampleForm.library_prep_method} onChange={(v) => setEditSampleForm({ ...editSampleForm, library_prep_method: v })} placeholder="Library Prep Method..." />
                       </div>
-                      <div className="col-span-2">
+                      <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">Library Layout</label>
                         <VocabularySelect fieldName="library_layout" value={editSampleForm.library_layout} onChange={(v) => setEditSampleForm({ ...editSampleForm, library_layout: v })} placeholder="Library Layout..." />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Sample Batch</label>
+                        <input value={editSampleForm.sample_batch_code ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sample_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Sequencing Batch</label>
+                        <input value={editSampleForm.sequencing_batch_code ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sequencing_batch_code: e.target.value || null })} className="border rounded px-3 py-2 text-sm w-full" />
                       </div>
                     </div>
                     {editSampleError && (
