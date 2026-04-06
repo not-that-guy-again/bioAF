@@ -227,6 +227,7 @@ export interface ExperimentUpdateRequest {
   expected_sample_count?: number | null;
   design_type?: string | null;
   field_defaults?: FieldDefaultValue[];
+  custom_fields?: CustomFieldValue[];
 }
 
 export interface ExperimentListResponse {

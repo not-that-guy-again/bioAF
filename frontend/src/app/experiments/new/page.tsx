@@ -39,6 +39,7 @@ export default function NewExperimentPage() {
   const [fieldDefaults, setFieldDefaults] = useState<FieldDefaultValue[]>([]);
   const [showFieldDefaults, setShowFieldDefaults] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  const [extraCustomFields, setExtraCustomFields] = useState<{ name: string; value: string }[]>([]);
 
   const DEFAULTABLE_FIELDS = [
     { name: "organism", label: "Organism", type: "text" as const },
@@ -46,6 +47,8 @@ export default function NewExperimentPage() {
     { name: "donor_source", label: "Donor ID", type: "text" as const },
     { name: "treatment_condition", label: "Treatment Condition", type: "text" as const },
     { name: "chemistry_version", label: "Chemistry Version", type: "text" as const },
+    { name: "sample_batch_code", label: "Sample Batch", type: "text" as const },
+    { name: "sequencing_batch_code", label: "Sequencing Batch", type: "text" as const },
     { name: "molecule_type", label: "Molecule Type", type: "vocabulary" as const },
     { name: "library_prep_method", label: "Library Prep Method", type: "vocabulary" as const },
     { name: "library_layout", label: "Library Layout", type: "vocabulary" as const },
@@ -93,17 +96,25 @@ export default function NewExperimentPage() {
     setError("");
 
     try {
-      const customFields = Object.entries(customFieldValues)
+      const templateFields = Object.entries(customFieldValues)
         .filter(([, v]) => v.trim())
         .map(([name, value]) => ({
           field_name: name,
           field_value: value,
           field_type: "string",
         }));
+      const userFields = extraCustomFields
+        .filter((f) => f.name.trim() && f.value.trim())
+        .map((f) => ({
+          field_name: f.name.trim(),
+          field_value: f.value.trim(),
+          field_type: "string",
+        }));
+      const allCustomFields = [...templateFields, ...userFields];
       const payload = {
         ...form,
         field_defaults: fieldDefaults.length > 0 ? fieldDefaults : undefined,
-        custom_fields: customFields.length > 0 ? customFields : undefined,
+        custom_fields: allCustomFields.length > 0 ? allCustomFields : undefined,
       };
       const experiment = await api.post<Experiment>("/api/experiments", payload);
 
@@ -230,27 +241,69 @@ export default function NewExperimentPage() {
               </div>
             </div>
 
-            {selectedTemplate?.custom_fields_schema_json && (
-              <div className="bg-white rounded-lg shadow p-6 space-y-4">
-                <h2 className="text-lg font-semibold">Custom Fields</h2>
-                <p className="text-sm text-gray-500">
-                  Fields defined by the &quot;{selectedTemplate.name}&quot; template.
-                </p>
-                {(selectedTemplate.custom_fields_schema_json as { fields?: Array<{ name: string; type: string; required?: boolean }> })?.fields?.map((field) => (
-                  <div key={field.name}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {field.name} {field.required && "*"}
-                    </label>
+            <div className="bg-white rounded-lg shadow p-6 space-y-4">
+              <h2 className="text-lg font-semibold">Custom Fields</h2>
+
+              {selectedTemplate?.custom_fields_schema_json && (
+                <>
+                  <p className="text-sm text-gray-500">
+                    Fields from template &quot;{selectedTemplate.name}&quot;:
+                  </p>
+                  {(selectedTemplate.custom_fields_schema_json as { fields?: Array<{ name: string; type: string; required?: boolean }> })?.fields?.map((field) => (
+                    <div key={field.name}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {field.name} {field.required && "*"}
+                      </label>
+                      <input
+                        type={field.type === "number" ? "number" : "text"}
+                        value={customFieldValues[field.name] ?? ""}
+                        onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {extraCustomFields.map((field, idx) => (
+                <div key={idx} className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Field Name</label>
                     <input
-                      type={field.type === "number" ? "number" : "text"}
-                      value={customFieldValues[field.name] ?? ""}
-                      onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                      type="text"
+                      value={field.name}
+                      onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, name: e.target.value } : f))}
+                      placeholder="e.g. sequencer_operator"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                     />
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
+                    <input
+                      type="text"
+                      value={field.value}
+                      onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, value: e.target.value } : f))}
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExtraCustomFields((prev) => prev.filter((_, i) => i !== idx))}
+                    className="text-red-500 hover:text-red-700 text-sm pb-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setExtraCustomFields((prev) => [...prev, { name: "", value: "" }])}
+                className="text-sm text-bioaf-600 hover:underline"
+              >
+                + Add Custom Field
+              </button>
+            </div>
 
             <div className="bg-white rounded-lg shadow p-6 space-y-4">
               <div className="flex items-center justify-between">

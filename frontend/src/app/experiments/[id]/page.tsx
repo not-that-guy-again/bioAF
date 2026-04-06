@@ -78,6 +78,7 @@ export default function ExperimentDetailPage() {
   const [sampleFormError, setSampleFormError] = useState("");
   const [batchForm, setBatchForm] = useState<SampleBatchCreateRequest>({ name: "" });
   const [editFieldDefaults, setEditFieldDefaults] = useState<FieldDefaultValue[]>([]);
+  const [editCustomFields, setEditCustomFields] = useState<{ field_name: string; field_value: string }[]>([]);
 
   // Sample viewing/editing state
   const [viewingSample, setViewingSample] = useState<Sample | null>(null);
@@ -95,6 +96,8 @@ export default function ExperimentDetailPage() {
     { name: "donor_source", label: "Donor ID", type: "text" as const },
     { name: "treatment_condition", label: "Treatment Condition", type: "text" as const },
     { name: "chemistry_version", label: "Chemistry Version", type: "text" as const },
+    { name: "sample_batch_code", label: "Sample Batch", type: "text" as const },
+    { name: "sequencing_batch_code", label: "Sequencing Batch", type: "text" as const },
     { name: "molecule_type", label: "Molecule Type", type: "vocabulary" as const },
     { name: "library_prep_method", label: "Library Prep Method", type: "vocabulary" as const },
     { name: "library_layout", label: "Library Layout", type: "vocabulary" as const },
@@ -222,6 +225,12 @@ export default function ExperimentDetailPage() {
         is_required: fd.is_required,
       }))
     );
+    setEditCustomFields(
+      experiment.custom_fields.map((cf) => ({
+        field_name: cf.field_name,
+        field_value: cf.field_value ?? "",
+      }))
+    );
     setOverviewError("");
     setEditingOverview(true);
   }
@@ -245,7 +254,10 @@ export default function ExperimentDetailPage() {
   async function handleSaveOverview() {
     setOverviewError("");
     try {
-      const payload = { ...overviewForm, field_defaults: editFieldDefaults };
+      const customFields = editCustomFields
+        .filter((f) => f.field_name.trim())
+        .map((f) => ({ field_name: f.field_name.trim(), field_value: f.field_value.trim(), field_type: "string" }));
+      const payload = { ...overviewForm, field_defaults: editFieldDefaults, custom_fields: customFields };
       await api.patch(`/api/experiments/${id}`, payload);
       setEditingOverview(false);
       loadExperiment();
@@ -526,6 +538,47 @@ export default function ExperimentDetailPage() {
                             </div>
                           );
                         })}
+                      </div>
+                    </div>
+                    <div className="border-t pt-3 mt-3">
+                      <h3 className="text-sm font-medium text-gray-700 mb-2">Custom Fields</h3>
+                      <div className="space-y-2">
+                        {editCustomFields.map((cf, idx) => (
+                          <div key={idx} className="flex gap-2 items-end">
+                            <div className="flex-1">
+                              <label className="block text-xs text-gray-500 mb-1">Field Name</label>
+                              <input
+                                value={cf.field_name}
+                                onChange={(e) => setEditCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, field_name: e.target.value } : f))}
+                                placeholder="Field name"
+                                className="w-full border rounded px-2 py-1 text-sm"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="block text-xs text-gray-500 mb-1">Value</label>
+                              <input
+                                value={cf.field_value}
+                                onChange={(e) => setEditCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, field_value: e.target.value } : f))}
+                                placeholder="Value"
+                                className="w-full border rounded px-2 py-1 text-sm"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditCustomFields((prev) => prev.filter((_, i) => i !== idx))}
+                              className="text-red-500 hover:text-red-700 text-sm pb-1"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setEditCustomFields((prev) => [...prev, { field_name: "", field_value: "" }])}
+                          className="text-sm text-bioaf-600 hover:underline"
+                        >
+                          + Add Custom Field
+                        </button>
                       </div>
                     </div>
                     {overviewError && <p className="text-red-600 text-sm">{overviewError}</p>}
