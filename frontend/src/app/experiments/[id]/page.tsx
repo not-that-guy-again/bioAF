@@ -408,7 +408,7 @@ export default function ExperimentDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "samples", label: `Samples (${experiment.sample_count})` },
-    { key: "batches", label: `Sample Batches (${experiment.batch_count})` },
+    { key: "batches", label: `Batches (${experiment.batch_count})` },
     { key: "files", label: "Files" },
     { key: "analysis", label: "Analysis" },
     { key: "pipelines", label: "Pipeline Runs" },
