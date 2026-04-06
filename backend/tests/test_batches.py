@@ -113,7 +113,7 @@ async def test_list_sample_batches_with_sample_counts(client, admin_token, exper
     # Add samples to batch
     await client.post(
         f"/api/experiments/{experiment_id}/samples",
-        json={"sample_id_external": "CB001", "sample_batch_id": batch_id},
+        json={"sample_id_external": "CB001", "sample_batch_code": "Count Batch"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
