@@ -166,11 +166,13 @@ class SampleService:
 
         if data.custom_fields:
             for cf in data.custom_fields:
-                session.add(SampleCustomField(
-                    sample_id=sample.id,
-                    field_name=cf.field_name,
-                    field_value=cf.field_value,
-                ))
+                session.add(
+                    SampleCustomField(
+                        sample_id=sample.id,
+                        field_name=cf.field_name,
+                        field_value=cf.field_value,
+                    )
+                )
             await session.flush()
 
         await log_action(
@@ -261,11 +263,13 @@ class SampleService:
 
             if data.custom_fields:
                 for cf in data.custom_fields:
-                    session.add(SampleCustomField(
-                        sample_id=sample.id,
-                        field_name=cf.field_name,
-                        field_value=cf.field_value,
-                    ))
+                    session.add(
+                        SampleCustomField(
+                            sample_id=sample.id,
+                            field_name=cf.field_name,
+                            field_value=cf.field_value,
+                        )
+                    )
                 await session.flush()
 
             await log_action(
@@ -287,7 +291,11 @@ class SampleService:
     async def update_sample(session: AsyncSession, sample_id: int, user_id: int, data: SampleUpdate) -> Sample | None:
         result = await session.execute(
             select(Sample)
-            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch), selectinload(Sample.custom_fields))
+            .options(
+                selectinload(Sample.sample_batch),
+                selectinload(Sample.sequencing_batch),
+                selectinload(Sample.custom_fields),
+            )
             .where(Sample.id == sample_id)
         )
         sample = result.scalar_one_or_none()
@@ -347,18 +355,18 @@ class SampleService:
 
         # Handle custom fields (delete-and-replace)
         if data.custom_fields is not None:
-            existing = await session.execute(
-                select(SampleCustomField).where(SampleCustomField.sample_id == sample_id)
-            )
+            existing = await session.execute(select(SampleCustomField).where(SampleCustomField.sample_id == sample_id))
             for row in existing.scalars().all():
                 await session.delete(row)
             await session.flush()
             for cf in data.custom_fields:
-                session.add(SampleCustomField(
-                    sample_id=sample_id,
-                    field_name=cf.field_name,
-                    field_value=cf.field_value,
-                ))
+                session.add(
+                    SampleCustomField(
+                        sample_id=sample_id,
+                        field_name=cf.field_name,
+                        field_value=cf.field_value,
+                    )
+                )
             updates["custom_fields"] = [
                 {"field_name": cf.field_name, "field_value": cf.field_value} for cf in data.custom_fields
             ]
@@ -448,7 +456,11 @@ class SampleService:
     ) -> list[Sample]:
         query = (
             select(Sample)
-            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch), selectinload(Sample.custom_fields))
+            .options(
+                selectinload(Sample.sample_batch),
+                selectinload(Sample.sequencing_batch),
+                selectinload(Sample.custom_fields),
+            )
             .where(Sample.experiment_id == experiment_id)
         )
         if sample_batch_id is not None:
@@ -465,7 +477,11 @@ class SampleService:
     async def get_sample(session: AsyncSession, sample_id: int) -> Sample | None:
         result = await session.execute(
             select(Sample)
-            .options(selectinload(Sample.sample_batch), selectinload(Sample.sequencing_batch), selectinload(Sample.custom_fields))
+            .options(
+                selectinload(Sample.sample_batch),
+                selectinload(Sample.sequencing_batch),
+                selectinload(Sample.custom_fields),
+            )
             .where(Sample.id == sample_id)
         )
         return result.scalar_one_or_none()
