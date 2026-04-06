@@ -38,13 +38,10 @@ async def test_generate_setup_code_creates_org(client: AsyncClient, session):
 
 async def test_generate_setup_code_returns_new_code_when_expired(client: AsyncClient, session):
     """POST /generate-setup-code returns a fresh code when previous expired."""
-    data1 = await _generate_code(client)
-    code1 = data1["code"]
+    await _generate_code(client)
 
     # Expire the code manually
-    await session.execute(
-        text("UPDATE organizations SET setup_code_expires_at = NOW() - interval '1 hour'")
-    )
+    await session.execute(text("UPDATE organizations SET setup_code_expires_at = NOW() - interval '1 hour'"))
     await session.commit()
 
     data2 = await _generate_code(client)
@@ -102,9 +99,7 @@ async def test_verify_setup_code_returns_401_on_expired(client: AsyncClient, ses
     gen_data = await _generate_code(client)
 
     # Expire it
-    await session.execute(
-        text("UPDATE organizations SET setup_code_expires_at = NOW() - interval '1 hour'")
-    )
+    await session.execute(text("UPDATE organizations SET setup_code_expires_at = NOW() - interval '1 hour'"))
     await session.commit()
 
     resp = await _verify_code(client, gen_data["code"])

@@ -140,7 +140,7 @@ async def test_generate_new_code_overwrites_previous(session):
     assert code1 != code2 or True  # codes could theoretically match; that's fine
 
     # Old code should no longer work
-    result = await SetupCodeService.verify_code(session, org, code1)
+    await SetupCodeService.verify_code(session, org, code1)
     # Either it fails (different hash) or it succeeds (same code by coincidence)
     # But the new code should always work
     await session.refresh(org)

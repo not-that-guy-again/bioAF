@@ -25,6 +25,7 @@ from app.schemas.bootstrap import (
 from app.services.audit_service import log_action
 from app.services.auth_service import AuthService
 from app.services.component_service import ComponentService
+from app.services.email_service import EmailService
 from app.services import role_service
 from app.services.setup_code_service import SetupCodeService
 from app.services.user_service import UserService

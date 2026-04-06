@@ -45,10 +45,7 @@ async def test_setup_code_columns_default_to_null(session):
     await session.flush()
 
     result = await session.execute(
-        text(
-            "SELECT setup_code_hash, setup_code_expires_at "
-            "FROM organizations WHERE id = :id"
-        ),
+        text("SELECT setup_code_hash, setup_code_expires_at FROM organizations WHERE id = :id"),
         {"id": org.id},
     )
     row = result.fetchone()

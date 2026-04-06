@@ -1,6 +1,6 @@
 """Tests for POST /api/v1/infrastructure/terraform/init endpoint."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import text
@@ -72,9 +72,8 @@ async def test_terraform_init_success(client, session):
     data = resp.json()
     assert data["message"] == "Terraform initialized"
 
-    # Check terraform_initialized is set
-    row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'terraform_initialized'"))
-    # The mock doesn't actually set it, but the endpoint should have consumed the SSE generator
+    # The mock doesn't actually set terraform_initialized, but the endpoint
+    # should have consumed the SSE generator without error.
 
 
 async def test_terraform_init_returns_400_without_gcp(client, session):
