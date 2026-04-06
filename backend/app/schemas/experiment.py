@@ -74,6 +74,7 @@ class ExperimentUpdate(BaseModel):
     start_date: date | None = None
     expected_sample_count: int | None = None
     field_defaults: list[FieldDefaultValue] | None = None
+    custom_fields: list[CustomFieldValue] | None = None
     design_type: str | None = None
     protocol_version: str | None = None
     variables_json: dict | None = None

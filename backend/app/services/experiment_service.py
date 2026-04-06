@@ -132,6 +132,27 @@ class ExperimentService:
                 for fd in data.field_defaults
             ]
 
+        if data.custom_fields is not None:
+            # Delete existing custom fields and replace
+            existing_cf = await session.execute(
+                select(ExperimentCustomField).where(ExperimentCustomField.experiment_id == experiment_id)
+            )
+            for row in existing_cf.scalars().all():
+                await session.delete(row)
+            await session.flush()
+
+            for cf in data.custom_fields:
+                custom_field = ExperimentCustomField(
+                    experiment_id=experiment_id,
+                    field_name=cf.field_name,
+                    field_value=cf.field_value,
+                    field_type=cf.field_type,
+                )
+                session.add(custom_field)
+            updates["custom_fields"] = [
+                {"field_name": cf.field_name, "field_value": cf.field_value} for cf in data.custom_fields
+            ]
+
         if updates:
             snap = serialize_entity(experiment)
             await session.flush()

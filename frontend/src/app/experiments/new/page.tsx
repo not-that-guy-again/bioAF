@@ -38,6 +38,7 @@ export default function NewExperimentPage() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [fieldDefaults, setFieldDefaults] = useState<FieldDefaultValue[]>([]);
   const [showFieldDefaults, setShowFieldDefaults] = useState(false);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
 
   const DEFAULTABLE_FIELDS = [
     { name: "organism", label: "Organism", type: "text" as const },
@@ -92,7 +93,18 @@ export default function NewExperimentPage() {
     setError("");
 
     try {
-      const payload = { ...form, field_defaults: fieldDefaults.length > 0 ? fieldDefaults : undefined };
+      const customFields = Object.entries(customFieldValues)
+        .filter(([, v]) => v.trim())
+        .map(([name, value]) => ({
+          field_name: name,
+          field_value: value,
+          field_type: "string",
+        }));
+      const payload = {
+        ...form,
+        field_defaults: fieldDefaults.length > 0 ? fieldDefaults : undefined,
+        custom_fields: customFields.length > 0 ? customFields : undefined,
+      };
       const experiment = await api.post<Experiment>("/api/experiments", payload);
 
       if (csvFile) {
@@ -231,6 +243,8 @@ export default function NewExperimentPage() {
                     </label>
                     <input
                       type={field.type === "number" ? "number" : "text"}
+                      value={customFieldValues[field.name] ?? ""}
+                      onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                     />
                   </div>
