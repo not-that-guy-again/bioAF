@@ -51,6 +51,7 @@ class ExperimentService:
                     field_name=cf.field_name,
                     field_value=cf.field_value,
                     field_type=cf.field_type,
+                    is_required=cf.is_required,
                 )
                 session.add(custom_field)
             await session.flush()
@@ -147,10 +148,12 @@ class ExperimentService:
                     field_name=cf.field_name,
                     field_value=cf.field_value,
                     field_type=cf.field_type,
+                    is_required=cf.is_required,
                 )
                 session.add(custom_field)
             updates["custom_fields"] = [
-                {"field_name": cf.field_name, "field_value": cf.field_value} for cf in data.custom_fields
+                {"field_name": cf.field_name, "field_value": cf.field_value, "is_required": cf.is_required}
+                for cf in data.custom_fields
             ]
 
         if updates:

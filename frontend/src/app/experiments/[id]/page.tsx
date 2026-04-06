@@ -78,7 +78,7 @@ export default function ExperimentDetailPage() {
   const [sampleFormError, setSampleFormError] = useState("");
   const [batchForm, setBatchForm] = useState<SampleBatchCreateRequest>({ name: "" });
   const [editFieldDefaults, setEditFieldDefaults] = useState<FieldDefaultValue[]>([]);
-  const [editCustomFields, setEditCustomFields] = useState<{ field_name: string; field_value: string }[]>([]);
+  const [editCustomFields, setEditCustomFields] = useState<{ field_name: string; field_value: string; is_required: boolean }[]>([]);
 
   // Sample viewing/editing state
   const [viewingSample, setViewingSample] = useState<Sample | null>(null);
@@ -229,6 +229,7 @@ export default function ExperimentDetailPage() {
       experiment.custom_fields.map((cf) => ({
         field_name: cf.field_name,
         field_value: cf.field_value ?? "",
+        is_required: cf.is_required,
       }))
     );
     setOverviewError("");
@@ -256,7 +257,7 @@ export default function ExperimentDetailPage() {
     try {
       const customFields = editCustomFields
         .filter((f) => f.field_name.trim())
-        .map((f) => ({ field_name: f.field_name.trim(), field_value: f.field_value.trim(), field_type: "string" }));
+        .map((f) => ({ field_name: f.field_name.trim(), field_value: f.field_value.trim(), field_type: "string", is_required: f.is_required }));
       const payload = { ...overviewForm, field_defaults: editFieldDefaults, custom_fields: customFields };
       await api.patch(`/api/experiments/${id}`, payload);
       setEditingOverview(false);
@@ -544,18 +545,14 @@ export default function ExperimentDetailPage() {
                       <h3 className="text-sm font-medium text-gray-700 mb-2">Custom Fields</h3>
                       <div className="space-y-2">
                         {editCustomFields.map((cf, idx) => (
-                          <div key={idx} className="flex gap-2 items-end">
-                            <div className="flex-1">
-                              <label className="block text-xs text-gray-500 mb-1">Field Name</label>
-                              <input
-                                value={cf.field_name}
-                                onChange={(e) => setEditCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, field_name: e.target.value } : f))}
-                                placeholder="Field name"
-                                className="w-full border rounded px-2 py-1 text-sm"
-                              />
-                            </div>
-                            <div className="flex-1">
-                              <label className="block text-xs text-gray-500 mb-1">Value</label>
+                          <div key={idx} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-2 items-center">
+                            <input
+                              value={cf.field_name}
+                              onChange={(e) => setEditCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, field_name: e.target.value } : f))}
+                              placeholder="Field name"
+                              className="w-full border rounded px-2 py-1 text-sm"
+                            />
+                            <div className="min-w-0">
                               <input
                                 value={cf.field_value}
                                 onChange={(e) => setEditCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, field_value: e.target.value } : f))}
@@ -563,21 +560,32 @@ export default function ExperimentDetailPage() {
                                 className="w-full border rounded px-2 py-1 text-sm"
                               />
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setEditCustomFields((prev) => prev.filter((_, i) => i !== idx))}
-                              className="text-red-500 hover:text-red-700 text-sm pb-1"
-                            >
-                              Remove
-                            </button>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <label className="flex items-center gap-1 text-xs text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={cf.is_required}
+                                  onChange={(e) => setEditCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, is_required: e.target.checked } : f))}
+                                  className="rounded border-gray-300"
+                                />
+                                Required
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setEditCustomFields((prev) => prev.filter((_, i) => i !== idx))}
+                                className="text-red-400 hover:text-red-600 text-xs ml-1"
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         ))}
                         <button
                           type="button"
-                          onClick={() => setEditCustomFields((prev) => [...prev, { field_name: "", field_value: "" }])}
+                          onClick={() => setEditCustomFields((prev) => [...prev, { field_name: "", field_value: "", is_required: false }])}
                           className="text-sm text-bioaf-600 hover:underline"
                         >
-                          + Add Custom Field
+                          + Add Field
                         </button>
                       </div>
                     </div>
@@ -629,9 +637,10 @@ export default function ExperimentDetailPage() {
                     )}
                     <dl className="space-y-2">
                       {experiment.custom_fields.map((cf) => (
-                        <div key={cf.id}>
+                        <div key={cf.id} className="flex items-center gap-2">
                           <dt className="text-sm text-gray-400">{cf.field_name}</dt>
                           <dd className="text-sm text-gray-500">{cf.field_value || "—"}</dd>
+                          {cf.is_required && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">required</span>}
                         </div>
                       ))}
                     </dl>

@@ -17,6 +17,7 @@ class CustomFieldValue(BaseModel):
     field_name: str
     field_value: str
     field_type: str = "string"
+    is_required: bool = False
 
 
 class FieldDefaultValue(BaseModel):
@@ -48,6 +49,7 @@ class CustomFieldResponse(BaseModel):
     field_name: str
     field_value: str | None
     field_type: str
+    is_required: bool = False
 
     model_config = {"from_attributes": True}
 

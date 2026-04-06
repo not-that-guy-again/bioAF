@@ -241,6 +241,7 @@ export interface CustomFieldValue {
   field_name: string;
   field_value: string;
   field_type: string;
+  is_required?: boolean;
 }
 
 export interface CustomFieldResponse {
@@ -248,6 +249,7 @@ export interface CustomFieldResponse {
   field_name: string;
   field_value: string | null;
   field_type: string;
+  is_required: boolean;
 }
 
 export interface SampleBrief {

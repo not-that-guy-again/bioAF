@@ -39,7 +39,7 @@ export default function NewExperimentPage() {
   const [fieldDefaults, setFieldDefaults] = useState<FieldDefaultValue[]>([]);
   const [showFieldDefaults, setShowFieldDefaults] = useState(false);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
-  const [extraCustomFields, setExtraCustomFields] = useState<{ name: string; value: string }[]>([]);
+  const [extraCustomFields, setExtraCustomFields] = useState<{ name: string; value: string; required: boolean }[]>([]);
 
   const DEFAULTABLE_FIELDS = [
     { name: "organism", label: "Organism", type: "text" as const },
@@ -104,11 +104,12 @@ export default function NewExperimentPage() {
           field_type: "string",
         }));
       const userFields = extraCustomFields
-        .filter((f) => f.name.trim() && f.value.trim())
+        .filter((f) => f.name.trim())
         .map((f) => ({
           field_name: f.name.trim(),
           field_value: f.value.trim(),
           field_type: "string",
+          is_required: f.required,
         }));
       const allCustomFields = [...templateFields, ...userFields];
       const payload = {
@@ -272,6 +273,7 @@ export default function NewExperimentPage() {
                               value={current?.default_value ?? null}
                               onChange={(v) => updateFieldDefault(field.name, v, current?.is_required ?? null)}
                               placeholder={`Default...`}
+                              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                             />
                           ) : (
                             <input
@@ -332,19 +334,30 @@ export default function NewExperimentPage() {
                           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                         />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setExtraCustomFields((prev) => prev.filter((_, i) => i !== idx))}
-                        className="text-red-500 hover:text-red-700 text-sm whitespace-nowrap"
-                      >
-                        Remove
-                      </button>
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <label className="flex items-center gap-1 text-sm text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={field.required}
+                            onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, required: e.target.checked } : f))}
+                            className="rounded border-gray-300"
+                          />
+                          Required
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setExtraCustomFields((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-red-400 hover:text-red-600 text-xs ml-1"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   ))}
 
                   <button
                     type="button"
-                    onClick={() => setExtraCustomFields((prev) => [...prev, { name: "", value: "" }])}
+                    onClick={() => setExtraCustomFields((prev) => [...prev, { name: "", value: "", required: false }])}
                     className="text-sm text-bioaf-600 hover:underline"
                   >
                     + Add Field
