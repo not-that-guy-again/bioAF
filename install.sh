@@ -23,6 +23,38 @@ green()  { printf '\033[0;32m%s\033[0m\n' "$*"; }
 yellow() { printf '\033[0;33m%s\033[0m\n' "$*"; }
 bold()   { printf '\033[1m%s\033[0m\n' "$*"; }
 
+# ---------------------------------------------------------------------------
+# OS check -- bioAF requires a Linux host (typically a GCP VM)
+# ---------------------------------------------------------------------------
+check_os() {
+    local os
+    os="$(uname -s)"
+    case "$os" in
+        Darwin)
+            echo ""
+            red "bioAF cannot be installed on macOS."
+            echo ""
+            echo "bioAF requires a Linux server, typically a VM in Google Cloud."
+            echo "See the installation guide for step-by-step instructions:"
+            echo ""
+            bold "  https://bioaf.co/docs/installation/gcp-setup/"
+            echo ""
+            exit 1
+            ;;
+        MINGW*|MSYS*|CYGWIN*|Windows_NT)
+            echo ""
+            red "bioAF cannot be installed on Windows."
+            echo ""
+            echo "bioAF requires a Linux server, typically a VM in Google Cloud."
+            echo "See the installation guide for step-by-step instructions:"
+            echo ""
+            bold "  https://bioaf.co/docs/installation/gcp-setup/"
+            echo ""
+            exit 1
+            ;;
+    esac
+}
+
 usage() {
     bold "bioAF Installer"
     echo ""
@@ -53,6 +85,8 @@ read_env_value() {
 # Prerequisite checks
 # ---------------------------------------------------------------------------
 check_prereqs() {
+    check_os
+
     local missing=0
 
     bold "Checking prerequisites..."
@@ -286,7 +320,7 @@ full_install() {
     bold "=== bioAF Installer ==="
     echo ""
 
-    # Step 1: Prerequisites
+    # Step 1: Prerequisites (includes OS check)
     check_prereqs || exit 1
     echo ""
 
