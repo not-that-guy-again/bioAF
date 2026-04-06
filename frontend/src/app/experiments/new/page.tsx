@@ -242,70 +242,6 @@ export default function NewExperimentPage() {
             </div>
 
             <div className="bg-white rounded-lg shadow p-6 space-y-4">
-              <h2 className="text-lg font-semibold">Custom Fields</h2>
-
-              {selectedTemplate?.custom_fields_schema_json && (
-                <>
-                  <p className="text-sm text-gray-500">
-                    Fields from template &quot;{selectedTemplate.name}&quot;:
-                  </p>
-                  {(selectedTemplate.custom_fields_schema_json as { fields?: Array<{ name: string; type: string; required?: boolean }> })?.fields?.map((field) => (
-                    <div key={field.name}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {field.name} {field.required && "*"}
-                      </label>
-                      <input
-                        type={field.type === "number" ? "number" : "text"}
-                        value={customFieldValues[field.name] ?? ""}
-                        onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                      />
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {extraCustomFields.map((field, idx) => (
-                <div key={idx} className="flex gap-2 items-end">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Field Name</label>
-                    <input
-                      type="text"
-                      value={field.name}
-                      onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, name: e.target.value } : f))}
-                      placeholder="e.g. sequencer_operator"
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
-                    <input
-                      type="text"
-                      value={field.value}
-                      onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, value: e.target.value } : f))}
-                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setExtraCustomFields((prev) => prev.filter((_, i) => i !== idx))}
-                    className="text-red-500 hover:text-red-700 text-sm pb-2"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => setExtraCustomFields((prev) => [...prev, { name: "", value: "" }])}
-                className="text-sm text-bioaf-600 hover:underline"
-              >
-                + Add Custom Field
-              </button>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Sample Field Defaults</h2>
@@ -327,27 +263,27 @@ export default function NewExperimentPage() {
                   {DEFAULTABLE_FIELDS.map((field) => {
                     const current = fieldDefaults.find((d) => d.field_name === field.name);
                     return (
-                      <div key={field.name} className="grid grid-cols-3 gap-3 items-center">
-                        <label className="text-sm text-gray-700">{field.label}</label>
-                        <div>
+                      <div key={field.name} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-3 items-center">
+                        <label className="text-sm text-gray-700 truncate">{field.label}</label>
+                        <div className="min-w-0">
                           {field.type === "vocabulary" ? (
                             <VocabularySelect
                               fieldName={field.name}
                               value={current?.default_value ?? null}
                               onChange={(v) => updateFieldDefault(field.name, v, current?.is_required ?? null)}
-                              placeholder={`Default ${field.label}...`}
+                              placeholder={`Default...`}
                             />
                           ) : (
                             <input
                               type="text"
                               value={current?.default_value ?? ""}
                               onChange={(e) => updateFieldDefault(field.name, e.target.value || null, current?.is_required ?? null)}
-                              placeholder={`Default ${field.label}`}
+                              placeholder="Default..."
                               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                             />
                           )}
                         </div>
-                        <label className="flex items-center gap-2 text-sm text-gray-600">
+                        <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap">
                           <input
                             type="checkbox"
                             checked={current?.is_required ?? false}
@@ -359,6 +295,60 @@ export default function NewExperimentPage() {
                       </div>
                     );
                   })}
+
+                  {selectedTemplate?.custom_fields_schema_json &&
+                    (selectedTemplate.custom_fields_schema_json as { fields?: Array<{ name: string; type: string; required?: boolean }> })?.fields?.map((field) => (
+                      <div key={`tmpl-${field.name}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-3 items-center">
+                        <label className="text-sm text-gray-700 truncate">{field.name} {field.required && "*"}</label>
+                        <div className="min-w-0">
+                          <input
+                            type={field.type === "number" ? "number" : "text"}
+                            value={customFieldValues[field.name] ?? ""}
+                            onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                            placeholder="Default..."
+                            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">from template</span>
+                      </div>
+                    ))
+                  }
+
+                  {extraCustomFields.map((field, idx) => (
+                    <div key={`extra-${idx}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_auto] gap-3 items-center">
+                      <input
+                        type="text"
+                        value={field.name}
+                        onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, name: e.target.value } : f))}
+                        placeholder="Field name..."
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      />
+                      <div className="min-w-0">
+                        <input
+                          type="text"
+                          value={field.value}
+                          onChange={(e) => setExtraCustomFields((prev) => prev.map((f, i) => i === idx ? { ...f, value: e.target.value } : f))}
+                          placeholder="Default..."
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExtraCustomFields((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-red-500 hover:text-red-700 text-sm whitespace-nowrap"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setExtraCustomFields((prev) => [...prev, { name: "", value: "" }])}
+                    className="text-sm text-bioaf-600 hover:underline"
+                  >
+                    + Add Field
+                  </button>
                 </div>
               )}
             </div>
