@@ -57,6 +57,7 @@ async def test_file_arrives_after_manifest(client: AsyncClient, admin_token: str
             {"pid": proj.json()["id"]},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     # Create manifest entry
@@ -104,6 +105,7 @@ async def test_md5_mismatch(client: AsyncClient, admin_token: str, session: Asyn
             {"pid": proj.json()["id"]},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     batch_id, entry_ids = await _setup_batch_and_entries(
@@ -149,6 +151,7 @@ async def test_file_without_manifest_entry(client: AsyncClient, admin_token: str
             {"pid": proj.json()["id"]},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     # No manifest entries exist
@@ -196,6 +199,7 @@ async def test_manifest_entry_enhances_resolution(client: AsyncClient, admin_tok
             {"eid": exp_id},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     # Create a manifest entry with resolved sample
@@ -205,6 +209,7 @@ async def test_manifest_entry_enhances_resolution(client: AsyncClient, admin_tok
             {"org": org_id},
         )
     ).fetchone()
+    assert batch_row is not None
 
     entry = ManifestEntry(
         sequencing_batch_id=batch_row[0],

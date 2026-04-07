@@ -83,11 +83,13 @@ def test_schema_accepts_sample_index():
     """NamingProfileCreate schema accepts sample_index as a valid field."""
     from app.schemas.naming_profile import NamingProfileCreate
 
+    from app.schemas.naming_profile import SegmentDefinition
+
     profile = NamingProfileCreate(
         name="Illumina S-number",
         segments=[
-            {"position": 0, "field": "ignore", "required": True},
-            {"position": 1, "field": "sample_index", "required": True},
+            SegmentDefinition(position=0, field="ignore", required=True),
+            SegmentDefinition(position=1, field="sample_index", required=True),
         ],
     )
     assert profile.segments[1].field == "sample_index"

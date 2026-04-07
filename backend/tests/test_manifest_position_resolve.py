@@ -33,8 +33,10 @@ async def _create_naming_profile(session: AsyncSession, org_id: int) -> int:
     )
     session.add(profile)
     await session.flush()
-    row = await session.execute(text("SELECT id FROM naming_profiles WHERE name = 'Illumina S-number'"))
-    profile_id = row.fetchone()[0]
+    result = await session.execute(text("SELECT id FROM naming_profiles WHERE name = 'Illumina S-number'"))
+    row = result.fetchone()
+    assert row is not None
+    profile_id = row[0]
     await session.flush()
     return profile_id
 
@@ -78,6 +80,7 @@ async def test_manifest_resolves_by_sample_index(client: AsyncClient, admin_toke
             {"eid": exp_id},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     # Create naming profile
@@ -145,6 +148,7 @@ async def test_manifest_unknown_position_stays_unresolved(client: AsyncClient, a
             {"eid": exp_id},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     await _create_naming_profile(session, org_id)
@@ -203,6 +207,7 @@ async def test_manifest_paired_end_same_sample(client: AsyncClient, admin_token:
             {"eid": exp_id},
         )
     ).fetchone()
+    assert org_row is not None
     org_id = org_row[0]
 
     await _create_naming_profile(session, org_id)
