@@ -376,6 +376,51 @@ async def process_ingest_event(
             cleanup_policy = config.get("ingest_cleanup_policy", "delete_after_copy")
             await cleanup_ingest_file(source_bucket, source_path, policy=cleanup_policy)
 
+    # Step 5c: ManifestEntry reconciliation
+    from datetime import datetime, timezone
+
+    from app.models.manifest_entry import ManifestEntry
+    from app.models.sequencing_batch import SequencingBatch
+
+    manifest_entry_result = await db.execute(
+        select(ManifestEntry).where(
+            ManifestEntry.expected_filename == filename,
+            ManifestEntry.status == "pending",
+        )
+    )
+    manifest_entry = manifest_entry_result.scalar_one_or_none()
+    if manifest_entry:
+        manifest_entry.file_id = file_record.id
+        manifest_entry.last_check_at = datetime.now(timezone.utc)
+
+        if content_md5 and manifest_entry.expected_md5:
+            if content_md5 == manifest_entry.expected_md5:
+                manifest_entry.status = "verified"
+            else:
+                manifest_entry.status = "checksum_mismatch"
+                manifest_entry.error_message = f"Expected {manifest_entry.expected_md5}, got {content_md5}"
+        else:
+            manifest_entry.status = "verified"
+
+        # Enhance resolution from manifest entry if naming profile didn't resolve
+        if manifest_entry.resolved_sample_id and not resolved_sample_id:
+            resolved_sample_id = manifest_entry.resolved_sample_id
+        if manifest_entry.resolved_experiment_id and not resolved_experiment_id:
+            resolved_experiment_id = manifest_entry.resolved_experiment_id
+
+        # Link file to sequencing batch
+        file_record.sequencing_batch_id = manifest_entry.sequencing_batch_id
+
+        # Increment batch ingested_file_count
+        batch_result = await db.execute(
+            select(SequencingBatch).where(SequencingBatch.id == manifest_entry.sequencing_batch_id)
+        )
+        seq_batch = batch_result.scalar_one_or_none()
+        if seq_batch:
+            seq_batch.ingested_file_count = (seq_batch.ingested_file_count or 0) + 1
+
+        await db.flush()
+
     # Step 6: Create file_parse_result
     parse_result_record = FileParseResult(
         file_id=file_record.id,
