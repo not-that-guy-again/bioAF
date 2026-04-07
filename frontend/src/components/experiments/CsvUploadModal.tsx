@@ -43,6 +43,7 @@ const SAMPLE_FIELDS = [
   { value: "collection_method", label: "Collection Method" },
   { value: "sample_batch", label: "Sample Batch" },
   { value: "sequencing_batch", label: "Sequencing Batch" },
+  { value: "sequencing_batch_position", label: "Batch Position" },
 ];
 
 const EXAMPLE_VALUES: Record<string, string> = {

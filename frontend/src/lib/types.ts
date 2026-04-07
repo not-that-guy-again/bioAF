@@ -322,6 +322,7 @@ export interface Sample {
   chemistry_version: string | null;
   sample_batch: SampleBatchSummary | null;
   sequencing_batch: { id: number; code: string } | null;
+  sequencing_batch_position: number | null;
   viability_pct: number | null;
   cell_count: number | null;
   prep_notes: string | null;
@@ -1425,7 +1426,7 @@ export interface SnapshotComparison {
 
 export interface SegmentDefinition {
   position: number;
-  field: "date" | "project_code" | "experiment_code" | "sample_id" | "data_type" | "analysis_type" | "researcher_initials" | "version" | "organism" | "ignore" | "custom";
+  field: "date" | "project_code" | "experiment_code" | "sample_id" | "sample_index" | "data_type" | "analysis_type" | "researcher_initials" | "version" | "organism" | "ignore" | "custom";
   format?: string | null;
   required: boolean;
   custom_label?: string | null;

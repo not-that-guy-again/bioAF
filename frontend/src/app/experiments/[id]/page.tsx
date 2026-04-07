@@ -806,6 +806,7 @@ export default function ExperimentDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Layout</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sample Batch</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Seq. Batch</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pos.</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QC</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3"></th>
@@ -831,6 +832,7 @@ export default function ExperimentDetailPage() {
                         <td className="px-4 py-3 text-sm">{s.library_layout || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.sample_batch?.name || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.sequencing_batch?.code || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.sequencing_batch_position ?? "---"}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={s.qc_status ?? ""}
@@ -881,6 +883,7 @@ export default function ExperimentDetailPage() {
                     { label: "Viability %", value: viewingSample.viability_pct != null ? `${viewingSample.viability_pct}%` : null },
                     { label: "Sample Batch", value: viewingSample.sample_batch?.name },
                     { label: "Sequencing Batch", value: viewingSample.sequencing_batch?.code },
+                    { label: "Batch Position", value: viewingSample.sequencing_batch_position },
                     { label: "QC Status", value: viewingSample.qc_status },
                     { label: "QC Notes", value: viewingSample.qc_notes },
                     { label: "Prep Notes", value: viewingSample.prep_notes },
