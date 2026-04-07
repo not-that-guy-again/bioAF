@@ -58,6 +58,10 @@ async def configure_auto_ingest(
     """Enable or disable auto-ingest with optional cleanup policy."""
     user_id = int(current_user["sub"])
 
+    # Check if enabled state is actually changing (not just a config save)
+    prev_row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'auto_ingest_enabled'"))
+    was_enabled = (prev_row.scalar() or "false") == "true"
+
     # Check storage is deployed
     if body.enabled:
         row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'storage_deployed'"))
@@ -116,8 +120,8 @@ async def configure_auto_ingest(
 
     await session.commit()
 
-    # Start the listener if it's not already running
-    if body.enabled:
+    # Only start the listener when transitioning from disabled to enabled
+    if body.enabled and not was_enabled:
         from app.services.pubsub_listener import restart_listener_if_needed
 
         await restart_listener_if_needed()

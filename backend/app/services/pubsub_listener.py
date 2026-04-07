@@ -55,7 +55,11 @@ class PubSubListener:
 
         project_id = config.get("gcp_project_id", "")
 
-        subscriber = self._create_subscriber()
+        # Use stored GCP credentials if available (same as GCS storage)
+        from app.services.gcs_storage import GcsStorageService
+
+        credentials = await GcsStorageService.get_credentials(session)
+        subscriber = self._create_subscriber(credentials=credentials)
         subscription_path = f"projects/{project_id}/subscriptions/{subscription_name}"
 
         self._running = True
@@ -159,10 +163,12 @@ class PubSubListener:
         )
         await session.commit()
 
-    def _create_subscriber(self):  # type: ignore[no-untyped-def]
+    def _create_subscriber(self, credentials=None):  # type: ignore[no-untyped-def]
         """Create a Pub/Sub SubscriberClient. Overridden in tests."""
         from google.cloud import pubsub_v1
 
+        if credentials:
+            return pubsub_v1.SubscriberClient(credentials=credentials)
         return pubsub_v1.SubscriberClient()
 
     @staticmethod
