@@ -105,8 +105,19 @@ class PubSubListener:
             logger.info("Pub/Sub listener stopped")
 
     async def _handle_message(self, msg_data: dict, session: AsyncSession) -> None:
-        """Process a single Pub/Sub message by calling the ingest pipeline."""
+        """Process a single Pub/Sub message by calling the ingest pipeline.
+
+        If the file is a manifest (matches the configured manifest filename),
+        route it to the manifest ingest service. Otherwise, route to the
+        standard file ingest pipeline.
+        """
+        from app.services.gcs_storage import GcsStorageService
         from app.services.ingest_service import process_ingest_event
+        from app.services.manifest_ingest_service import (
+            is_manifest_filename,
+            process_manifest_ingest,
+            read_manifest_config,
+        )
 
         bucket = msg_data["bucket"]
         object_name = msg_data["name"]
@@ -119,6 +130,21 @@ class PubSubListener:
         org_id = int(org_id_row[0]) if org_id_row else 1
 
         filename = object_name.split("/")[-1]
+
+        # Check if this is a manifest file
+        manifest_config = await read_manifest_config(session)
+        if is_manifest_filename(filename, manifest_config["manifest_filename"]):
+            logger.info("Detected manifest file: %s", filename)
+            content = await GcsStorageService.read_object_text(bucket, object_name)
+            await process_manifest_ingest(
+                manifest_content=content,
+                manifest_format=manifest_config["manifest_format"],
+                org_id=org_id,
+                source_bucket=bucket,
+                db=session,
+            )
+            await session.commit()
+            return
 
         await process_ingest_event(
             filename=filename,
