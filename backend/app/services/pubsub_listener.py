@@ -198,3 +198,25 @@ async def start_pubsub_listener_task(session: AsyncSession) -> PubSubListener:
     _listener = PubSubListener()
     await _listener.start(session)
     return _listener
+
+
+async def restart_listener_if_needed() -> None:
+    """Start or restart the listener after config changes.
+
+    Called from the auto-ingest settings endpoint when the user enables
+    auto-ingest. If the listener is already running, this is a no-op.
+    """
+    global _listener
+    if _listener and _listener.running:
+        return
+
+    from app.database import async_session_factory
+
+    _listener = PubSubListener()
+
+    async def _run() -> None:
+        async with async_session_factory() as session:
+            assert _listener is not None
+            await _listener.start(session)
+
+    asyncio.create_task(_run())
