@@ -94,6 +94,17 @@ async def process_manifest_ingest(
                 resolved_experiment_id = resolution.experiment_id
                 resolved_project_id = resolution.project_id
 
+            # If naming profile extracted a sample_index but didn't resolve
+            # a sample (no sample_id segment), try batch-position lookup
+            sample_index_str = parse.segments.get("sample_index")
+            if sample_index_str and not resolved_sample_id:
+                from app.services.sample_service import SampleService
+
+                sample = await SampleService.resolve_by_batch_position(db, seq_batch.id, int(sample_index_str))
+                if sample:
+                    resolved_sample_id = sample.id
+                    resolved_experiment_id = resolved_experiment_id or sample.experiment_id
+
         manifest_entry = ManifestEntry(
             sequencing_batch_id=seq_batch.id,
             expected_filename=entry.filename,
