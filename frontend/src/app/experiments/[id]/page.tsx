@@ -1273,6 +1273,7 @@ export default function ExperimentDetailPage() {
           {showCsvUpload && (
             <CsvUploadModal
               experimentId={Number(id)}
+              existingCustomFields={experiment?.custom_fields?.map((cf) => cf.field_name) ?? []}
               onClose={() => setShowCsvUpload(false)}
               onSuccess={handleCsvUploadSuccess}
             />

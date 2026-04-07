@@ -67,13 +67,14 @@ const EXAMPLE_VALUES: Record<string, string> = {
 
 interface Props {
   experimentId: number;
+  existingCustomFields?: string[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
 type Step = "select" | "preview" | "confirm" | "done";
 
-export function CsvUploadModal({ experimentId, onClose, onSuccess }: Props) {
+export function CsvUploadModal({ experimentId, existingCustomFields = [], onClose, onSuccess }: Props) {
   const [step, setStep] = useState<Step>("select");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -295,7 +296,16 @@ export function CsvUploadModal({ experimentId, onClose, onSuccess }: Props) {
                         className="flex-1 text-sm border border-gray-300 rounded-md px-2 py-1.5"
                       >
                         <option value="skip">Skip this column</option>
-                        <option value={`custom:${col}`}>Accept as custom field &quot;{col}&quot;</option>
+                        <option value={`custom:${col}`}>Add as new custom field &quot;{col}&quot;</option>
+                        {existingCustomFields.length > 0 && (
+                          <optgroup label="Map to existing custom field">
+                            {existingCustomFields.map((cf) => (
+                              <option key={`cf:${cf}`} value={`custom:${cf}`}>
+                                {cf}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                         <optgroup label="Map to sample field">
                           {SAMPLE_FIELDS.filter(
                             (f) => !usedFields.has(f.value) || columnMappings[col] === f.value

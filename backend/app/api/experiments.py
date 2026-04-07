@@ -382,18 +382,18 @@ async def confirm_samples_csv(
             sample = await SampleService.create_sample(session, experiment_id, user_id, sample_data)
             created.append(sample)
 
-            # Store custom fields on the experiment if any
+            # Store custom fields on the sample
             if i < len(custom_field_rows) and custom_field_rows[i]:
-                from app.models.experiment_custom_field import ExperimentCustomField
+                from app.models.sample_custom_field import SampleCustomField
 
                 for field_name, field_value in custom_field_rows[i].items():
-                    cf = ExperimentCustomField(
-                        experiment_id=experiment_id,
-                        field_name=f"sample:{sample.id}:{field_name}",
-                        field_value=str(field_value),
-                        field_type="text",
+                    session.add(
+                        SampleCustomField(
+                            sample_id=sample.id,
+                            field_name=field_name,
+                            field_value=str(field_value),
+                        )
                     )
-                    session.add(cf)
         except HTTPException as e:
             create_errors.append(f"Sample {i + 1}: {e.detail}")
 
