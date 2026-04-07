@@ -133,13 +133,16 @@ class PubSubListener:
         org_id_row = row.fetchone()
         org_id = int(org_id_row[0]) if org_id_row else 1
 
+        # Fetch stored GCP credentials for all downstream GCS operations
+        credentials = await GcsStorageService.get_credentials(session)
+
         filename = object_name.split("/")[-1]
 
         # Check if this is a manifest file
         manifest_config = await read_manifest_config(session)
         if is_manifest_filename(filename, manifest_config["manifest_filename"]):
             logger.info("Detected manifest file: %s", filename)
-            content = await GcsStorageService.read_object_text(bucket, object_name)
+            content = await GcsStorageService.read_object_text(bucket, object_name, credentials=credentials)
             await process_manifest_ingest(
                 manifest_content=content,
                 manifest_format=manifest_config["manifest_format"],
@@ -160,6 +163,7 @@ class PubSubListener:
             file_size_bytes=size,
             content_md5=md5_hash,
             ingest_source="auto_ingest",
+            credentials=credentials,
         )
         await session.commit()
 

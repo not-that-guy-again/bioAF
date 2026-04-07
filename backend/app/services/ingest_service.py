@@ -172,6 +172,7 @@ async def copy_to_raw_bucket(
     raw_bucket: str,
     destination_prefix: str,
     filename: str,
+    credentials=None,
 ) -> str:
     """Copy a file from the ingest bucket to the raw bucket.
 
@@ -182,7 +183,7 @@ async def copy_to_raw_bucket(
     source_uri = f"gs://{source_bucket}/{source_path}"
     destination_uri = f"gs://{raw_bucket}/{destination_prefix}{filename}"
 
-    await GcsStorageService.move_file(source_uri, destination_uri)
+    await GcsStorageService.move_file(source_uri, destination_uri, credentials=credentials)
     return destination_uri
 
 
@@ -190,6 +191,7 @@ async def cleanup_ingest_file(
     source_bucket: str,
     source_path: str,
     policy: str,
+    credentials=None,
 ) -> None:
     """Apply the cleanup policy to the ingest bucket file.
 
@@ -199,7 +201,7 @@ async def cleanup_ingest_file(
     if policy == "delete_after_copy":
         from google.cloud import storage
 
-        client = storage.Client()
+        client = storage.Client(credentials=credentials)
         bucket = client.get_bucket(source_bucket)
         blob = bucket.blob(source_path)
         blob.delete()
@@ -223,6 +225,7 @@ async def process_ingest_event(
     file_size_bytes: int | None = None,
     content_md5: str | None = None,
     ingest_source: str = "simulate",
+    credentials=None,
 ) -> IngestEvent:
     """Main ingest pipeline orchestrator.
 
@@ -368,13 +371,14 @@ async def process_ingest_event(
                 raw_bucket,
                 prefix,
                 filename,
+                credentials=credentials,
             )
             file_record.gcs_uri = new_uri
             await db.flush()
 
             # Apply cleanup policy
             cleanup_policy = config.get("ingest_cleanup_policy", "delete_after_copy")
-            await cleanup_ingest_file(source_bucket, source_path, policy=cleanup_policy)
+            await cleanup_ingest_file(source_bucket, source_path, policy=cleanup_policy, credentials=credentials)
 
     # Step 5c: ManifestEntry reconciliation
     from datetime import datetime, timezone

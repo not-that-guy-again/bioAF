@@ -9,6 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.pubsub_listener import PubSubListener
 
 
+@pytest.fixture(autouse=True)
+def _patch_get_credentials():
+    """All routing tests use ADC (credentials=None) since GCS calls are mocked."""
+    with patch(
+        "app.services.gcs_storage.GcsStorageService.get_credentials",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield
+
+
 async def _setup_config(session: AsyncSession, manifest_filename: str = "md5.txt"):
     """Insert platform_config keys needed by the listener."""
     for key, value in [
@@ -62,7 +73,7 @@ async def test_manifest_routes_to_manifest_ingest(session: AsyncSession):
     ):
         await listener._handle_message(msg_data, session)
 
-        mock_read.assert_called_once_with("my-ingest-bucket", "delivery/md5.txt")
+        mock_read.assert_called_once_with("my-ingest-bucket", "delivery/md5.txt", credentials=None)
         mock_manifest.assert_called_once()
         mock_ingest.assert_not_called()
 
