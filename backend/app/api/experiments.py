@@ -246,6 +246,7 @@ async def list_experiment_samples(
             sequencing_batch={"id": s.sequencing_batch.id, "code": s.sequencing_batch.code}
             if s.sequencing_batch
             else None,
+            sequencing_batch_position=s.sequencing_batch_position,
             viability_pct=float(s.viability_pct) if s.viability_pct is not None else None,
             cell_count=s.cell_count,
             prep_notes=s.prep_notes,
@@ -289,6 +290,7 @@ async def create_sample(
         sequencing_batch={"id": sample.sequencing_batch.id, "code": sample.sequencing_batch.code}
         if sample.sequencing_batch
         else None,
+        sequencing_batch_position=sample.sequencing_batch_position,
         viability_pct=float(sample.viability_pct) if sample.viability_pct is not None else None,
         cell_count=sample.cell_count,
         prep_notes=sample.prep_notes,

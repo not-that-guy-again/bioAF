@@ -39,6 +39,7 @@ class SampleCreate(BaseModel):
     chemistry_version: str | None = None
     sample_batch_code: str | None = None
     sequencing_batch_code: str | None = None
+    sequencing_batch_position: int | None = None
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
@@ -76,6 +77,7 @@ class SampleUpdate(BaseModel):
     chemistry_version: str | None = None
     sample_batch_code: str | None = None
     sequencing_batch_code: str | None = None
+    sequencing_batch_position: int | None = None
     viability_pct: float | None = None
     cell_count: int | None = None
     prep_notes: str | None = None
@@ -139,6 +141,7 @@ class SampleResponse(BaseModel):
     chemistry_version: str | None
     sample_batch: SampleBatchSummary | None = None
     sequencing_batch: SequencingBatchSummary | None = None
+    sequencing_batch_position: int | None = None
     viability_pct: float | None
     cell_count: int | None
     prep_notes: str | None

@@ -25,6 +25,7 @@ SAMPLE_FIELDS = [
     "collection_method",
     "sample_batch",
     "sequencing_batch",
+    "sequencing_batch_position",
 ]
 
 # Maps common CSV header names to sample model field names
@@ -59,9 +60,12 @@ COLUMN_MAP = {
     "sequencing_batch": "sequencing_batch_code",
     "sequencing_batch_code": "sequencing_batch_code",
     "seq_batch": "sequencing_batch_code",
+    "sequencing_batch_position": "sequencing_batch_position",
+    "seq_batch_position": "sequencing_batch_position",
+    "batch_position": "sequencing_batch_position",
 }
 
-NUMERIC_FIELDS = {"viability_pct", "cell_count"}
+NUMERIC_FIELDS = {"viability_pct", "cell_count", "sequencing_batch_position"}
 DATETIME_FIELDS = {"collection_timestamp"}
 
 # Example values for the template CSV
@@ -141,7 +145,7 @@ def _convert_value(field_name: str, raw_val: str) -> tuple[Any, str | None]:
     """
     if field_name in NUMERIC_FIELDS:
         try:
-            if field_name == "cell_count":
+            if field_name in ("cell_count", "sequencing_batch_position"):
                 return int(raw_val), None
             return float(raw_val), None
         except ValueError:
