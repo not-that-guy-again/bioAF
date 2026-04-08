@@ -10,6 +10,7 @@ import logging
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.experiment import Experiment
 from app.models.manifest_entry import ManifestEntry
 from app.models.sequencing_batch import SequencingBatch
 from app.services.manifest_parser import parse_manifest
@@ -118,6 +119,22 @@ async def process_manifest_ingest(
                 if sample:
                     resolved_sample_id = sample.id
                     resolved_experiment_id = resolved_experiment_id or sample.experiment_id
+
+        # If we resolved a sample but not its experiment, derive from sample
+        if resolved_sample_id and not resolved_experiment_id:
+            from app.models.sample import Sample
+
+            sample_result = await db.execute(select(Sample).where(Sample.id == resolved_sample_id))
+            sample = sample_result.scalar_one_or_none()
+            if sample:
+                resolved_experiment_id = sample.experiment_id
+
+        # If we have an experiment but not a project, derive from experiment
+        if resolved_experiment_id and not resolved_project_id:
+            exp_result = await db.execute(select(Experiment).where(Experiment.id == resolved_experiment_id))
+            exp = exp_result.scalar_one_or_none()
+            if exp:
+                resolved_project_id = exp.project_id
 
         manifest_entry = ManifestEntry(
             sequencing_batch_id=seq_batch.id,

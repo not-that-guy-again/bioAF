@@ -237,3 +237,63 @@ async def test_manifest_paired_end_same_sample(client: AsyncClient, admin_token:
     # Both R1 and R2 resolve to the same sample
     assert entries[0][0] == sample_id
     assert entries[1][0] == sample_id
+
+
+@pytest.mark.asyncio
+async def test_manifest_derives_experiment_from_sample(client: AsyncClient, admin_token: str, session: AsyncSession):
+    """When sample resolves, experiment_id and project_id should be derived from it."""
+    proj = await client.post(
+        "/api/projects",
+        json={"name": "Derive Exp Project", "status": "active"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    proj_id = proj.json()["id"]
+    exp = await client.post(
+        "/api/experiments",
+        json={"name": "Derive Exp Exp", "project_id": proj_id},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    exp_id = exp.json()["id"]
+
+    await client.post(
+        f"/api/experiments/{exp_id}/samples",
+        json={"sample_id_external": "DERIVE-001", "sequencing_batch_code": "CCB0004"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    await session.commit()
+
+    org_row = (
+        await session.execute(
+            text("SELECT organization_id FROM experiments WHERE id = :eid"),
+            {"eid": exp_id},
+        )
+    ).fetchone()
+    assert org_row is not None
+    org_id = org_row[0]
+
+    await _create_naming_profile(session, org_id)
+    await session.flush()
+
+    manifest = "# batch: CCB0004\nhash1  pbmc_1k_v3_S1_L001_R1_001.fastq.gz\n"
+
+    batch = await process_manifest_ingest(
+        manifest_content=manifest,
+        manifest_format="md5sum",
+        org_id=org_id,
+        source_bucket="test-bucket",
+        db=session,
+    )
+
+    entries = (
+        await session.execute(
+            text(
+                "SELECT resolved_sample_id, resolved_experiment_id, resolved_project_id "
+                "FROM manifest_entries WHERE sequencing_batch_id = :bid"
+            ).bindparams(bid=batch.id)
+        )
+    ).fetchall()
+
+    assert len(entries) == 1
+    assert entries[0][0] is not None, "sample should be resolved"
+    assert entries[0][1] == exp_id, f"experiment should be {exp_id}, got {entries[0][1]}"
+    assert entries[0][2] == proj_id, f"project should be {proj_id}, got {entries[0][2]}"
