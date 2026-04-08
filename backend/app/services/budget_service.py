@@ -26,6 +26,7 @@ class BudgetCheckResult(BaseModel):
     monthly_budget: float
     decision: str
 
+
 # Default values for local/POC mode
 DEFAULT_PIPELINE_COST = Decimal("5.00")
 DEFAULT_MONTHLY_BUDGET = Decimal("500.00")

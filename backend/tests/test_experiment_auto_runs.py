@@ -9,7 +9,6 @@ from app.models.pipeline_catalog_entry import PipelineCatalogEntry
 from app.models.sample import Sample
 from app.models.sequencing_batch import SequencingBatch
 from app.models.manifest_entry import ManifestEntry
-from app.models.experiment_auto_run import ExperimentAutoRun
 
 pytestmark = pytest.mark.asyncio
 
@@ -435,9 +434,7 @@ async def test_checksum_mismatch_cancels_pending_run(
     await session.commit()
 
     # Now simulate a checksum mismatch on one entry
-    await AutoRunService.cancel_pending_runs_for_sample(
-        session, sample_id=sample.id, reason="checksum_mismatch"
-    )
+    await AutoRunService.cancel_pending_runs_for_sample(session, sample_id=sample.id, reason="checksum_mismatch")
     await session.commit()
 
     result = await session.execute(
@@ -450,9 +447,7 @@ async def test_checksum_mismatch_cancels_pending_run(
     assert row[1] == "checksum_mismatch"
 
 
-async def test_disabled_config_does_not_queue(
-    client, admin_token, experiment, pipeline, sample_with_manifest, session
-):
+async def test_disabled_config_does_not_queue(client, admin_token, experiment, pipeline, sample_with_manifest, session):
     """A disabled auto-run config should not create pending runs."""
     sample = sample_with_manifest["sample"]
 

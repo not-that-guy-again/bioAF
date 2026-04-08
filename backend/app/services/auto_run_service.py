@@ -280,9 +280,7 @@ class AutoRunService:
 
         for org_id, org_runs in by_org.items():
             # Budget check
-            budget_result = await session.execute(
-                select(BudgetConfig).where(BudgetConfig.organization_id == org_id)
-            )
+            budget_result = await session.execute(select(BudgetConfig).where(BudgetConfig.organization_id == org_id))
             budget_config = budget_result.scalar_one_or_none()
 
             if budget_config and budget_config.monthly_budget:
@@ -345,12 +343,12 @@ class AutoRunService:
                         reference_genome=config.reference_genome,
                         alignment_algorithm=config.alignment_algorithm,
                     )
-                    # Build user context matching what the API provides
-                    user_context = {
-                        "sub": str(config.configured_by_user_id),
-                        "org_id": config.organization_id,
-                    }
-                    run = await PipelineRunService.launch_run(session, launch_data, user_context)
+                    run = await PipelineRunService.launch_run(
+                        session,
+                        config.organization_id,
+                        config.configured_by_user_id,
+                        launch_data,
+                    )
                     pr.status = "launched"
                     pr.pipeline_run_id = run.id
                     await session.flush()

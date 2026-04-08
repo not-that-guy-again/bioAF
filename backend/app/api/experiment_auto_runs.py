@@ -110,9 +110,7 @@ async def update_auto_run_config(
     from sqlalchemy import select
     from app.models.experiment_auto_run import ExperimentAutoRun
 
-    result = await session.execute(
-        select(ExperimentAutoRun).where(ExperimentAutoRun.id == config_id)
-    )
+    result = await session.execute(select(ExperimentAutoRun).where(ExperimentAutoRun.id == config_id))
     config = result.scalar_one()
     return _config_response(config)
 
