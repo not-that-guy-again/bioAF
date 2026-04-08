@@ -351,46 +351,20 @@ async def process_ingest_event(
     db.add(file_record)
     await db.flush()
 
-    # Step 5b: Copy file to raw bucket (real GCS only)
-    if ingest_source == "auto_ingest":
-        config = await _read_ingest_config(db)
-        raw_bucket = config.get("raw_bucket_name", "")
-        if raw_bucket and raw_bucket != "null":
-            if resolved_experiment_id:
-                from app.services.gcs_storage import GcsStorageService
-
-                prefix = GcsStorageService.build_experiment_prefix(resolved_experiment_id)
-            else:
-                from app.services.gcs_storage import GcsStorageService
-
-                prefix = GcsStorageService.build_unlinked_prefix()
-
-            new_uri = await copy_to_raw_bucket(
-                source_bucket,
-                source_path,
-                raw_bucket,
-                prefix,
-                filename,
-                credentials=credentials,
-            )
-            file_record.gcs_uri = new_uri
-            await db.flush()
-
-            # Apply cleanup policy
-            cleanup_policy = config.get("ingest_cleanup_policy", "delete_after_copy")
-            await cleanup_ingest_file(source_bucket, source_path, policy=cleanup_policy, credentials=credentials)
-
-    # Step 5c: ManifestEntry reconciliation
+    # Step 5b: ManifestEntry reconciliation (before copy, so resolution
+    # from the manifest can determine the correct experiment prefix)
     from datetime import datetime, timezone
 
     from app.models.manifest_entry import ManifestEntry
     from app.models.sequencing_batch import SequencingBatch
 
     manifest_entry_result = await db.execute(
-        select(ManifestEntry).where(
+        select(ManifestEntry)
+        .where(
             ManifestEntry.expected_filename == filename,
             ManifestEntry.status == "pending",
         )
+        .limit(1)
     )
     manifest_entry = manifest_entry_result.scalar_one_or_none()
     if manifest_entry:
@@ -424,6 +398,37 @@ async def process_ingest_event(
             seq_batch.ingested_file_count = (seq_batch.ingested_file_count or 0) + 1
 
         await db.flush()
+
+    # Step 5c: Copy file to raw bucket (real GCS only)
+    if ingest_source == "auto_ingest":
+        config = await _read_ingest_config(db)
+        raw_bucket = config.get("raw_bucket_name", "")
+        if raw_bucket and raw_bucket != "null":
+            if resolved_experiment_id:
+                from app.services.gcs_storage import GcsStorageService
+
+                prefix = GcsStorageService.build_experiment_prefix(resolved_experiment_id)
+            else:
+                from app.services.gcs_storage import GcsStorageService
+
+                prefix = GcsStorageService.build_unlinked_prefix()
+
+            new_uri = await copy_to_raw_bucket(
+                source_bucket,
+                source_path,
+                raw_bucket,
+                prefix,
+                filename,
+                credentials=credentials,
+            )
+            file_record.gcs_uri = new_uri
+            await db.flush()
+
+            # move_file already deletes the source after copy+verify.
+            # Only call cleanup for retain policies (which skip deletion).
+            cleanup_policy = config.get("ingest_cleanup_policy", "delete_after_copy")
+            if cleanup_policy != "delete_after_copy":
+                await cleanup_ingest_file(source_bucket, source_path, policy=cleanup_policy, credentials=credentials)
 
     # Step 6: Create file_parse_result
     parse_result_record = FileParseResult(

@@ -60,6 +60,20 @@ async def process_manifest_ingest(
         )
         return seq_batch
 
+    # If the batch already has manifest entries, this is a redelivery.
+    # Return the existing batch to avoid creating duplicate entries.
+    if seq_batch:
+        existing_entries = await db.execute(
+            select(ManifestEntry).where(ManifestEntry.sequencing_batch_id == seq_batch.id).limit(1)
+        )
+        if existing_entries.scalar_one_or_none():
+            logger.info(
+                "Manifest redelivery for batch %s (org %d), skipping duplicate entry creation",
+                batch_number,
+                org_id,
+            )
+            return seq_batch
+
     if not seq_batch:
         seq_batch = SequencingBatch(
             organization_id=org_id,

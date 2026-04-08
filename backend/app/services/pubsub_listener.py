@@ -8,6 +8,8 @@ into the existing ingest pipeline handler.
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 import logging
 
@@ -19,6 +21,15 @@ logger = logging.getLogger("bioaf.pubsub_listener")
 # Retry backoff base (seconds) - overridable in tests
 RETRY_BASE_SECONDS: float = 10.0
 RETRY_MAX_SECONDS: float = 120.0
+
+
+def _base64_md5_to_hex(b64_md5: str) -> str:
+    """Convert a base64-encoded MD5 hash (from GCS) to lowercase hex."""
+    try:
+        return base64.b64decode(b64_md5).hex()
+    except (binascii.Error, ValueError):
+        # Not valid base64, return as-is (may already be hex)
+        return b64_md5
 
 
 class PubSubListener:
@@ -126,7 +137,10 @@ class PubSubListener:
         bucket = msg_data["bucket"]
         object_name = msg_data["name"]
         size = int(msg_data.get("size", 0))
-        md5_hash = msg_data.get("md5Hash")
+
+        # GCS Pub/Sub sends MD5 as base64; convert to hex for manifest comparison
+        raw_md5 = msg_data.get("md5Hash")
+        md5_hash = _base64_md5_to_hex(raw_md5) if raw_md5 else None
 
         # Read org_id from platform_config (single-tenant assumption)
         row = await session.execute(text("SELECT value FROM platform_config WHERE key = 'default_org_id'"))
