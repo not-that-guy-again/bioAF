@@ -386,7 +386,29 @@ async def process_ingest_event(
         if manifest_entry.resolved_experiment_id and not resolved_experiment_id:
             resolved_experiment_id = manifest_entry.resolved_experiment_id
 
-        # Link file to sequencing batch
+        # If we have a sample but still no experiment, derive from sample
+        if resolved_sample_id and not resolved_experiment_id:
+            sample_result = await db.execute(select(Sample).where(Sample.id == resolved_sample_id))
+            sample_obj = sample_result.scalar_one_or_none()
+            if sample_obj:
+                resolved_experiment_id = sample_obj.experiment_id
+
+        # Link file to sample via junction table
+        if resolved_sample_id:
+            from app.models.sample import sample_files
+
+            existing_link = await db.execute(
+                sample_files.select().where(
+                    sample_files.c.sample_id == resolved_sample_id,
+                    sample_files.c.file_id == file_record.id,
+                )
+            )
+            if not existing_link.fetchone():
+                await db.execute(sample_files.insert().values(sample_id=resolved_sample_id, file_id=file_record.id))
+
+        # Link file to experiment and sequencing batch
+        if resolved_experiment_id and not file_record.experiment_id:
+            file_record.experiment_id = resolved_experiment_id
         file_record.sequencing_batch_id = manifest_entry.sequencing_batch_id
 
         # Increment batch ingested_file_count
