@@ -7,7 +7,7 @@ from app.schemas.sample import SampleCreate
 
 # All user-facing sample fields (excludes internal fields like id, status, experiment_id)
 SAMPLE_FIELDS = [
-    "sample_id_external",
+    "sample_id_unique",
     "organism",
     "tissue_type",
     "donor_source",
@@ -30,9 +30,11 @@ SAMPLE_FIELDS = [
 
 # Maps common CSV header names to sample model field names
 COLUMN_MAP = {
-    "sample_id": "sample_id_external",
-    "external_id": "sample_id_external",
-    "sample_id_external": "sample_id_external",
+    "sample": "sample_id_unique",
+    "sample_id": "sample_id_unique",
+    "sample_id_unique": "sample_id_unique",
+    "sample_id_external": "sample_id_unique",
+    "external_id": "sample_id_unique",
     "organism": "organism",
     "tissue": "tissue_type",
     "tissue_type": "tissue_type",
@@ -70,7 +72,7 @@ DATETIME_FIELDS = {"collection_timestamp"}
 
 # Example values for the template CSV
 _EXAMPLE_VALUES = {
-    "sample_id_external": "SAMPLE-001",
+    "sample_id_unique": "SAMPLE-001",
     "organism": "Homo sapiens",
     "tissue_type": "PBMC",
     "donor_source": "Donor-A",

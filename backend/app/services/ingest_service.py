@@ -124,21 +124,21 @@ async def resolve_or_create_experiment(
 
 
 async def resolve_or_create_sample(
-    sample_id_external: str | None,
+    sample_id_unique: str | None,
     experiment_id: int | None,
     org_id: int,
     user_id: int | None,
     db: AsyncSession,
 ) -> int | None:
     """Resolve an existing sample or auto-create an unclaimed one."""
-    if not sample_id_external:
+    if not sample_id_unique:
         return None
     if not experiment_id:
         return None
 
     result = await db.execute(
         select(Sample).where(
-            Sample.sample_id_external == sample_id_external,
+            Sample.sample_id_unique == sample_id_unique,
             Sample.experiment_id == experiment_id,
         )
     )
@@ -148,7 +148,7 @@ async def resolve_or_create_sample(
 
     sample = Sample(
         experiment_id=experiment_id,
-        sample_id_external=sample_id_external,
+        sample_id_unique=sample_id_unique,
         status="registered",
         is_unclaimed=True,
     )
@@ -161,7 +161,7 @@ async def resolve_or_create_sample(
         entity_type="sample",
         entity_id=sample.id,
         action="auto_create",
-        details={"sample_id_external": sample_id_external, "experiment_id": experiment_id, "is_unclaimed": True},
+        details={"sample_id_unique": sample_id_unique, "experiment_id": experiment_id, "is_unclaimed": True},
     )
     return sample.id
 
@@ -625,7 +625,7 @@ async def get_unclaimed_entities(org_id: int, db: AsyncSession) -> list[dict]:
             {
                 "entity_type": "sample",
                 "entity_id": s.id,
-                "name": s.sample_id_external or f"Sample {s.id}",
+                "name": s.sample_id_unique or f"Sample {s.id}",
                 "created_at": s.created_at,
             }
         )

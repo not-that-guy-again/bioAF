@@ -25,7 +25,7 @@ interface ConfirmResponse {
 
 // All sample fields that an unknown column can be mapped to
 const SAMPLE_FIELDS = [
-  { value: "sample_id_external", label: "Sample ID (External)" },
+  { value: "sample_id_unique", label: "Sample ID (External)" },
   { value: "organism", label: "Organism" },
   { value: "tissue_type", label: "Tissue Type" },
   { value: "donor_source", label: "Donor Source" },
@@ -47,7 +47,7 @@ const SAMPLE_FIELDS = [
 ];
 
 const EXAMPLE_VALUES: Record<string, string> = {
-  sample_id_external: "SAMPLE-001",
+  sample_id_unique: "SAMPLE-001",
   organism: "Homo sapiens",
   tissue_type: "PBMC",
   donor_source: "Donor-A",

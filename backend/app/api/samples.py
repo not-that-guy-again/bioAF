@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/samples", tags=["samples"])
 def _sample_response(s) -> SampleResponse:
     return SampleResponse(
         id=s.id,
-        sample_id_external=s.sample_id_external,
+        sample_id_unique=s.sample_id_unique,
         organism=s.organism,
         tissue_type=s.tissue_type,
         donor_source=s.donor_source,

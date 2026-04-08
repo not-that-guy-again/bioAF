@@ -143,7 +143,7 @@ async def get_experiment(
         samples=[
             SampleResponseBrief(
                 id=s.id,
-                sample_id_external=s.sample_id_external,
+                sample_id_unique=s.sample_id_unique,
                 organism=s.organism,
                 tissue_type=s.tissue_type,
                 molecule_type=s.molecule_type,
@@ -236,7 +236,7 @@ async def list_experiment_samples(
     return [
         SampleResponse(
             id=s.id,
-            sample_id_external=s.sample_id_external,
+            sample_id_unique=s.sample_id_unique,
             organism=s.organism,
             tissue_type=s.tissue_type,
             donor_source=s.donor_source,
@@ -281,7 +281,7 @@ async def create_sample(
     sample = await SampleService.get_sample(session, sample.id)
     return SampleResponse(
         id=sample.id,
-        sample_id_external=sample.sample_id_external,
+        sample_id_unique=sample.sample_id_unique,
         organism=sample.organism,
         tissue_type=sample.tissue_type,
         donor_source=sample.donor_source,

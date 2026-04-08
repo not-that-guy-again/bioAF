@@ -28,7 +28,7 @@ async def test_create_sample_auto_assigns_position(client: AsyncClient, admin_to
         resp = await client.post(
             f"/api/experiments/{exp_id}/samples",
             json={
-                "sample_id_external": f"POS-{i + 1}",
+                "sample_id_unique": f"POS-{i + 1}",
                 "sequencing_batch_code": "CCB0001",
             },
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -66,7 +66,7 @@ async def test_create_sample_explicit_position(client: AsyncClient, admin_token:
     resp = await client.post(
         f"/api/experiments/{exp_id}/samples",
         json={
-            "sample_id_external": "EXPLICIT-1",
+            "sample_id_unique": "EXPLICIT-1",
             "sequencing_batch_code": "CCB0010",
             "sequencing_batch_position": 5,
         },
@@ -102,7 +102,7 @@ async def test_batch_change_auto_assigns_new_position(client: AsyncClient, admin
     # Create a sample in batch A with position 1, and another in batch B
     resp_a = await client.post(
         f"/api/experiments/{exp_id}/samples",
-        json={"sample_id_external": "MOVE-1", "sequencing_batch_code": "BATCH-A"},
+        json={"sample_id_unique": "MOVE-1", "sequencing_batch_code": "BATCH-A"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp_a.status_code == 200
@@ -110,7 +110,7 @@ async def test_batch_change_auto_assigns_new_position(client: AsyncClient, admin
     # Pre-populate batch B with one sample so next position is 2
     await client.post(
         f"/api/experiments/{exp_id}/samples",
-        json={"sample_id_external": "STAY-B", "sequencing_batch_code": "BATCH-B"},
+        json={"sample_id_unique": "STAY-B", "sequencing_batch_code": "BATCH-B"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
@@ -151,7 +151,7 @@ async def test_position_gaps_allowed(client: AsyncClient, admin_token: str, sess
     resp1 = await client.post(
         f"/api/experiments/{exp_id}/samples",
         json={
-            "sample_id_external": "GAP-1",
+            "sample_id_unique": "GAP-1",
             "sequencing_batch_code": "GAP-BATCH",
             "sequencing_batch_position": 1,
         },
@@ -162,7 +162,7 @@ async def test_position_gaps_allowed(client: AsyncClient, admin_token: str, sess
     resp3 = await client.post(
         f"/api/experiments/{exp_id}/samples",
         json={
-            "sample_id_external": "GAP-3",
+            "sample_id_unique": "GAP-3",
             "sequencing_batch_code": "GAP-BATCH",
             "sequencing_batch_position": 3,
         },
@@ -199,7 +199,7 @@ async def test_no_batch_means_null_position(client: AsyncClient, admin_token: st
 
     resp = await client.post(
         f"/api/experiments/{exp_id}/samples",
-        json={"sample_id_external": "NO-BATCH"},
+        json={"sample_id_unique": "NO-BATCH"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
@@ -231,9 +231,7 @@ async def test_bulk_create_auto_assigns_sequential(client: AsyncClient, admin_to
 
     resp = await client.post(
         f"/api/experiments/{exp_id}/samples/bulk",
-        json={
-            "samples": [{"sample_id_external": f"BULK-{i}", "sequencing_batch_code": "BULK-BATCH"} for i in range(5)]
-        },
+        json={"samples": [{"sample_id_unique": f"BULK-{i}", "sequencing_batch_code": "BULK-BATCH"} for i in range(5)]},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
@@ -270,7 +268,7 @@ async def test_response_includes_position(client: AsyncClient, admin_token: str,
     create_resp = await client.post(
         f"/api/experiments/{exp_id}/samples",
         json={
-            "sample_id_external": "RESP-1",
+            "sample_id_unique": "RESP-1",
             "sequencing_batch_code": "RESP-BATCH",
         },
         headers={"Authorization": f"Bearer {admin_token}"},

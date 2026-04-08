@@ -289,7 +289,7 @@ export default function ExperimentDetailPage() {
   function startEditSample(sample: Sample) {
     setEditingSampleId(sample.id);
     setEditSampleForm({
-      sample_id_external: sample.sample_id_external,
+      sample_id_unique: sample.sample_id_unique,
       organism: sample.organism,
       tissue_type: sample.tissue_type,
       donor_source: sample.donor_source,
@@ -728,7 +728,7 @@ export default function ExperimentDetailPage() {
               {showSampleForm && (
                 <div className="bg-white rounded-lg shadow p-4 mb-4">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <input placeholder="External Sample ID" value={sampleForm.sample_id_external ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, sample_id_external: e.target.value })} className="border rounded px-3 py-2 text-sm" />
+                    <input placeholder="External Sample ID" value={sampleForm.sample_id_unique ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, sample_id_unique: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Organism" value={sampleForm.organism ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, organism: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Tissue Type" value={sampleForm.tissue_type ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, tissue_type: e.target.value })} className="border rounded px-3 py-2 text-sm" />
                     <input placeholder="Donor ID" value={sampleForm.donor_source ?? ""} onChange={(e) => setSampleForm({ ...sampleForm, donor_source: e.target.value })} className="border rounded px-3 py-2 text-sm" />
@@ -821,7 +821,7 @@ export default function ExperimentDetailPage() {
                             className="rounded border-gray-300"
                           />
                         </td>
-                        <td className="px-4 py-3 text-sm">{s.sample_id_external || "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.sample_id_unique || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.organism || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.tissue_type || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.molecule_type || "---"}</td>
@@ -862,10 +862,10 @@ export default function ExperimentDetailPage() {
               {/* View Sample Modal */}
               {viewingSample && (
                 <DetailModal
-                  title={viewingSample.sample_id_external || `Sample #${viewingSample.id}`}
+                  title={viewingSample.sample_id_unique || `Sample #${viewingSample.id}`}
                   onClose={() => setViewingSample(null)}
                   fields={[
-                    { label: "External ID", value: viewingSample.sample_id_external },
+                    { label: "External ID", value: viewingSample.sample_id_unique },
                     { label: "Status", value: viewingSample.status.replace(/_/g, " ") },
                     { label: "Organism", value: viewingSample.organism },
                     { label: "Tissue Type", value: viewingSample.tissue_type },
@@ -913,7 +913,7 @@ export default function ExperimentDetailPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">External Sample ID</label>
-                        <input value={editSampleForm.sample_id_external ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sample_id_external: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
+                        <input value={editSampleForm.sample_id_unique ?? ""} onChange={(e) => setEditSampleForm({ ...editSampleForm, sample_id_unique: e.target.value })} className="border rounded px-3 py-2 text-sm w-full" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">Organism</label>
