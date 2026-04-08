@@ -258,6 +258,7 @@ async def list_experiment_samples(
             parent_sample_id=s.parent_sample_id,
             collection_timestamp=s.collection_timestamp,
             collection_method=s.collection_method,
+            file_count=len(s.files) if s.files else 0,
             status=s.status,
             created_at=s.created_at,
             updated_at=s.updated_at,

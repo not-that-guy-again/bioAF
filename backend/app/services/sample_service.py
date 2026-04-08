@@ -523,6 +523,7 @@ class SampleService:
                 selectinload(Sample.sample_batch),
                 selectinload(Sample.sequencing_batch),
                 selectinload(Sample.custom_fields),
+                selectinload(Sample.files),
             )
             .where(Sample.experiment_id == experiment_id)
         )

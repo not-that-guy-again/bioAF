@@ -804,9 +804,7 @@ export default function ExperimentDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Treatment</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Prep</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Library Layout</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sample Batch</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Seq. Batch</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pos.</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Files</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QC</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3"></th>
@@ -830,9 +828,7 @@ export default function ExperimentDetailPage() {
                         <td className="px-4 py-3 text-sm">{s.treatment_condition || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.library_prep_method || "---"}</td>
                         <td className="px-4 py-3 text-sm">{s.library_layout || "---"}</td>
-                        <td className="px-4 py-3 text-sm">{s.sample_batch?.name || "---"}</td>
-                        <td className="px-4 py-3 text-sm">{s.sequencing_batch?.code || "---"}</td>
-                        <td className="px-4 py-3 text-sm">{s.sequencing_batch_position ?? "---"}</td>
+                        <td className="px-4 py-3 text-sm">{s.file_count}</td>
                         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                           <select
                             value={s.qc_status ?? ""}
@@ -857,7 +853,7 @@ export default function ExperimentDetailPage() {
                       </tr>
                     ))}
                     {samples.length === 0 && (
-                      <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
+                      <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No samples yet</td></tr>
                     )}
                   </tbody>
                 </table>

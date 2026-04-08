@@ -331,6 +331,7 @@ export interface Sample {
   library_layout: string | null;
   qc_status: QCStatus | null;
   qc_notes: string | null;
+  file_count: number;
   status: SampleStatus;
   created_at: string;
   updated_at: string;

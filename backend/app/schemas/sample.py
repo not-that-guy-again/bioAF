@@ -153,6 +153,7 @@ class SampleResponse(BaseModel):
     parent_sample_id: int | None = None
     collection_timestamp: datetime | None = None
     collection_method: str | None = None
+    file_count: int = 0
     status: str
     created_at: datetime
     updated_at: datetime
