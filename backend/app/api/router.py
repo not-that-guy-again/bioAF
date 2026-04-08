@@ -44,8 +44,6 @@ from app.api.infrastructure import router as infrastructure_router
 from app.api.naming_profiles import router as naming_profiles_router
 from app.api.ingest import router as ingest_router
 from app.api.ingest import claim_router
-from app.api.pipeline_triggers import router as pipeline_triggers_router
-from app.api.pipeline_triggers import budget_router
 from app.api.ssh_connect import router as ssh_connect_router
 from app.api.gcp_config import router as gcp_config_router
 from app.api.terraform_executor import router as terraform_executor_router
@@ -111,8 +109,6 @@ api_router.include_router(infrastructure_router)
 api_router.include_router(naming_profiles_router)
 api_router.include_router(ingest_router)
 api_router.include_router(claim_router)
-api_router.include_router(pipeline_triggers_router)
-api_router.include_router(budget_router)
 api_router.include_router(ssh_connect_router)
 api_router.include_router(gcp_config_router)
 api_router.include_router(terraform_executor_router)

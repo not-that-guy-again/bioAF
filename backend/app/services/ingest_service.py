@@ -421,6 +421,30 @@ async def process_ingest_event(
 
         await db.flush()
 
+        # Step 5b-ii: Auto-run trigger evaluation
+        if manifest_entry.resolved_sample_id:
+            try:
+                from app.services.auto_run_service import AutoRunService
+
+                if manifest_entry.status == "verified":
+                    await AutoRunService.check_and_queue_auto_runs(
+                        db,
+                        sample_id=manifest_entry.resolved_sample_id,
+                        sequencing_batch_id=manifest_entry.sequencing_batch_id,
+                    )
+                elif manifest_entry.status == "checksum_mismatch":
+                    await AutoRunService.cancel_pending_runs_for_sample(
+                        db,
+                        sample_id=manifest_entry.resolved_sample_id,
+                        reason="checksum_mismatch",
+                    )
+                await db.flush()
+            except Exception:
+                logger.exception(
+                    "Auto-run evaluation failed for manifest entry %d",
+                    manifest_entry.id,
+                )
+
     # Step 5c: Copy file to raw bucket (real GCS only)
     if ingest_source == "auto_ingest":
         config = await _read_ingest_config(db)
@@ -563,15 +587,6 @@ async def process_ingest_event(
             "auto_created": auto_created,
         },
     )
-
-    # Step 10: Evaluate pipeline triggers for cataloged files
-    if ingest_status == "cataloged" and event.file_id:
-        try:
-            from app.services.trigger_service import TriggerService
-
-            await TriggerService.evaluate_event_triggers(event, db)
-        except Exception:
-            logger.exception("Trigger evaluation failed for event %d", event.id)
 
     return event
 
