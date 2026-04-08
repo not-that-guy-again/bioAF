@@ -17,6 +17,7 @@ import { ProvenanceReportPanel } from "@/components/provenance/ProvenanceReportP
 import { FileBrowser } from "@/components/files/FileBrowser";
 import { VocabularySelect } from "@/components/shared/VocabularySelect";
 import { CsvUploadModal } from "@/components/experiments/CsvUploadModal";
+import { AutoRunConfigSection } from "@/components/experiments/AutoRunConfigSection";
 import { ExtensibleVocabularySelect } from "@/components/shared/ExtensibleVocabularySelect";
 import { isAuthenticated, getCurrentUser } from "@/lib/auth";
 import { api, fileContentUrl } from "@/lib/api";
@@ -1210,6 +1211,8 @@ export default function ExperimentDetailPage() {
                   </table>
                 </div>
               )}
+
+              <AutoRunConfigSection experimentId={Number(id)} />
             </div>
           )}
 

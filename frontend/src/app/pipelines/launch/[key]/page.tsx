@@ -15,6 +15,7 @@ import type {
   PipelineRunLaunchRequest,
   PipelineRun,
   ParameterSchema,
+  VocabularyResponse,
 } from "@/lib/types";
 
 type Step = 1 | 2 | 3 | 4;
@@ -38,6 +39,10 @@ export default function PipelineLauncherPage() {
   );
   const [selectedSampleIds, setSelectedSampleIds] = useState<number[]>([]);
   const [userParams, setUserParams] = useState<Record<string, unknown>>({});
+  const [referenceGenome, setReferenceGenome] = useState<string>("");
+  const [alignmentAlgorithm, setAlignmentAlgorithm] = useState<string>("");
+  const [genomeOptions, setGenomeOptions] = useState<string[]>([]);
+  const [algorithmOptions, setAlgorithmOptions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -51,15 +56,19 @@ export default function PipelineLauncherPage() {
 
   async function loadData() {
     try {
-      const [pipelineData, expData] = await Promise.all([
+      const [pipelineData, expData, genomeData, algoData] = await Promise.all([
         api.get<PipelineCatalog>(`/api/pipelines/${encodeURIComponent(pipelineKey)}`),
         api.get<ExperimentListResponse>("/api/experiments?page_size=100"),
+        api.get<VocabularyResponse>("/api/vocabularies?field=reference_genome").catch(() => null),
+        api.get<VocabularyResponse>("/api/vocabularies?field=alignment_algorithm").catch(() => null),
       ]);
       setPipeline(pipelineData);
       setExperiments(expData.experiments);
       if (pipelineData.default_params) {
         setUserParams({ ...pipelineData.default_params });
       }
+      if (genomeData?.values) setGenomeOptions(genomeData.values.map((v) => v.value));
+      if (algoData?.values) setAlgorithmOptions(algoData.values.map((v) => v.value));
     } catch {} finally { setLoading(false); }
   }
 
@@ -80,6 +89,8 @@ export default function PipelineLauncherPage() {
         experiment_id: selectedExperimentId,
         sample_ids: selectedSampleIds.length > 0 ? selectedSampleIds : null,
         parameters: userParams,
+        reference_genome: referenceGenome || null,
+        alignment_algorithm: alignmentAlgorithm || null,
       };
       const run = await api.post<PipelineRun>("/api/pipeline-runs", request);
       router.push(`/pipelines/runs/${run.id}`);
@@ -219,6 +230,36 @@ export default function PipelineLauncherPage() {
           {step === 3 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4">Configure Parameters</h2>
+              {(genomeOptions.length > 0 || algorithmOptions.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 pb-6 border-b">
+                  {genomeOptions.length > 0 && (
+                    <div>
+                      <label className="text-xs text-gray-500">Reference Genome</label>
+                      <select
+                        value={referenceGenome}
+                        onChange={(e) => setReferenceGenome(e.target.value)}
+                        className="w-full border rounded px-3 py-1.5 text-sm"
+                      >
+                        <option value="">None</option>
+                        {genomeOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {algorithmOptions.length > 0 && (
+                    <div>
+                      <label className="text-xs text-gray-500">Alignment Algorithm</label>
+                      <select
+                        value={alignmentAlgorithm}
+                        onChange={(e) => setAlignmentAlgorithm(e.target.value)}
+                        className="w-full border rounded px-3 py-1.5 text-sm"
+                      >
+                        <option value="">None</option>
+                        {algorithmOptions.map((v) => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
               <ParameterForm
                 schema={pipeline.parameter_schema}
                 defaultParams={pipeline.default_params || {}}
@@ -240,6 +281,8 @@ export default function PipelineLauncherPage() {
                 <div><dt className="text-sm text-gray-500">Pipeline</dt><dd className="text-sm font-medium">{pipeline.name} v{pipeline.version}</dd></div>
                 <div><dt className="text-sm text-gray-500">Experiment</dt><dd className="text-sm">{selectedExperiment?.name}</dd></div>
                 <div><dt className="text-sm text-gray-500">Samples</dt><dd className="text-sm">{selectedSampleIds.length} selected</dd></div>
+                {referenceGenome && <div><dt className="text-sm text-gray-500">Reference Genome</dt><dd className="text-sm font-medium">{referenceGenome}</dd></div>}
+                {alignmentAlgorithm && <div><dt className="text-sm text-gray-500">Alignment Algorithm</dt><dd className="text-sm font-medium">{alignmentAlgorithm}</dd></div>}
                 <div>
                   <dt className="text-sm text-gray-500">Non-default Parameters</dt>
                   <dd className="text-sm">
