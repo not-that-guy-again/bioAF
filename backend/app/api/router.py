@@ -63,6 +63,7 @@ from app.api.provenance_reports import router as provenance_reports_router
 from app.api.data_export import router as data_export_router
 from app.api.sequencing_batches import router as sequencing_batches_router
 from app.api.slack_oauth import router as slack_oauth_router
+from app.api.experiment_auto_runs import router as experiment_auto_runs_router
 
 api_router = APIRouter()
 
@@ -129,3 +130,4 @@ api_router.include_router(provenance_reports_router)
 api_router.include_router(data_export_router)
 api_router.include_router(sequencing_batches_router)
 api_router.include_router(slack_oauth_router)
+api_router.include_router(experiment_auto_runs_router)
