@@ -8,7 +8,6 @@ import type {
   AutoRunConfigUpdate,
   PipelineCatalog,
   PipelineCatalogListResponse,
-  VocabularyResponse,
   ParameterSchema,
 } from "@/lib/types";
 
@@ -177,18 +176,12 @@ function AutoRunConfigModal({
   const [userParams, setUserParams] = useState<Record<string, unknown>>(
     (existingConfig?.parameters as Record<string, unknown>) || {},
   );
-  const [referenceGenome, setReferenceGenome] = useState(existingConfig?.reference_genome || "");
-  const [alignmentAlgorithm, setAlignmentAlgorithm] = useState(existingConfig?.alignment_algorithm || "");
   const [delayMinutes, setDelayMinutes] = useState(existingConfig?.delay_minutes ?? 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const [genomeOptions, setGenomeOptions] = useState<string[]>([]);
-  const [algorithmOptions, setAlgorithmOptions] = useState<string[]>([]);
-
   useEffect(() => {
     loadPipelines();
-    loadVocabularies();
   }, []);
 
   useEffect(() => {
@@ -218,17 +211,6 @@ function AutoRunConfigModal({
     } catch {}
   }
 
-  async function loadVocabularies() {
-    try {
-      const [genomeData, algoData] = await Promise.all([
-        api.get<VocabularyResponse>("/api/vocabularies?field=reference_genome").catch(() => null),
-        api.get<VocabularyResponse>("/api/vocabularies?field=alignment_algorithm").catch(() => null),
-      ]);
-      if (genomeData?.values) setGenomeOptions(genomeData.values.map((v) => v.value));
-      if (algoData?.values) setAlgorithmOptions(algoData.values.map((v) => v.value));
-    } catch {}
-  }
-
   async function handleSave() {
     setSaving(true);
     setError("");
@@ -236,8 +218,6 @@ function AutoRunConfigModal({
       if (isEdit && existingConfig) {
         const update: AutoRunConfigUpdate = {
           parameters: userParams,
-          reference_genome: referenceGenome || null,
-          alignment_algorithm: alignmentAlgorithm || null,
           delay_minutes: delayMinutes,
         };
         await api.patch(`/api/experiments/${experimentId}/auto-runs/${existingConfig.id}`, update);
@@ -245,8 +225,6 @@ function AutoRunConfigModal({
         const create: AutoRunConfigCreate = {
           pipeline_key: selectedPipelineKey,
           parameters: userParams,
-          reference_genome: referenceGenome || null,
-          alignment_algorithm: alignmentAlgorithm || null,
           delay_minutes: delayMinutes,
         };
         await api.post(`/api/experiments/${experimentId}/auto-runs`, create);
@@ -318,36 +296,6 @@ function AutoRunConfigModal({
           {/* Step 2: Configure Parameters */}
           {step === 2 && (
             <div>
-              {(genomeOptions.length > 0 || algorithmOptions.length > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 pb-6 border-b">
-                  {genomeOptions.length > 0 && (
-                    <div>
-                      <label className="text-xs text-gray-500">Reference Genome</label>
-                      <select
-                        value={referenceGenome}
-                        onChange={(e) => setReferenceGenome(e.target.value)}
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                      >
-                        <option value="">None</option>
-                        {genomeOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {algorithmOptions.length > 0 && (
-                    <div>
-                      <label className="text-xs text-gray-500">Alignment Algorithm</label>
-                      <select
-                        value={alignmentAlgorithm}
-                        onChange={(e) => setAlignmentAlgorithm(e.target.value)}
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                      >
-                        <option value="">None</option>
-                        {algorithmOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              )}
               {selectedPipeline?.parameter_schema?.definitions ? (
                 <ModalParameterForm
                   schema={selectedPipeline.parameter_schema}
@@ -395,8 +343,6 @@ function AutoRunConfigModal({
                 <h3 className="text-sm font-medium text-gray-700 mb-3">Summary</h3>
                 <dl className="space-y-2 text-sm">
                   <div><dt className="text-gray-500 inline">Pipeline:</dt> <dd className="inline font-medium">{selectedPipelineKey}</dd></div>
-                  {referenceGenome && <div><dt className="text-gray-500 inline">Reference Genome:</dt> <dd className="inline">{referenceGenome}</dd></div>}
-                  {alignmentAlgorithm && <div><dt className="text-gray-500 inline">Alignment Algorithm:</dt> <dd className="inline">{alignmentAlgorithm}</dd></div>}
                   <div><dt className="text-gray-500 inline">Delay:</dt> <dd className="inline">{delayMinutes === 0 ? "Immediate" : `${delayMinutes} minutes`}</dd></div>
                   <div>
                     <dt className="text-gray-500 inline">Parameter overrides:</dt>
@@ -442,7 +388,7 @@ function ModalParameterForm({
   values: Record<string, unknown>;
   onChange: (v: Record<string, unknown>) => void;
 }) {
-  const managedParams = new Set(["input", "outdir", "genome", "reference_genome", "alignment_algorithm"]);
+  const managedParams = new Set(["input", "outdir"]);
 
   function setValue(key: string, val: unknown) {
     onChange({ ...values, [key]: val });

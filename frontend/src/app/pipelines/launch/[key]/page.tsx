@@ -15,10 +15,36 @@ import type {
   PipelineRunLaunchRequest,
   PipelineRun,
   ParameterSchema,
-  VocabularyResponse,
 } from "@/lib/types";
 
 type Step = 1 | 2 | 3 | 4;
+
+const CHEMISTRY_TO_PROTOCOL: Record<string, string> = {
+  "v1": "10XV1",
+  "v2": "10XV2",
+  "v3": "10XV3",
+  "v3.1": "10XV3",
+  "nextgem v3.1": "10XV3",
+  "nextgem v3": "10XV3",
+  "10x chromium 3' v1": "10XV1",
+  "10x chromium 3' v2": "10XV2",
+  "10x chromium 3' v3": "10XV3",
+  "10x chromium 3' v3.1": "10XV3",
+  "10x chromium 5' v1": "10XV1",
+  "10x chromium 5' v2": "10XV2",
+  "10x chromium 5' v3": "10XV3",
+};
+
+function detectProtocol(samples: SampleBrief[]): string | null {
+  const versions = new Set(
+    samples
+      .map((s) => s.chemistry_version?.trim().toLowerCase())
+      .filter(Boolean) as string[],
+  );
+  if (versions.size !== 1) return null;
+  const version = [...versions][0];
+  return CHEMISTRY_TO_PROTOCOL[version] || null;
+}
 
 export default function PipelineLauncherPage() {
   const router = useRouter();
@@ -39,10 +65,6 @@ export default function PipelineLauncherPage() {
   );
   const [selectedSampleIds, setSelectedSampleIds] = useState<number[]>([]);
   const [userParams, setUserParams] = useState<Record<string, unknown>>({});
-  const [referenceGenome, setReferenceGenome] = useState<string>("");
-  const [alignmentAlgorithm, setAlignmentAlgorithm] = useState<string>("");
-  const [genomeOptions, setGenomeOptions] = useState<string[]>([]);
-  const [algorithmOptions, setAlgorithmOptions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
@@ -56,19 +78,15 @@ export default function PipelineLauncherPage() {
 
   async function loadData() {
     try {
-      const [pipelineData, expData, genomeData, algoData] = await Promise.all([
+      const [pipelineData, expData] = await Promise.all([
         api.get<PipelineCatalog>(`/api/pipelines/${encodeURIComponent(pipelineKey)}`),
         api.get<ExperimentListResponse>("/api/experiments?page_size=100"),
-        api.get<VocabularyResponse>("/api/vocabularies?field=reference_genome").catch(() => null),
-        api.get<VocabularyResponse>("/api/vocabularies?field=alignment_algorithm").catch(() => null),
       ]);
       setPipeline(pipelineData);
       setExperiments(expData.experiments);
       if (pipelineData.default_params) {
         setUserParams({ ...pipelineData.default_params });
       }
-      if (genomeData?.values) setGenomeOptions(genomeData.values.map((v) => v.value));
-      if (algoData?.values) setAlgorithmOptions(algoData.values.map((v) => v.value));
     } catch {} finally { setLoading(false); }
   }
 
@@ -77,6 +95,11 @@ export default function PipelineLauncherPage() {
       const data = await api.get<SampleBrief[]>(`/api/experiments/${experimentId}/samples`);
       setSamples(data);
       setSelectedSampleIds(data.map((s) => s.id));
+      // Auto-detect protocol from sample chemistry_version
+      const detectedProtocol = detectProtocol(data);
+      if (detectedProtocol) {
+        setUserParams((prev) => ({ ...prev, protocol: detectedProtocol }));
+      }
     } catch {}
   }
 
@@ -89,8 +112,6 @@ export default function PipelineLauncherPage() {
         experiment_id: selectedExperimentId,
         sample_ids: selectedSampleIds.length > 0 ? selectedSampleIds : null,
         parameters: userParams,
-        reference_genome: referenceGenome || null,
-        alignment_algorithm: alignmentAlgorithm || null,
       };
       const run = await api.post<PipelineRun>("/api/pipeline-runs", request);
       router.push(`/pipelines/runs/${run.id}`);
@@ -230,36 +251,6 @@ export default function PipelineLauncherPage() {
           {step === 3 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4">Configure Parameters</h2>
-              {(genomeOptions.length > 0 || algorithmOptions.length > 0) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 pb-6 border-b">
-                  {genomeOptions.length > 0 && (
-                    <div>
-                      <label className="text-xs text-gray-500">Reference Genome</label>
-                      <select
-                        value={referenceGenome}
-                        onChange={(e) => setReferenceGenome(e.target.value)}
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                      >
-                        <option value="">None</option>
-                        {genomeOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {algorithmOptions.length > 0 && (
-                    <div>
-                      <label className="text-xs text-gray-500">Alignment Algorithm</label>
-                      <select
-                        value={alignmentAlgorithm}
-                        onChange={(e) => setAlignmentAlgorithm(e.target.value)}
-                        className="w-full border rounded px-3 py-1.5 text-sm"
-                      >
-                        <option value="">None</option>
-                        {algorithmOptions.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              )}
               <ParameterForm
                 schema={pipeline.parameter_schema}
                 defaultParams={pipeline.default_params || {}}
@@ -281,8 +272,6 @@ export default function PipelineLauncherPage() {
                 <div><dt className="text-sm text-gray-500">Pipeline</dt><dd className="text-sm font-medium">{pipeline.name} v{pipeline.version}</dd></div>
                 <div><dt className="text-sm text-gray-500">Experiment</dt><dd className="text-sm">{selectedExperiment?.name}</dd></div>
                 <div><dt className="text-sm text-gray-500">Samples</dt><dd className="text-sm">{selectedSampleIds.length} selected</dd></div>
-                {referenceGenome && <div><dt className="text-sm text-gray-500">Reference Genome</dt><dd className="text-sm font-medium">{referenceGenome}</dd></div>}
-                {alignmentAlgorithm && <div><dt className="text-sm text-gray-500">Alignment Algorithm</dt><dd className="text-sm font-medium">{alignmentAlgorithm}</dd></div>}
                 <div>
                   <dt className="text-sm text-gray-500">Non-default Parameters</dt>
                   <dd className="text-sm">
@@ -345,7 +334,7 @@ function ParameterForm({
     );
   }
 
-  const managedParams = new Set(["input", "outdir", "genome", "reference_genome", "alignment_algorithm"]);
+  const managedParams = new Set(["input", "outdir"]);
 
   function setValue(key: string, val: unknown) {
     onChange({ ...values, [key]: val });
@@ -405,6 +394,17 @@ function ParameterForm({
   );
 }
 
+const PROTOCOL_INFO = `The protocol parameter tells the aligner how to parse barcode and UMI sequences from Read 1.
+
+It must match the 10x Chromium chemistry used during library preparation:
+- **10XV1** -- 10x Chromium Single Cell 3' v1 (14bp barcode + 10bp UMI = 24bp R1)
+- **10XV2** -- 10x Chromium Single Cell 3' v2 (16bp barcode + 10bp UMI = 26bp R1)
+- **10XV3** -- 10x Chromium Single Cell 3' v3 or v3.1 (16bp barcode + 12bp UMI = 28bp R1)
+
+If your samples have a chemistry version set, bioAF will auto-detect the correct protocol. You can override it here if needed.
+
+A mismatch between protocol and actual chemistry will cause the aligner to fail with a barcode length error.`;
+
 function ParameterField({
   paramKey,
   prop,
@@ -418,17 +418,34 @@ function ParameterField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const label = paramKey.replace(/_/g, " ");
+  const hasInfo = paramKey === "protocol";
 
   if (prop.enum) {
     return (
       <div>
-        <label className="text-xs text-gray-500">{label}{required ? " *" : ""}</label>
+        <div className="flex items-center gap-1">
+          <label className="text-xs text-gray-500">{label}{required ? " *" : ""}</label>
+          {hasInfo && (
+            <button
+              type="button"
+              onClick={() => setShowInfo(!showInfo)}
+              className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold hover:bg-gray-300 flex items-center justify-center"
+              title="More info"
+            >i</button>
+          )}
+        </div>
         <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm">
-          <option value="">—</option>
+          <option value="">--</option>
           {prop.enum.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
         </select>
-        {prop.description && <p className="text-xs text-gray-400 mt-0.5">{prop.description}</p>}
+        {prop.description && !showInfo && <p className="text-xs text-gray-400 mt-0.5">{prop.description}</p>}
+        {showInfo && (
+          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-gray-700 whitespace-pre-line col-span-2">
+            {PROTOCOL_INFO}
+          </div>
+        )}
       </div>
     );
   }

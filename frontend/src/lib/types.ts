@@ -263,6 +263,7 @@ export interface SampleBrief {
   molecule_type: string | null;
   library_prep_method: string | null;
   library_layout: string | null;
+  chemistry_version: string | null;
   qc_status: QCStatus | null;
   status: SampleStatus;
   created_at: string;
