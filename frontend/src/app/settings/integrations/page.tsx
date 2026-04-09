@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { GcpSettingsContent } from "@/app/settings/gcp/page";
-import { SmtpSettingsContent } from "@/app/settings/smtp/page";
-import { SlackSettingsContent } from "@/app/settings/slack/page";
+import { GcpSettingsContent } from "@/components/settings/GcpSettingsContent";
+import { SmtpSettingsContent } from "@/components/settings/SmtpSettingsContent";
+import { SlackSettingsContent } from "@/components/settings/SlackSettingsContent";
 
 type Tab = "gcp" | "smtp" | "slack" | "seqera";
 
