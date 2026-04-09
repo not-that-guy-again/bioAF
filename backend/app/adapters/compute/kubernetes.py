@@ -1216,7 +1216,7 @@ class KubernetesComputeProvider(ComputeProvider):
 
             processes.append(
                 {
-                    "name": row.get("process", ""),
+                    "name": row.get("name", "") or row.get("process", ""),
                     "status": mapped_status,
                     "cpu": cpu,
                     "memory_gb": memory_gb,
