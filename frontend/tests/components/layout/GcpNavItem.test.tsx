@@ -78,7 +78,7 @@ describe("GCP Configuration nav item", () => {
     expect(screen.queryByText("GCP Configuration")).not.toBeInTheDocument();
   });
 
-  it("is positioned between Audit Log and Naming Profiles", () => {
+  it("is positioned after Audit Log in Settings", () => {
     mockGetCurrentUser.mockReturnValue({ email: "admin@bioaf.org", role_name: "admin", sub: "1" });
     render(<Sidebar />);
 
@@ -87,10 +87,8 @@ describe("GCP Configuration nav item", () => {
     const items = screen.getAllByRole("link").map((el) => el.textContent);
     const auditLogIdx = items.findIndex((t) => t === "Audit Log");
     const gcpIdx = items.findIndex((t) => t === "GCP Configuration");
-    const namingIdx = items.findIndex((t) => t === "Naming Profiles");
 
     expect(auditLogIdx).toBeGreaterThanOrEqual(0);
     expect(gcpIdx).toBeGreaterThan(auditLogIdx);
-    expect(namingIdx).toBeGreaterThan(gcpIdx);
   });
 });
