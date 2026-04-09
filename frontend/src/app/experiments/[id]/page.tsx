@@ -1310,7 +1310,7 @@ export default function ExperimentDetailPage() {
                   You are about to delete <span className="font-semibold">{selectedSampleIds.size}</span> sample{selectedSampleIds.size > 1 ? "s" : ""}.
                 </p>
                 <p className="text-sm text-red-600 mb-4">
-                  This action cannot be undone. Associated file links, pipeline run associations, and pending auto-runs will be removed.
+                  This action cannot be undone. File links and pending auto-runs for these samples will be removed. Existing pipeline runs will be kept for audit purposes.
                 </p>
                 <div className="flex justify-end gap-2">
                   <button
