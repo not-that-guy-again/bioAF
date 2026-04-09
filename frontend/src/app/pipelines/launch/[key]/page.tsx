@@ -66,6 +66,8 @@ export default function PipelineLauncherPage() {
   const [selectedSampleIds, setSelectedSampleIds] = useState<number[]>([]);
   const [userParams, setUserParams] = useState<Record<string, unknown>>({});
 
+  const [detectedProtocol, setDetectedProtocol] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isAuthenticated()) { router.push("/login"); return; }
     loadData();
@@ -73,8 +75,9 @@ export default function PipelineLauncherPage() {
   }, [router, pipelineKey]);
 
   useEffect(() => {
-    if (selectedExperimentId) loadSamples(selectedExperimentId);
-  }, [selectedExperimentId]);
+    if (selectedExperimentId && pipeline) loadSamples(selectedExperimentId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedExperimentId, pipeline]);
 
   async function loadData() {
     try {
@@ -96,9 +99,10 @@ export default function PipelineLauncherPage() {
       setSamples(data);
       setSelectedSampleIds(data.map((s) => s.id));
       // Auto-detect protocol from sample chemistry_version
-      const detectedProtocol = detectProtocol(data);
-      if (detectedProtocol) {
-        setUserParams((prev) => ({ ...prev, protocol: detectedProtocol }));
+      const protocol = detectProtocol(data);
+      setDetectedProtocol(protocol);
+      if (protocol) {
+        setUserParams((prev) => ({ ...prev, protocol }));
       }
     } catch {}
   }
@@ -251,6 +255,12 @@ export default function PipelineLauncherPage() {
           {step === 3 && (
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold mb-4">Configure Parameters</h2>
+              {detectedProtocol && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm">
+                  Protocol auto-detected as <span className="font-semibold">{detectedProtocol}</span> from sample chemistry version.
+                </div>
+              )}
+              <ProtocolInfo />
               <ParameterForm
                 schema={pipeline.parameter_schema}
                 defaultParams={pipeline.default_params || {}}
@@ -394,16 +404,34 @@ function ParameterForm({
   );
 }
 
-const PROTOCOL_INFO = `The protocol parameter tells the aligner how to parse barcode and UMI sequences from Read 1.
-
-It must match the 10x Chromium chemistry used during library preparation:
-- **10XV1** -- 10x Chromium Single Cell 3' v1 (14bp barcode + 10bp UMI = 24bp R1)
-- **10XV2** -- 10x Chromium Single Cell 3' v2 (16bp barcode + 10bp UMI = 26bp R1)
-- **10XV3** -- 10x Chromium Single Cell 3' v3 or v3.1 (16bp barcode + 12bp UMI = 28bp R1)
-
-If your samples have a chemistry version set, bioAF will auto-detect the correct protocol. You can override it here if needed.
-
-A mismatch between protocol and actual chemistry will cause the aligner to fail with a barcode length error.`;
+function ProtocolInfo() {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700"
+      >
+        <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold flex items-center justify-center">i</span>
+        <span>About the protocol parameter</span>
+        <span className="text-xs">{expanded ? "▲" : "▼"}</span>
+      </button>
+      {expanded && (
+        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-gray-700 space-y-2">
+          <p>The <strong>protocol</strong> parameter tells the aligner how to parse barcode and UMI sequences from Read 1. It must match the 10x Chromium chemistry used during library preparation:</p>
+          <ul className="list-disc ml-4 space-y-1">
+            <li><strong>10XV1</strong> -- 10x Chromium Single Cell 3&apos; v1 (14bp barcode + 10bp UMI = 24bp R1)</li>
+            <li><strong>10XV2</strong> -- 10x Chromium Single Cell 3&apos; v2 (16bp barcode + 10bp UMI = 26bp R1)</li>
+            <li><strong>10XV3</strong> -- 10x Chromium Single Cell 3&apos; v3 or v3.1 (16bp barcode + 12bp UMI = 28bp R1)</li>
+          </ul>
+          <p>If your samples have a chemistry version set, bioAF will auto-detect the correct protocol. You can override it in the parameters below.</p>
+          <p>A mismatch between protocol and actual chemistry will cause the aligner to fail with a barcode length error.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ParameterField({
   paramKey,
@@ -418,34 +446,17 @@ function ParameterField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  const [showInfo, setShowInfo] = useState(false);
   const label = paramKey.replace(/_/g, " ");
-  const hasInfo = paramKey === "protocol";
 
   if (prop.enum) {
     return (
       <div>
-        <div className="flex items-center gap-1">
-          <label className="text-xs text-gray-500">{label}{required ? " *" : ""}</label>
-          {hasInfo && (
-            <button
-              type="button"
-              onClick={() => setShowInfo(!showInfo)}
-              className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold hover:bg-gray-300 flex items-center justify-center"
-              title="More info"
-            >i</button>
-          )}
-        </div>
+        <label className="text-xs text-gray-500">{label}{required ? " *" : ""}</label>
         <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm">
           <option value="">--</option>
           {prop.enum.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
         </select>
-        {prop.description && !showInfo && <p className="text-xs text-gray-400 mt-0.5">{prop.description}</p>}
-        {showInfo && (
-          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-gray-700 whitespace-pre-line col-span-2">
-            {PROTOCOL_INFO}
-          </div>
-        )}
+        {prop.description && <p className="text-xs text-gray-400 mt-0.5">{prop.description}</p>}
       </div>
     );
   }
