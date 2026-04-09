@@ -179,12 +179,11 @@ class TestK8sExecutor:
         assert "workDir = 'gs://bioaf-raw-test-abc123/nextflow-work'" in config
 
     def test_k8s_config_enables_wave_and_fusion_for_gcs(self):
-        """Wave + Fusion must be enabled when fusion_enabled=True with GCS work dir."""
+        """Wave + Fusion must be enabled when GCS work dir is set."""
         config = KubernetesComputeProvider._build_nextflow_k8s_config(
             namespace="bioaf-pipelines",
             has_gcs_secret=True,
             gcs_work_dir="gs://bioaf-raw-test-abc123/nextflow-work",
-            fusion_enabled=True,
         )
         assert "wave.enabled = true" in config
         assert "fusion.enabled = true" in config
