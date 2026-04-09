@@ -6,6 +6,7 @@ and prepare for file verification.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -158,8 +159,74 @@ async def process_manifest_ingest(
 
     await db.flush()
 
-    # Step 5: Batch status stays 'ingesting' since all entries are 'pending'
-    # File verification happens separately (Chunk 5 retry mechanism or inline)
+    # Step 5: Reconcile manifest entries against files already in the database.
+    # Files may have been ingested before the manifest arrived.
+    from app.models.file import File
+    from app.models.sample import sample_files
+
+    entries_result = await db.execute(
+        select(ManifestEntry).where(
+            ManifestEntry.sequencing_batch_id == seq_batch.id,
+            ManifestEntry.status == "pending",
+        )
+    )
+    pending_entries = list(entries_result.scalars().all())
+
+    for me in pending_entries:
+        file_result = await db.execute(
+            select(File).where(File.original_filename == me.expected_filename).order_by(File.id.desc()).limit(1)
+        )
+        existing_file = file_result.scalar_one_or_none()
+        if not existing_file:
+            continue
+
+        me.file_id = existing_file.id
+        me.last_check_at = datetime.now(timezone.utc)
+
+        # MD5 verification
+        if existing_file.md5_checksum and me.expected_md5:
+            if existing_file.md5_checksum == me.expected_md5:
+                me.status = "verified"
+            else:
+                me.status = "checksum_mismatch"
+                me.error_message = f"Expected {me.expected_md5}, got {existing_file.md5_checksum}"
+        else:
+            me.status = "verified"
+
+        # Link file to sample
+        if me.resolved_sample_id:
+            existing_link = await db.execute(
+                sample_files.select().where(
+                    sample_files.c.sample_id == me.resolved_sample_id,
+                    sample_files.c.file_id == existing_file.id,
+                )
+            )
+            if not existing_link.fetchone():
+                await db.execute(
+                    sample_files.insert().values(sample_id=me.resolved_sample_id, file_id=existing_file.id)
+                )
+
+        # Link file to experiment and batch
+        if me.resolved_experiment_id and not existing_file.experiment_id:
+            existing_file.experiment_id = me.resolved_experiment_id
+        existing_file.sequencing_batch_id = seq_batch.id
+
+        seq_batch.ingested_file_count = (seq_batch.ingested_file_count or 0) + 1
+
+        # Check sample completeness for auto-run triggers
+        if me.resolved_sample_id and me.status == "verified":
+            try:
+                from app.services.auto_run_service import AutoRunService
+
+                await AutoRunService.check_and_queue_auto_runs(
+                    db,
+                    sample_id=me.resolved_sample_id,
+                    sequencing_batch_id=seq_batch.id,
+                )
+            except Exception:
+                logger.exception("Auto-run check failed for manifest entry %d", me.id)
+
+    await db.flush()
 
     return seq_batch
 
