@@ -553,7 +553,12 @@ class KubernetesComputeProvider(ComputeProvider):
         if "outdir" not in parameters:
             parameters = {**parameters, "outdir": "/data/results"}
 
+        # Strip bioAF-internal config knobs that are not Nextflow parameters
+        internal_keys = {"fusion_enabled"}
+
         for key, value in sorted(parameters.items()):
+            if key in internal_keys:
+                continue
             parts.extend([f"--{key}", str(value)])
 
         return ["/bin/sh", "-c", " ".join(parts)]
@@ -563,6 +568,7 @@ class KubernetesComputeProvider(ComputeProvider):
         namespace: str,
         has_gcs_secret: bool,
         gcs_work_dir: str | None = None,
+        fusion_enabled: bool = False,
     ) -> str:
         """Build a nextflow.config for K8s executor mode.
 
@@ -578,10 +584,14 @@ class KubernetesComputeProvider(ComputeProvider):
         ]
 
         # GCS work directory so head and process pods share files.
-        # Wave + Fusion mount GCS paths as a local filesystem inside
-        # process pods so they can access .command.run scripts.
         if gcs_work_dir:
             lines.append(f"workDir = '{gcs_work_dir}'")
+
+        # Wave + Fusion mount GCS paths as a local filesystem inside
+        # process pods. Requires a Seqera Platform access token, so
+        # off by default. Users can enable via the fusion_enabled
+        # pipeline parameter.
+        if fusion_enabled and gcs_work_dir:
             lines.append("wave.enabled = true")
             lines.append("fusion.enabled = true")
             lines.append("fusion.exportStorageCredentials = true")
@@ -724,7 +734,8 @@ class KubernetesComputeProvider(ComputeProvider):
             nf_cfg = self._cluster_config or {}
             raw_bucket = nf_cfg.get("raw_bucket_name", "")
             gcs_work_dir = f"gs://{raw_bucket}/nextflow-work" if raw_bucket else None
-            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir)
+            fusion_enabled = bool(job_spec.get("parameters", {}).get("fusion_enabled", False))
+            nf_config = self._build_nextflow_k8s_config(namespace, has_gcs_secret, gcs_work_dir, fusion_enabled)
             # Use heredoc to avoid shell escaping issues with single quotes
             # in Nextflow config values (e.g., 'k8s', 'bioaf-pipelines')
             init_containers.append(

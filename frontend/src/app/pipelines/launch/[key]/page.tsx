@@ -345,7 +345,7 @@ function ParameterForm({
     );
   }
 
-  const managedParams = new Set(["input", "outdir"]);
+  const managedParams = new Set(["input", "outdir", "genome", "reference_genome", "alignment_algorithm"]);
 
   function setValue(key: string, val: unknown) {
     onChange({ ...values, [key]: val });
