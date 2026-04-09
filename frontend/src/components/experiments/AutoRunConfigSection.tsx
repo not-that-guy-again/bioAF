@@ -7,6 +7,7 @@ import type {
   AutoRunConfigCreate,
   AutoRunConfigUpdate,
   PipelineCatalog,
+  PipelineCatalogListResponse,
   VocabularyResponse,
   ParameterSchema,
 } from "@/lib/types";
@@ -198,10 +199,10 @@ function AutoRunConfigModal({
 
   async function loadPipelines() {
     try {
-      const data = await api.get<PipelineCatalog[]>("/api/pipelines");
-      setPipelines(data);
+      const data = await api.get<PipelineCatalogListResponse>("/api/pipelines");
+      setPipelines(data.pipelines);
       if (existingConfig) {
-        const match = data.find((p) => p.pipeline_key === existingConfig.pipeline_key);
+        const match = data.pipelines.find((p) => p.pipeline_key === existingConfig.pipeline_key);
         if (match) setSelectedPipeline(match);
       }
     } catch {}
