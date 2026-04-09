@@ -97,7 +97,7 @@ const REQUIRED_APIS = [
   { name: "cloudbuild.googleapis.com", description: "Cloud Build" },
 ];
 
-export default function GcpSettingsPage() {
+export function GcpSettingsContent() {
   const [projectId, setProjectId] = useState("");
   const [region, setRegion] = useState("us-central1");
   const [zone, setZone] = useState("us-central1-a");
@@ -181,12 +181,8 @@ export default function GcpSettingsPage() {
   const totalPermissions = validationResult?.permission_details?.length ?? 0;
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <h1 className="text-2xl font-bold mb-6">GCP Configuration</h1>
+    <>
+      <h1 className="text-2xl font-bold mb-6">GCP Configuration</h1>
 
           {message && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">
@@ -479,6 +475,18 @@ ${RECOMMENDED_ROLES.map(({ role }) => `gcloud projects add-iam-policy-binding $P
               </div>
             )}
           </div>
+    </>
+  );
+}
+
+export default function GcpSettingsPage() {
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6">
+          <GcpSettingsContent />
         </main>
       </div>
     </div>

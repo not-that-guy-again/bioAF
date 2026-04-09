@@ -114,7 +114,7 @@ const EVENT_CATEGORIES: Record<string, { label: string; events: string[] }> = {
   },
 };
 
-export default function SettingsSlackPage() {
+export function SlackSettingsContent() {
   const [status, setStatus] = useState<SlackStatus | null>(null);
   const [channels, setChannels] = useState<SlackChannel[]>([]);
   const [mappings, setMappings] = useState<ChannelMapping[]>([]);
@@ -418,26 +418,12 @@ export default function SettingsSlackPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex h-screen">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
-          <main className="flex-1 flex items-center justify-center">
-            <p className="text-gray-500">Loading Slack settings...</p>
-          </main>
-        </div>
-      </div>
-    );
+    return <p className="text-gray-500">Loading Slack settings...</p>;
   }
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl">
+    <>
+      <div className="max-w-4xl">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h1 className="text-2xl font-bold">Slack Integration</h1>
@@ -858,6 +844,18 @@ export default function SettingsSlackPage() {
               </>
             )}
           </div>
+    </>
+  );
+}
+
+export default function SettingsSlackPage() {
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6">
+          <SlackSettingsContent />
         </main>
       </div>
     </div>

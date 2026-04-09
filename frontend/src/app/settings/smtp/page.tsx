@@ -15,7 +15,7 @@ interface SmtpSettings {
   configured: boolean;
 }
 
-export default function SettingsSmtpPage() {
+export function SmtpSettingsContent() {
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpPort, setSmtpPort] = useState("587");
   const [smtpUsername, setSmtpUsername] = useState("");
@@ -90,84 +90,82 @@ export default function SettingsSmtpPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex h-screen">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
-          <main className="flex-1 overflow-y-auto p-6">
-            <p className="text-gray-500">Loading...</p>
-          </main>
-        </div>
-      </div>
-    );
+    return <p className="text-gray-500">Loading...</p>;
   }
 
+  return (
+    <>
+      <h1 className="text-2xl font-bold mb-6">SMTP Configuration</h1>
+
+      {message && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">{message}</div>}
+      {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">{error}</div>}
+
+      <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Host</label>
+            <input type="text" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="smtp.example.com" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
+            <input type="number" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} className="w-full px-3 py-2 border rounded" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+            <input type="text" value={smtpUsername} onChange={(e) => setSmtpUsername(e.target.value)} className="w-full px-3 py-2 border rounded" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder={hasExistingPassword ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (saved)" : "Enter password"} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">From Address</label>
+            <input type="email" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="noreply@example.com" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Encryption</label>
+            <select value={smtpEncryption} onChange={(e) => setSmtpEncryption(e.target.value)} className="w-full px-3 py-2 border rounded">
+              <option value="starttls">STARTTLS (port 587)</option>
+              <option value="ssl">SSL/TLS (port 465)</option>
+              <option value="none">None (port 25)</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-6">
+          <button onClick={handleSaveSmtp} className="px-4 py-2 bg-bioaf-600 text-white rounded hover:bg-bioaf-700">
+            Save SMTP Settings
+          </button>
+        </div>
+
+        {/* Test Email */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Send Test Email</h3>
+          <div className="flex gap-3">
+            <input
+              type="email"
+              value={testEmailTo}
+              onChange={(e) => setTestEmailTo(e.target.value)}
+              className="flex-1 px-3 py-2 border rounded"
+              placeholder="recipient@example.com"
+            />
+            <button onClick={handleTestEmail} className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+              Send Test Email
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default function SettingsSmtpPage() {
   return (
     <div className="flex h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-y-auto p-6">
-          <h1 className="text-2xl font-bold mb-6">SMTP Configuration</h1>
-
-          {message && <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded text-sm">{message}</div>}
-          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded text-sm">{error}</div>}
-
-          <div className="bg-white rounded-lg shadow p-6 max-w-2xl">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Host</label>
-                <input type="text" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="smtp.example.com" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Port</label>
-                <input type="number" value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} className="w-full px-3 py-2 border rounded" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                <input type="text" value={smtpUsername} onChange={(e) => setSmtpUsername(e.target.value)} className="w-full px-3 py-2 border rounded" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder={hasExistingPassword ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022 (saved)" : "Enter password"} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Address</label>
-                <input type="email" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} className="w-full px-3 py-2 border rounded" placeholder="noreply@example.com" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Encryption</label>
-                <select value={smtpEncryption} onChange={(e) => setSmtpEncryption(e.target.value)} className="w-full px-3 py-2 border rounded">
-                  <option value="starttls">STARTTLS (port 587)</option>
-                  <option value="ssl">SSL/TLS (port 465)</option>
-                  <option value="none">None (port 25)</option>
-                </select>
-              </div>
-            </div>
-            <div className="mt-6">
-              <button onClick={handleSaveSmtp} className="px-4 py-2 bg-bioaf-600 text-white rounded hover:bg-bioaf-700">
-                Save SMTP Settings
-              </button>
-            </div>
-
-            {/* Test Email */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Send Test Email</h3>
-              <div className="flex gap-3">
-                <input
-                  type="email"
-                  value={testEmailTo}
-                  onChange={(e) => setTestEmailTo(e.target.value)}
-                  className="flex-1 px-3 py-2 border rounded"
-                  placeholder="recipient@example.com"
-                />
-                <button onClick={handleTestEmail} className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
-                  Send Test Email
-                </button>
-              </div>
-            </div>
-          </div>
+          <SmtpSettingsContent />
         </main>
       </div>
     </div>
