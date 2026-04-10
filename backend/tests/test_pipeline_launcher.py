@@ -181,5 +181,5 @@ class TestSubmitStoresCostEstimate:
         await session.commit()
 
         assert run.cost_estimate is not None
-        # Base cost $0.50 + 1 sample * $0.10 = $0.60
-        assert float(run.cost_estimate) == 0.60
+        # n2-highmem-16 spot ~$0.37/hr * 1.25h (1h base + 1 sample) = $0.46
+        assert float(run.cost_estimate) == 0.46

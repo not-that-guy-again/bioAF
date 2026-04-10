@@ -117,17 +117,28 @@ class TestKubernetesComputeClusterMetrics:
 
 class TestKubernetesComputeCostEstimate:
     @pytest.mark.asyncio
-    async def test_cost_estimate_with_no_files(self, adapter):
+    async def test_cost_estimate_uses_instance_pricing(self, adapter):
+        """Cost estimate should use actual machine type and spot pricing."""
         result = await adapter.get_cost_estimate({})
-        assert result["estimated_cost_usd"] == 0.50
-        assert result["confidence_low"] < result["estimated_cost_usd"]
-        assert result["confidence_high"] > result["estimated_cost_usd"]
+        assert "n2-highmem-16" in result["basis"]
+        assert "spot" in result["basis"]
         assert result["currency"] == "USD"
 
     @pytest.mark.asyncio
+    async def test_cost_estimate_base_reflects_hourly_rate(self, adapter):
+        """With no input files, estimate should be ~1h of spot n2-highmem-16."""
+        result = await adapter.get_cost_estimate({})
+        # n2-highmem-16 on-demand $1.0482/hr * 0.35 spot = ~$0.37/hr
+        # 1h base duration -> ~$0.37
+        assert result["estimated_cost_usd"] >= 0.30
+        assert result["estimated_cost_usd"] <= 0.50
+
+    @pytest.mark.asyncio
     async def test_cost_estimate_scales_with_files(self, adapter):
-        result = await adapter.get_cost_estimate({"input_files": ["a", "b", "c", "d", "e"]})
-        assert result["estimated_cost_usd"] == 1.0  # 0.50 + 5 * 0.10
+        """More input files should increase estimated duration and cost."""
+        result_0 = await adapter.get_cost_estimate({})
+        result_5 = await adapter.get_cost_estimate({"input_files": ["a", "b", "c", "d", "e"]})
+        assert result_5["estimated_cost_usd"] > result_0["estimated_cost_usd"]
 
     @pytest.mark.asyncio
     async def test_cost_estimate_has_confidence_interval(self, adapter):
