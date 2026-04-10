@@ -110,7 +110,11 @@ class KubernetesComputeProvider(ComputeProvider):
         return await self._k8s_get_cluster_metrics()
 
     async def get_cost_estimate(self, job_spec: dict) -> dict:
-        # Look up the pipeline node pool's machine type and spot flag
+        # Return the hourly node rate for the pipeline pool so the UI
+        # can show $/hr and let the user reason about total cost from
+        # the run duration.  Trying to predict total cost is unreliable
+        # because actual cost depends on node uptime (autoscaler cooldown),
+        # spot preemptions, and shared tenancy.
         status = self._local_cluster_status()
         pool = next(
             (p for p in status.get("node_pools", []) if p["name"] == "bioaf-pipelines"),
@@ -120,17 +124,10 @@ class KubernetesComputeProvider(ComputeProvider):
         is_spot = pool.get("spot", False)
         hourly_rate = self._hourly_rate(machine_type, is_spot)
 
-        # Estimate duration: 1h base + 15min per input file
-        input_count = len(job_spec.get("input_files", []))
-        estimated_hours = 1.0 + input_count * 0.25
-
-        estimated = round(hourly_rate * estimated_hours, 2)
         return {
-            "estimated_cost_usd": estimated,
-            "confidence_low": round(estimated * 0.5, 2),
-            "confidence_high": round(estimated * 2.0, 2),
+            "estimated_cost_usd": hourly_rate,
             "currency": "USD",
-            "basis": f"{machine_type} {'spot' if is_spot else 'on-demand'}, {estimated_hours:.1f}h estimated",
+            "basis": f"{machine_type} {'spot' if is_spot else 'on-demand'} $/hr",
         }
 
     async def get_job_report(self, job_id: str) -> str:

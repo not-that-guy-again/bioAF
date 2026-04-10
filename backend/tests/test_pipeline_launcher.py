@@ -181,5 +181,5 @@ class TestSubmitStoresCostEstimate:
         await session.commit()
 
         assert run.cost_estimate is not None
-        # n2-highmem-16 spot ~$0.37/hr * 1.25h (1h base + 1 sample) = $0.46
-        assert float(run.cost_estimate) == 0.46
+        # Stores the pipeline pool's hourly node rate (n2-highmem-16 spot)
+        assert float(run.cost_estimate) == 0.3669
