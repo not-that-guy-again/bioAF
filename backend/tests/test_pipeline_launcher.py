@@ -175,9 +175,7 @@ class TestSubmitStoresCostEstimate:
             experiment_id=data["experiment"].id,
         )
 
-        run = await PipelineRunService.launch_run(
-            session, data["org"].id, data["user"].id, request
-        )
+        run = await PipelineRunService.launch_run(session, data["org"].id, data["user"].id, request)
         await session.commit()
 
         assert run.cost_estimate is not None
