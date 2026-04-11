@@ -35,10 +35,19 @@ logger = logging.getLogger("bioaf.terraform_executor")
 
 # Path inside the container / local dev where Terraform modules live
 MODULES_DIR = Path("/app/terraform/modules")
-STALE_RUN_THRESHOLD_MINUTES = 30
+
+# Safety ceiling: if a process runs longer than this, mark failed regardless.
+# This is a last-resort safeguard, not the primary recovery mechanism.
+SAFETY_TIMEOUT_HOURS = 4
 
 # Global asyncio lock - one Terraform operation at a time
 _tf_lock = asyncio.Lock()
+
+# In-memory registry of active Terraform processes.
+# Maps run_id -> asyncio.subprocess.Process.
+# Resets on container restart, which is the desired behavior: any
+# "applying" run left in the DB after restart has a dead process.
+_active_processes: dict[int, asyncio.subprocess.Process] = {}
 
 
 @dataclass
@@ -171,6 +180,7 @@ class TerraformExecutor:
                 stderr=asyncio.subprocess.PIPE,
                 env={**TerraformExecutor._base_env(), **env},
             )
+            _active_processes[run_id] = process
 
             while True:
                 try:
@@ -340,6 +350,7 @@ class TerraformExecutor:
                 resources_total=resources_total,
             )
         finally:
+            _active_processes.pop(run_id, None)
             await cleanup()
             if run.status == "failed":
                 await TerraformExecutor._auto_cleanup_lock(session, module_name)
@@ -607,6 +618,7 @@ class TerraformExecutor:
                 stderr=asyncio.subprocess.PIPE,
                 env={**TerraformExecutor._base_env(), **env},
             )
+            _active_processes[run.id] = process
 
             while True:
                 try:
@@ -723,6 +735,7 @@ class TerraformExecutor:
                 resources_total=resources_total,
             )
         finally:
+            _active_processes.pop(run.id, None)
             await cleanup()
             if run.status == "failed":
                 await TerraformExecutor._auto_cleanup_lock(session, module_name)
@@ -967,42 +980,81 @@ class TerraformExecutor:
         state_bucket = config.get("terraform_state_bucket", "")
         if state_bucket:
             lock_path = f"{module_name}/default.tflock"
-            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
+            credentials = await TerraformExecutor._load_gcs_credentials(session)
+            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path, credentials)
+
+    @staticmethod
+    async def _load_gcs_credentials(session: AsyncSession):
+        """Load GCS credentials from platform_config (same SA the app uses)."""
+        from app.services.gcs_storage import GcsStorageService
+
+        return await GcsStorageService.get_credentials(session)
 
     @staticmethod
     async def _recover_stale_runs(session: AsyncSession) -> None:
-        """Mark runs stuck in planning/applying/awaiting_confirmation for >30 min as failed."""
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_RUN_THRESHOLD_MINUTES)
+        """Recover runs whose Terraform process is no longer alive.
 
-        # Find stale runs first so we can clean up their lock files
-        stale_result = await session.execute(
+        Uses the in-memory process registry to determine whether a run
+        has a live process. After a container restart the registry is
+        empty, so all leftover "applying" rows are immediately recoverable.
+        A safety ceiling of SAFETY_TIMEOUT_HOURS catches processes that
+        are technically alive but have been running unreasonably long.
+        """
+        safety_cutoff = datetime.now(timezone.utc) - timedelta(hours=SAFETY_TIMEOUT_HOURS)
+
+        result = await session.execute(
             text("""
-            SELECT id, module_name FROM terraform_runs
+            SELECT id, module_name, started_at FROM terraform_runs
             WHERE status IN ('planning', 'applying', 'awaiting_confirmation')
-              AND started_at < :cutoff
-            """).bindparams(cutoff=cutoff)
+            """)
         )
-        stale_runs = stale_result.fetchall()
+        active_rows = result.fetchall()
 
-        if stale_runs:
+        runs_to_fail: list[tuple[int, str | None]] = []
+        for run_id, module_name, started_at in active_rows:
+            process = _active_processes.get(run_id)
+
+            if process is not None and process.returncode is None:
+                # Process is alive in this container
+                if started_at < safety_cutoff:
+                    # But has exceeded the safety ceiling
+                    logger.warning(
+                        "Run %d has been running for >%d hours, marking failed",
+                        run_id,
+                        SAFETY_TIMEOUT_HOURS,
+                    )
+                    process.terminate()
+                    _active_processes.pop(run_id, None)
+                    runs_to_fail.append((run_id, module_name))
+                else:
+                    # Still within limits, leave it alone
+                    continue
+            else:
+                # No live process -- container restarted or process exited
+                # without proper cleanup
+                _active_processes.pop(run_id, None)
+                runs_to_fail.append((run_id, module_name))
+
+        if runs_to_fail:
+            credentials = await TerraformExecutor._load_gcs_credentials(session)
             config = await TerraformExecutor._read_gcp_config(session)
             state_bucket = config.get("terraform_state_bucket", "")
-            if state_bucket:
-                for _run_id, module_name in stale_runs:
-                    if module_name:
-                        lock_path = f"{module_name}/default.tflock"
-                        await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
 
-            await session.execute(
-                text("""
-                UPDATE terraform_runs
-                SET status = 'failed',
-                    error_message = 'Run timed out and was recovered',
-                    completed_at = now()
-                WHERE status IN ('planning', 'applying', 'awaiting_confirmation')
-                  AND started_at < :cutoff
-                """).bindparams(cutoff=cutoff)
-            )
+            for run_id, module_name in runs_to_fail:
+                if state_bucket and module_name:
+                    lock_path = f"{module_name}/default.tflock"
+                    await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path, credentials)
+                await session.execute(
+                    text("""
+                    UPDATE terraform_runs
+                    SET status = 'failed',
+                        error_message = 'Process no longer running (recovered)',
+                        completed_at = now()
+                    WHERE id = :run_id
+                      AND status IN ('planning', 'applying', 'awaiting_confirmation')
+                    """).bindparams(run_id=run_id)
+                )
+
         await session.flush()
 
     @staticmethod
@@ -1033,7 +1085,13 @@ class TerraformExecutor:
         lock_path = f"{module_name}/default.tflock"
 
         if state_bucket:
-            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path)
+            credentials = await TerraformExecutor._load_gcs_credentials(session)
+            await TerraformExecutor._delete_gcs_lock_file(state_bucket, lock_path, credentials)
+
+        # Kill the process if it's still running in this container
+        process = _active_processes.pop(run_id, None)
+        if process and process.returncode is None:
+            process.terminate()
 
         run.status = "cancelled"
         run.error_message = "Abandoned by user"
@@ -1052,15 +1110,20 @@ class TerraformExecutor:
         return run
 
     @staticmethod
-    async def _delete_gcs_lock_file(bucket_name: str, lock_path: str) -> None:
+    async def _delete_gcs_lock_file(
+        bucket_name: str,
+        lock_path: str,
+        credentials=None,
+    ) -> None:
         """Delete a Terraform lock file from a GCS bucket.
 
-        Uses google-cloud-storage Python client. Failures are logged but not
-        raised since the run is already marked cancelled.
+        Uses the app's configured credentials when available; falls back
+        to ADC. Failures are logged but not raised since the run is
+        already marked cancelled/failed.
         """
 
         def _delete() -> None:
-            client = storage.Client()
+            client = storage.Client(credentials=credentials) if credentials else storage.Client()
             bucket = client.bucket(bucket_name)
             blob = bucket.blob(lock_path)
             blob.delete()

@@ -222,16 +222,88 @@ class OrphanedResourceService:
             return "NOT_FOUND", None
 
     @staticmethod
+    async def scan_for_orphans(session: AsyncSession) -> int:
+        """Scan GKE API for bioaf-* clusters not tracked by the platform.
+
+        Compares live clusters against the active cluster in platform_config
+        and existing orphan records. Any untracked clusters are logged as
+        new orphaned resources. Returns the number of newly detected orphans.
+        """
+        config_result = await session.execute(
+            text(
+                "SELECT key, value FROM platform_config WHERE key IN ('gcp_project_id', 'gcp_zone', 'gke_cluster_name')"
+            )
+        )
+        config = {r[0]: r[1] for r in config_result.fetchall()}
+
+        project_id = config.get("gcp_project_id", "")
+        zone = config.get("gcp_zone", "")
+        active_cluster = config.get("gke_cluster_name", "")
+        if active_cluster == "null":
+            active_cluster = ""
+
+        if not project_id or not zone:
+            return 0
+
+        # Get existing orphan names so we don't duplicate
+        existing_result = await session.execute(
+            select(OrphanedResource.resource_name).where(
+                OrphanedResource.resource_type == "gke_cluster",
+                OrphanedResource.status.in_({"detected", "failed", "cleaning"}),
+            )
+        )
+        known_names = {r[0] for r in existing_result.fetchall()}
+
+        # Query GKE for all clusters in the zone
+        try:
+            credentials = await _get_gke_credentials(session)
+            client = _get_gke_client(credentials)
+            parent = f"projects/{project_id}/locations/{zone}"
+            response = client.list_clusters(parent=parent)
+            live_clusters = list(response.clusters) if response.clusters else []
+        except Exception as exc:
+            logger.warning("Failed to scan GKE clusters: %s", exc)
+            return 0
+
+        detected = 0
+        for cluster in live_clusters:
+            name = cluster.name
+            if not name.startswith("bioaf-"):
+                continue
+            if name == active_cluster:
+                continue
+            if name in known_names:
+                continue
+
+            await OrphanedResourceService.log_resource(
+                session,
+                resource_type="gke_cluster",
+                resource_name=name,
+                gcp_project_id=project_id,
+                gcp_zone=zone,
+                stack_uid=name,
+            )
+            detected += 1
+            logger.info("Detected untracked GKE cluster: %s", name)
+
+        if detected:
+            await session.flush()
+        return detected
+
+    @staticmethod
     async def recovery_check(
         session: AsyncSession,
     ) -> dict[str, list[dict]]:
-        """Check all unresolved orphaned GKE clusters and classify them.
+        """Scan for new orphans, then classify all unresolved GKE clusters.
 
         Returns a dict with three lists:
         - recoverable: clusters in RUNNING/RECONCILING state (can be adopted)
         - provisioning: clusters still being created
         - dead: clusters in ERROR state or not found in GCP
         """
+        # Scan GKE API for clusters the platform doesn't know about
+        await OrphanedResourceService.scan_for_orphans(session)
+
         unresolved = {"detected", "failed"}
         stmt = (
             select(OrphanedResource)
