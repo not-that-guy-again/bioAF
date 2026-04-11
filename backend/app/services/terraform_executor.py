@@ -162,6 +162,18 @@ class TerraformExecutor:
         resources_total = run.resources_planned or 0
         resources_completed = 0
 
+        # Emit the full resource list from the plan so the frontend can
+        # show all resources upfront with "Queued" status.
+        if run.plan_json and run.plan_json.get("resources"):
+            planned_addrs = [r["address"] for r in run.plan_json["resources"] if not r["address"].startswith("data.")]
+            yield TerraformProgressEvent(
+                event_type="planned_resources",
+                message="Resources planned",
+                resources_completed=0,
+                resources_total=resources_total,
+                extra={"addresses": planned_addrs},
+            )
+
         env, cleanup = await GCPCredentialInjector.build_env(config)
         log_lines: list[str] = []
         process = None
