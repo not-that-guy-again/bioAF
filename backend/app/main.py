@@ -6,15 +6,13 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.database import engine
+from app.logging_config import configure_logging
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+configure_logging(debug=settings.debug)
 logger = logging.getLogger("bioaf")
 
 
