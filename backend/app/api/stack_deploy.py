@@ -327,19 +327,22 @@ async def stack_deploy_progress(
 
     is_active = run.status in ("planning", "applying", "awaiting_confirmation")
 
-    # Extract planned resource addresses from plan_json so the frontend
-    # can show the full list with queued/done status from the start.
+    # Only include planned/completed resource lists for active runs.
+    # Stale data from previous runs confuses the frontend.
     planned = []
-    if run.plan_json and run.plan_json.get("resources"):
-        planned = [r["address"] for r in run.plan_json["resources"] if not r["address"].startswith("data.")]
+    completed = []
+    if is_active:
+        if run.plan_json and run.plan_json.get("resources"):
+            planned = [r["address"] for r in run.plan_json["resources"] if not r["address"].startswith("data.")]
+        completed = run.completed_resources or []
 
     return DeployProgressResponse(
         active=is_active,
         status=run.status,
         phase=run.deploy_phase,
-        resources_completed=run.resources_completed,
-        resources_total=run.resources_planned or 0,
-        completed_resources=run.completed_resources or [],
+        resources_completed=run.resources_completed if is_active else 0,
+        resources_total=(run.resources_planned or 0) if is_active else 0,
+        completed_resources=completed,
         planned_resources=planned,
         error_message=run.error_message,
         run_id=run.id,
