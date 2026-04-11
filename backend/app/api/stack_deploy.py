@@ -111,6 +111,7 @@ class DeployProgressResponse(BaseModel):
     resources_completed: int = 0
     resources_total: int = 0
     completed_resources: list[str] = []
+    planned_resources: list[str] = []
     error_message: str | None = None
     run_id: int | None = None
 
@@ -326,6 +327,12 @@ async def stack_deploy_progress(
 
     is_active = run.status in ("planning", "applying", "awaiting_confirmation")
 
+    # Extract planned resource addresses from plan_json so the frontend
+    # can show the full list with queued/done status from the start.
+    planned = []
+    if run.plan_json and run.plan_json.get("resources"):
+        planned = [r["address"] for r in run.plan_json["resources"] if not r["address"].startswith("data.")]
+
     return DeployProgressResponse(
         active=is_active,
         status=run.status,
@@ -333,6 +340,7 @@ async def stack_deploy_progress(
         resources_completed=run.resources_completed,
         resources_total=run.resources_planned or 0,
         completed_resources=run.completed_resources or [],
+        planned_resources=planned,
         error_message=run.error_message,
         run_id=run.id,
     )

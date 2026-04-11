@@ -1028,6 +1028,7 @@ export default function InfraComponentsPage() {
           resourcesCompleted={deployProgress.resources_completed}
           resourcesTotal={deployProgress.resources_total}
           completedResources={deployProgress.completed_resources}
+          plannedResources={deployProgress.planned_resources}
           errorMessage={deployProgress.error_message}
           onDismiss={() => setShowDeployModal(false)}
           onAbort={() => {

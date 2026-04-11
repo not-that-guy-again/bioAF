@@ -107,6 +107,7 @@ interface DeployProgressModalProps {
   resourcesCompleted: number;
   resourcesTotal: number;
   completedResources: string[];
+  plannedResources: string[];
   errorMessage: string | null;
   onDismiss: () => void;
   onAbort: () => void;
@@ -167,6 +168,7 @@ export function DeployProgressModal({
   resourcesCompleted,
   resourcesTotal,
   completedResources,
+  plannedResources,
   errorMessage,
   onDismiss,
   onAbort,
@@ -189,12 +191,21 @@ export function DeployProgressModal({
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // Build resource list from completedResources
-  const resources: TrackedResource[] = completedResources.map((addr) => ({
-    address: addr,
-    label: friendlyLabel(addr),
-    status: "complete" as const,
-  }));
+  // Build the full resource list from plannedResources, marking completed ones.
+  // If plannedResources is empty (older backend), fall back to completedResources only.
+  const completedSet = new Set(completedResources);
+  const resources: TrackedResource[] =
+    plannedResources.length > 0
+      ? plannedResources.map((addr) => ({
+          address: addr,
+          label: friendlyLabel(addr),
+          status: completedSet.has(addr) ? ("complete" as const) : ("pending" as const),
+        }))
+      : completedResources.map((addr) => ({
+          address: addr,
+          label: friendlyLabel(addr),
+          status: "complete" as const,
+        }));
 
   // Auto-scroll resource list
   useEffect(() => {
