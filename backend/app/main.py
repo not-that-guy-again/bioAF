@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 from app.config import settings
 from app.database import engine
-from app.logging_config import configure_logging
+from app.logging_config import attach_cloud_logging, configure_logging
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -54,6 +54,22 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
     logger.info("Database connection verified")
+
+    # Attach Cloud Logging using the app's configured GCP credentials
+    try:
+        from app.database import async_session_factory as cl_session_factory
+        from app.services.gcs_storage import GcsStorageService
+
+        async with cl_session_factory() as cl_session:
+            result = await cl_session.execute(text("SELECT value FROM platform_config WHERE key = 'gcp_project_id'"))
+            row = result.fetchone()
+            gcp_project_id = row[0] if row and row[0] and row[0] != "null" else ""
+
+            if gcp_project_id:
+                credentials = await GcsStorageService.get_credentials(cl_session)
+                attach_cloud_logging(gcp_project_id, credentials, debug=settings.debug)
+    except Exception as e:
+        logger.info("Cloud Logging not configured: %s", e)
 
     # Load persisted SMTP settings from database (gracefully skip if columns
     # don't exist yet, e.g. before migration 040 has run)
