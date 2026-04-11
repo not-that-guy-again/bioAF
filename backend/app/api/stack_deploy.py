@@ -211,16 +211,16 @@ async def stack_deploy_endpoint(
     async def event_generator():
         try:
             async for event in deploy_stack(session, stack_type, user_id, org_id=org_id):
-                data = json.dumps(
-                    {
-                        "event_type": event.event_type,
-                        "message": event.message,
-                        "resource_address": event.resource_address,
-                        "resources_completed": event.resources_completed,
-                        "resources_total": event.resources_total,
-                    }
-                )
-                yield f"data: {data}\n\n"
+                payload: dict = {
+                    "event_type": event.event_type,
+                    "message": event.message,
+                    "resource_address": event.resource_address,
+                    "resources_completed": event.resources_completed,
+                    "resources_total": event.resources_total,
+                }
+                if event.extra:
+                    payload["extra"] = event.extra
+                yield f"data: {json.dumps(payload)}\n\n"
         except ValueError as exc:
             error_data = json.dumps({"event_type": "stack_error", "message": str(exc)})
             yield f"data: {error_data}\n\n"
@@ -354,13 +354,16 @@ async def stack_teardown_endpoint(
     async def event_generator():
         try:
             async for event in teardown_stack(session, user_id, org_id=org_id):
-                data = json.dumps(
-                    {
-                        "event_type": event.event_type,
-                        "message": event.message,
-                    }
-                )
-                yield f"data: {data}\n\n"
+                payload: dict = {
+                    "event_type": event.event_type,
+                    "message": event.message,
+                    "resource_address": event.resource_address,
+                    "resources_completed": event.resources_completed,
+                    "resources_total": event.resources_total,
+                }
+                if event.extra:
+                    payload["extra"] = event.extra
+                yield f"data: {json.dumps(payload)}\n\n"
         except ValueError as exc:
             error_data = json.dumps({"event_type": "stack_error", "message": str(exc)})
             yield f"data: {error_data}\n\n"
@@ -396,16 +399,16 @@ async def stack_destroy_storage_endpoint(
     async def event_generator():
         try:
             async for event in destroy_storage(session, user_id, org_id=org_id):
-                data = json.dumps(
-                    {
-                        "event_type": event.event_type,
-                        "message": event.message,
-                        "resource_address": event.resource_address,
-                        "resources_completed": event.resources_completed,
-                        "resources_total": event.resources_total,
-                    }
-                )
-                yield f"data: {data}\n\n"
+                payload: dict = {
+                    "event_type": event.event_type,
+                    "message": event.message,
+                    "resource_address": event.resource_address,
+                    "resources_completed": event.resources_completed,
+                    "resources_total": event.resources_total,
+                }
+                if event.extra:
+                    payload["extra"] = event.extra
+                yield f"data: {json.dumps(payload)}\n\n"
         except ValueError as exc:
             error_data = json.dumps({"event_type": "stack_error", "message": str(exc)})
             yield f"data: {error_data}\n\n"
