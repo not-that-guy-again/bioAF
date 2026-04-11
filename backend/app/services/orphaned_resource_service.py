@@ -61,7 +61,18 @@ class OrphanedResourceService:
         gcp_zone: str | None = None,
         terraform_run_id: int | None = None,
     ) -> OrphanedResource:
-        """Record a detected orphaned resource."""
+        """Record a detected orphaned resource (skips if already tracked)."""
+        result = await session.execute(
+            select(OrphanedResource).where(
+                OrphanedResource.resource_type == resource_type,
+                OrphanedResource.resource_name == resource_name,
+                OrphanedResource.status.in_({"detected", "failed", "cleaning"}),
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            return existing
+
         resource = OrphanedResource(
             resource_type=resource_type,
             resource_name=resource_name,
