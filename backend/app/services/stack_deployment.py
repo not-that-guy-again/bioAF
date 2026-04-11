@@ -494,19 +494,28 @@ async def deploy_stack(
             )
 
     if compute_failed:
-        # Log the expected cluster as an orphaned resource
+        # Log the expected cluster and its service accounts as orphaned
         project_id = await _read_config(session, "gcp_project_id")
         region = await _read_config(session, "gcp_region") or "us-central1"
         org_slug = await _read_config(session, "org_slug")
         suffix = await _read_config(session, "deploy_suffix")
         if suffix and suffix != "null" and org_slug and org_slug != "null":
             cluster_name = f"bioaf-{org_slug}-{suffix}"
+            pid = project_id if project_id != "null" else ""
             await OrphanedResourceService.log_resource(
                 session,
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
-                gcp_project_id=project_id if project_id != "null" else "",
+                gcp_project_id=pid,
                 gcp_zone=region,
+                stack_uid=suffix,
+            )
+            # The compute module also creates a service account
+            await OrphanedResourceService.log_resource(
+                session,
+                resource_type="service_account",
+                resource_name="bioaf-notebook-runner",
+                gcp_project_id=pid,
                 stack_uid=suffix,
             )
             await session.flush()
@@ -550,18 +559,27 @@ async def teardown_stack(
             teardown_failed = True
 
     if teardown_failed:
-        # Log the cluster as orphaned for later cleanup
+        # Log the cluster and its service accounts as orphaned
         project_id = await _read_config(session, "gcp_project_id")
         region = await _read_config(session, "gcp_region") or "us-central1"
         cluster_name = await _read_config(session, "gke_cluster_name")
         if cluster_name and cluster_name != "null":
+            pid = project_id if project_id != "null" else ""
+            uid = cluster_name.rsplit("-", 1)[-1]
             await OrphanedResourceService.log_resource(
                 session,
                 resource_type="gke_cluster",
                 resource_name=cluster_name,
-                gcp_project_id=project_id if project_id != "null" else "",
+                gcp_project_id=pid,
                 gcp_zone=region,
-                stack_uid=cluster_name.rsplit("-", 1)[-1],
+                stack_uid=uid,
+            )
+            await OrphanedResourceService.log_resource(
+                session,
+                resource_type="service_account",
+                resource_name="bioaf-notebook-runner",
+                gcp_project_id=pid,
+                stack_uid=uid,
             )
             await session.flush()
 

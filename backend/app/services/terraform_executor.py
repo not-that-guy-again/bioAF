@@ -103,7 +103,8 @@ class TerraformExecutor:
 
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
-            TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            tfvars = TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            run.tfvars_json = tfvars
 
             env, cleanup = await GCPCredentialInjector.build_env(config)
             try:
@@ -166,7 +167,9 @@ class TerraformExecutor:
         process = None
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
-            TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            tfvars = TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            if not run.tfvars_json:
+                run.tfvars_json = tfvars
             await TerraformExecutor._run_init(work_dir, env, config, module_name=module_name)
 
             process = await asyncio.create_subprocess_exec(
@@ -604,7 +607,8 @@ class TerraformExecutor:
         process = None
         try:
             work_dir = await asyncio.to_thread(TerraformExecutor._prepare_work_dir, module_name)
-            TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            tfvars = TerraformExecutor._write_tfvars(work_dir, module_name, config)
+            run.tfvars_json = tfvars
             await TerraformExecutor._run_init(work_dir, env, config, module_name=module_name)
 
             process = await asyncio.create_subprocess_exec(
@@ -828,8 +832,11 @@ class TerraformExecutor:
         return tmp
 
     @staticmethod
-    def _write_tfvars(work_dir: Path, module_name: str, config: dict) -> None:
-        """Write terraform.tfvars.json into work_dir from platform_config values."""
+    def _write_tfvars(work_dir: Path, module_name: str, config: dict) -> dict:
+        """Write terraform.tfvars.json into work_dir from platform_config values.
+
+        Returns the tfvars dict so callers can persist it on the run record.
+        """
         project_id = config.get("gcp_project_id") or ""
         region = config.get("gcp_region") or "us-central1"
         zone = config.get("gcp_zone") or f"{region}-a"
@@ -879,6 +886,7 @@ class TerraformExecutor:
 
         tfvars_path = work_dir / "terraform.tfvars.json"
         tfvars_path.write_text(json.dumps(tfvars, indent=2))
+        return tfvars
 
     @staticmethod
     async def _run_init(
