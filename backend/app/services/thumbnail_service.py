@@ -3,9 +3,14 @@
 Renders page 1 of a PDF to a PNG thumbnail and uploads it to a
 dedicated _thumbnails/ prefix in the results bucket so the scanner
 does not re-index it.
+
+All CPU-heavy rendering is offloaded to a thread pool to avoid
+blocking the async event loop.
 """
 
+import asyncio
 import logging
+from functools import partial
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +53,42 @@ class ThumbnailService:
             return None
 
     @staticmethod
+    def _download_render_upload(
+        credentials,
+        source_gcs_uri: str,
+        plot_entry_id: int,
+    ) -> str | None:
+        """Blocking helper that runs in a thread: download PDF, render, upload.
+
+        Returns the thumbnail GCS URI, or None on failure.
+        """
+        from google.cloud import storage as gcs_storage
+
+        client = gcs_storage.Client(credentials=credentials)
+
+        parts = source_gcs_uri.replace("gs://", "").split("/", 1)
+        bucket_name = parts[0]
+        blob_path = parts[1]
+        bucket = client.bucket(bucket_name)
+
+        # Download source PDF
+        pdf_bytes = bucket.blob(blob_path).download_as_bytes()
+
+        # Render thumbnail (CPU-heavy)
+        png_bytes = ThumbnailService.render_pdf_thumbnail(pdf_bytes)
+        if not png_bytes:
+            return None
+
+        # Upload to _thumbnails/ prefix
+        thumb_path = f"{THUMBNAIL_PREFIX}plot_{plot_entry_id}.png"
+        thumb_blob = bucket.blob(thumb_path)
+        thumb_blob.upload_from_string(png_bytes, content_type="image/png")
+
+        thumb_uri = f"gs://{bucket_name}/{thumb_path}"
+        logger.info("Generated thumbnail for plot %d: %s", plot_entry_id, thumb_uri)
+        return thumb_uri
+
+    @staticmethod
     async def generate_and_upload(
         session: AsyncSession,
         source_gcs_uri: str,
@@ -55,36 +96,23 @@ class ThumbnailService:
     ) -> str | None:
         """Download a PDF from GCS, render thumbnail, upload to _thumbnails/.
 
+        All blocking work (GCS I/O + PDF rendering) is offloaded to a
+        thread so the async event loop stays responsive.
+
         Returns the thumbnail GCS URI, or None on failure.
         """
         try:
-            from google.cloud import storage as gcs_storage
-
             credentials = await GcsStorageService.get_credentials(session)
-            client = gcs_storage.Client(credentials=credentials)
-
-            # Download the source PDF
-            parts = source_gcs_uri.replace("gs://", "").split("/", 1)
-            bucket_name = parts[0]
-            blob_path = parts[1]
-            bucket = client.bucket(bucket_name)
-            source_blob = bucket.blob(blob_path)
-            pdf_bytes = source_blob.download_as_bytes()
-
-            # Render thumbnail
-            png_bytes = ThumbnailService.render_pdf_thumbnail(pdf_bytes)
-            if not png_bytes:
-                return None
-
-            # Upload to _thumbnails/ prefix
-            thumb_path = f"{THUMBNAIL_PREFIX}plot_{plot_entry_id}.png"
-            thumb_blob = bucket.blob(thumb_path)
-            thumb_blob.upload_from_string(png_bytes, content_type="image/png")
-
-            thumb_uri = f"gs://{bucket_name}/{thumb_path}"
-            logger.info("Generated thumbnail for plot %d: %s", plot_entry_id, thumb_uri)
-            return thumb_uri
-
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None,
+                partial(
+                    ThumbnailService._download_render_upload,
+                    credentials,
+                    source_gcs_uri,
+                    plot_entry_id,
+                ),
+            )
         except Exception as e:
             logger.warning("Failed to generate thumbnail for plot %d: %s", plot_entry_id, e)
             return None

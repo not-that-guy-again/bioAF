@@ -300,7 +300,12 @@ class PlotArchiveService:
 
     @staticmethod
     async def backfill_thumbnails(session: AsyncSession) -> int:
-        """Generate missing thumbnails for PDF plot entries."""
+        """Generate missing thumbnails for PDF plot entries.
+
+        Processes one entry at a time with commits every 5 to avoid
+        holding the event loop or accumulating too much work in a
+        single transaction.
+        """
         result = await session.execute(
             select(PlotArchiveEntry)
             .options(selectinload(PlotArchiveEntry.file))
@@ -308,6 +313,7 @@ class PlotArchiveService:
         )
         entries = list(result.scalars().all())
         generated = 0
+        batch = 0
         for entry in entries:
             if not entry.file or not entry.file.gcs_uri:
                 continue
@@ -318,8 +324,15 @@ class PlotArchiveService:
             if thumb_uri:
                 entry.thumbnail_gcs_uri = thumb_uri
                 generated += 1
+                batch += 1
 
-        if generated > 0:
+            # Commit in batches of 5 to keep transactions short
+            if batch >= 5:
+                await session.commit()
+                batch = 0
+
+        if batch > 0:
             await session.commit()
+        if generated > 0:
             logger.info("Generated thumbnails for %d PDF plot entries", generated)
         return generated

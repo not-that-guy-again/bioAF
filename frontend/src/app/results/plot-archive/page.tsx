@@ -295,7 +295,7 @@ export default function PlotArchivePage() {
                         key={plot.id}
                         className={`bg-white rounded-lg shadow overflow-hidden transition-shadow ${deleted ? "opacity-60" : "hover:shadow-md"}`}
                       >
-                        <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                        <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                           {deleted ? (
                             <StorageDeletedPlaceholder />
                           ) : plot.file ? (
@@ -308,9 +308,14 @@ export default function PlotArchivePage() {
                               No preview
                             </span>
                           )}
+                          {plot.file && (
+                            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-black/50 text-white text-[10px] font-semibold uppercase rounded">
+                              {plot.file.file_type}
+                            </span>
+                          )}
                         </div>
                         <div className="p-2">
-                          <p className={`text-xs font-medium truncate ${deleted ? "text-gray-400" : ""}`}>
+                          <p className={`text-[11px] leading-tight font-medium line-clamp-2 ${deleted ? "text-gray-400" : ""}`} title={plot.title ?? undefined}>
                             {plot.title}
                           </p>
                           {plot.tags.length > 0 && (
