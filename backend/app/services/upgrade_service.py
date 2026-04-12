@@ -268,9 +268,7 @@ class UpgradeService:
         """
         current = settings.app_version
 
-        result = await session.execute(
-            select(UpgradeHistory).where(UpgradeHistory.status == "started")
-        )
+        result = await session.execute(select(UpgradeHistory).where(UpgradeHistory.status == "started"))
         pending = result.scalars().all()
 
         for upgrade in pending:
@@ -287,10 +285,7 @@ class UpgradeService:
                 # Version didn't change -- mark as failed
                 upgrade.status = "failed"
                 upgrade.completed_at = datetime.now(timezone.utc)
-                upgrade.notes = (
-                    f"Expected version {upgrade.to_version} after restart, "
-                    f"but running {current}"
-                )
+                upgrade.notes = f"Expected version {upgrade.to_version} after restart, but running {current}"
                 logger.warning(
                     "Resolved pending upgrade %d: expected %s but running %s (failed)",
                     upgrade.id,

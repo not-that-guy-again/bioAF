@@ -84,9 +84,7 @@ async def execute_upgrade(
     org_id = current_user["org_id"]
     user_id = int(current_user["sub"])
     try:
-        upgrade = await UpgradeService.execute_upgrade(
-            session, org_id, body.target_version, user_id
-        )
+        upgrade = await UpgradeService.execute_upgrade(session, org_id, body.target_version, user_id)
         await session.commit()
         return ExecuteUpgradeResponse(
             upgrade_id=upgrade.id,

@@ -365,12 +365,15 @@ async def test_get_update_status_in_progress(client: AsyncClient, admin_token: s
     with tempfile.TemporaryDirectory() as tmpdir:
         status_file = os.path.join(tmpdir, "current.json")
         with open(status_file, "w") as f:
-            json.dump({
-                "status": "in_progress",
-                "from_version": "0.6.4",
-                "to_version": "0.7.0",
-                "step": "build",
-            }, f)
+            json.dump(
+                {
+                    "status": "in_progress",
+                    "from_version": "0.6.4",
+                    "to_version": "0.7.0",
+                    "step": "build",
+                },
+                f,
+            )
 
         with patch("app.services.upgrade_service.settings") as mock_settings:
             mock_settings.update_status_dir = tmpdir
