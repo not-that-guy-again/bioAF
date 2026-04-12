@@ -72,6 +72,7 @@ export default function PlotArchivePage() {
   const [loading, setLoading] = useState(true);
   const [expandedUrl, setExpandedUrl] = useState<string | null>(null);
   const [expandedTitle, setExpandedTitle] = useState("");
+  const [expandedPlot, setExpandedPlot] = useState<PlotArchiveResponse | null>(null);
   const pageSize = 24;
 
   const [experiments, setExperiments] = useState<
@@ -147,6 +148,7 @@ export default function PlotArchivePage() {
   const handleExpand = (plot: PlotArchiveResponse, signedUrl: string) => {
     setExpandedUrl(signedUrl);
     setExpandedTitle(plot.title ?? "Plot");
+    setExpandedPlot(plot);
   };
 
   return (
@@ -324,7 +326,25 @@ export default function PlotArchivePage() {
               <PlotModal
                 url={expandedUrl}
                 title={expandedTitle}
-                onClose={() => setExpandedUrl(null)}
+                metadata={
+                  expandedPlot
+                    ? {
+                        experimentName: expandedPlot.experiment_name,
+                        projectName: expandedPlot.project_name,
+                        pipelineRunId: expandedPlot.pipeline_run_id,
+                        pipelineRunName: expandedPlot.pipeline_run_name,
+                        notebookSessionId: expandedPlot.notebook_session_id,
+                        notebookSessionType: expandedPlot.notebook_session_type,
+                        sourceType: expandedPlot.source_type,
+                        tags: expandedPlot.tags,
+                        indexedAt: expandedPlot.indexed_at,
+                      }
+                    : undefined
+                }
+                onClose={() => {
+                  setExpandedUrl(null);
+                  setExpandedPlot(null);
+                }}
               />
             )}
           </div>

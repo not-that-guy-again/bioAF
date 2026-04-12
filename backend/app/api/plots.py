@@ -29,13 +29,31 @@ def _plot_response(p) -> PlotArchiveResponse:
             upload_timestamp=p.file.upload_timestamp,
             created_at=p.file.created_at,
         )
+    # Derive source type from associations
+    source_type = None
+    if p.file and p.file.source_type:
+        source_type = p.file.source_type
+    elif p.notebook_session_id:
+        session_type = getattr(p.notebook_session, "session_type", None) if p.notebook_session else None
+        if session_type == "cellxgene":
+            source_type = "cellxgene"
+        else:
+            source_type = "notebook"
+    elif p.pipeline_run_id:
+        source_type = "pipeline"
+
     return PlotArchiveResponse(
         id=p.id,
         title=p.title,
         file=file_resp,
         experiment_id=p.experiment_id,
+        experiment_name=p.experiment.name if p.experiment else None,
+        project_name=p.experiment.project.name if p.experiment and p.experiment.project else None,
         pipeline_run_id=p.pipeline_run_id,
+        pipeline_run_name=p.pipeline_run.pipeline_name if p.pipeline_run else None,
         notebook_session_id=p.notebook_session_id,
+        notebook_session_type=p.notebook_session.session_type if p.notebook_session else None,
+        source_type=source_type,
         tags=p.tags_json if isinstance(p.tags_json, list) else [],
         thumbnail_url=p.thumbnail_gcs_uri,
         indexed_at=p.indexed_at,

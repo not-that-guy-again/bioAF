@@ -5,6 +5,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.experiment import Experiment
 from app.models.file import File
 from app.models.plot_archive_entry import PlotArchiveEntry
 from app.services.audit_service import log_action
@@ -56,7 +57,12 @@ class PlotArchiveService:
     ) -> tuple[list[PlotArchiveEntry], int]:
         base = (
             select(PlotArchiveEntry)
-            .options(selectinload(PlotArchiveEntry.file).selectinload(File.uploader))
+            .options(
+                selectinload(PlotArchiveEntry.file).selectinload(File.uploader),
+                selectinload(PlotArchiveEntry.experiment).selectinload(Experiment.project),
+                selectinload(PlotArchiveEntry.pipeline_run),
+                selectinload(PlotArchiveEntry.notebook_session),
+            )
             .where(PlotArchiveEntry.organization_id == org_id)
         )
         count_base = select(func.count(PlotArchiveEntry.id)).where(PlotArchiveEntry.organization_id == org_id)
@@ -92,7 +98,12 @@ class PlotArchiveService:
     async def get_plot(session: AsyncSession, org_id: int, plot_id: int) -> PlotArchiveEntry | None:
         result = await session.execute(
             select(PlotArchiveEntry)
-            .options(selectinload(PlotArchiveEntry.file).selectinload(File.uploader))
+            .options(
+                selectinload(PlotArchiveEntry.file).selectinload(File.uploader),
+                selectinload(PlotArchiveEntry.experiment).selectinload(Experiment.project),
+                selectinload(PlotArchiveEntry.pipeline_run),
+                selectinload(PlotArchiveEntry.notebook_session),
+            )
             .where(PlotArchiveEntry.id == plot_id, PlotArchiveEntry.organization_id == org_id)
         )
         return result.scalar_one_or_none()
