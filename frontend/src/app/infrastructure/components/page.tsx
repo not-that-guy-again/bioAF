@@ -1069,9 +1069,16 @@ export default function InfraComponentsPage() {
               </button>
               <button
                 disabled={!teardownChecked}
-                onClick={() => {
+                onClick={async () => {
                   setShowTeardownModal(false);
-                  setShowTeardownProgress(true);
+                  try {
+                    await api.post("/api/v1/infrastructure/stack/teardown-background", { confirm: true });
+                    setDeployStarted(true);
+                    setShowTeardownProgress(true);
+                  } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : "Teardown failed to start";
+                    alert(msg);
+                  }
                 }}
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1084,12 +1091,21 @@ export default function InfraComponentsPage() {
 
       {/* Teardown Progress Modal */}
       {showTeardownProgress && (
-        <TerraformProgressModal
-          title="Teardown Compute Stack"
-          sseUrl="/api/v1/infrastructure/stack/teardown"
+        <DeployProgressModal
           mode="teardown"
-          onComplete={handleTeardownComplete}
-          onClose={() => setShowTeardownProgress(false)}
+          phase={deployProgress.phase}
+          status={deployProgress.status ?? (deployStarted ? "applying" : null)}
+          resourcesCompleted={deployProgress.resources_completed}
+          resourcesTotal={deployProgress.resources_total}
+          completedResources={deployProgress.completed_resources}
+          plannedResources={deployProgress.planned_resources}
+          errorMessage={deployProgress.error_message}
+          onDismiss={() => setShowTeardownProgress(false)}
+          onAbort={() => {
+            setShowTeardownProgress(false);
+            setShowAbortConfirm(true);
+          }}
+          onDone={handleTeardownComplete}
         />
       )}
 
@@ -1144,9 +1160,16 @@ export default function InfraComponentsPage() {
               </button>
               <button
                 disabled={!destroyStorageChecked || destroyStoragePhrase !== DESTROY_STORAGE_PHRASE}
-                onClick={() => {
+                onClick={async () => {
                   setShowDestroyStorageModal(false);
-                  setShowDestroyStorageProgress(true);
+                  try {
+                    await api.post("/api/v1/infrastructure/stack/destroy-storage-background", { confirm: true });
+                    setDeployStarted(true);
+                    setShowDestroyStorageProgress(true);
+                  } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : "Storage destroy failed to start";
+                    alert(msg);
+                  }
                 }}
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1159,12 +1182,21 @@ export default function InfraComponentsPage() {
 
       {/* Destroy Storage Progress Modal */}
       {showDestroyStorageProgress && (
-        <TerraformProgressModal
-          title="Destroy Storage Infrastructure"
-          sseUrl="/api/v1/infrastructure/stack/destroy-storage"
+        <DeployProgressModal
           mode="teardown"
-          onComplete={handleDestroyStorageComplete}
-          onClose={() => setShowDestroyStorageProgress(false)}
+          phase={deployProgress.phase}
+          status={deployProgress.status ?? (deployStarted ? "applying" : null)}
+          resourcesCompleted={deployProgress.resources_completed}
+          resourcesTotal={deployProgress.resources_total}
+          completedResources={deployProgress.completed_resources}
+          plannedResources={deployProgress.planned_resources}
+          errorMessage={deployProgress.error_message}
+          onDismiss={() => setShowDestroyStorageProgress(false)}
+          onAbort={() => {
+            setShowDestroyStorageProgress(false);
+            setShowAbortConfirm(true);
+          }}
+          onDone={handleDestroyStorageComplete}
         />
       )}
 

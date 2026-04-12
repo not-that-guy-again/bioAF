@@ -112,6 +112,7 @@ interface DeployProgressModalProps {
   onDismiss: () => void;
   onAbort: () => void;
   onDone: () => void;
+  mode?: "deploy" | "teardown";
 }
 
 type ResourceStatus = "pending" | "in_progress" | "complete";
@@ -135,7 +136,7 @@ function friendlyLabel(address: string): string {
   return address;
 }
 
-function StatusBadge({ status }: { status: ResourceStatus }) {
+function StatusBadge({ status, mode }: { status: ResourceStatus; mode: "deploy" | "teardown" }) {
   if (status === "complete") {
     return (
       <span className="text-xs font-medium text-green-600 uppercase tracking-wide">
@@ -147,7 +148,7 @@ function StatusBadge({ status }: { status: ResourceStatus }) {
     return (
       <span className="text-xs font-medium text-blue-600 uppercase tracking-wide flex items-center gap-1.5">
         <span className="inline-block h-1.5 w-1.5 bg-blue-600 rounded-full animate-pulse" />
-        Setting up
+        {mode === "teardown" ? "Removing" : "Setting up"}
       </span>
     );
   }
@@ -158,7 +159,12 @@ function StatusBadge({ status }: { status: ResourceStatus }) {
   );
 }
 
-function phaseTitle(phase: string | null, status: string | null): string {
+function phaseTitle(phase: string | null, status: string | null, mode: "deploy" | "teardown"): string {
+  if (mode === "teardown") {
+    if (status === null || status === "planning" || status === "awaiting_confirmation")
+      return "Preparing teardown";
+    return "Tearing down infrastructure";
+  }
   if (status === null || status === "planning" || status === "awaiting_confirmation")
     return "Preparing deployment";
   if (phase === "storage") return "Deploying storage infrastructure";
@@ -181,6 +187,7 @@ export function DeployProgressModal({
   onDismiss,
   onAbort,
   onDone,
+  mode = "deploy",
 }: DeployProgressModalProps) {
   const listRef = useRef<HTMLUListElement | null>(null);
   const [patienceIndex, setPatienceIndex] = useState(0);
@@ -237,7 +244,11 @@ export function DeployProgressModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
         <h2 className="text-lg font-semibold mb-1">
-          {isComplete ? "Deployment complete" : isError ? "Deployment failed" : phaseTitle(phase, status)}
+          {isComplete
+            ? (mode === "teardown" ? "Teardown complete" : "Deployment complete")
+            : isError
+              ? (mode === "teardown" ? "Teardown failed" : "Deployment failed")
+              : phaseTitle(phase, status, mode)}
         </h2>
 
         <div data-testid="deploy-modal-status" className="mb-4">
@@ -247,7 +258,7 @@ export function DeployProgressModal({
                 <span className="inline-block h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
                 {status === null || status === "planning" || status === "awaiting_confirmation"
                   ? "Planning resources..."
-                  : "Applying changes..."}
+                  : mode === "teardown" ? "Removing resources..." : "Applying changes..."}
               </p>
               <div className="mt-2">
                 {showTimingWarning && (
@@ -263,7 +274,7 @@ export function DeployProgressModal({
           )}
           {isComplete && (
             <p className="text-sm text-green-600 font-medium">
-              All systems ready
+              {mode === "teardown" ? "Teardown complete" : "All systems ready"}
             </p>
           )}
           {isError && (
@@ -271,7 +282,7 @@ export function DeployProgressModal({
               data-testid="deploy-modal-error"
               className="text-sm text-red-600 font-medium"
             >
-              Setup failed: {errorMessage}
+              {mode === "teardown" ? "Teardown failed" : "Setup failed"}: {errorMessage}
             </p>
           )}
         </div>
@@ -301,7 +312,7 @@ export function DeployProgressModal({
                 className="flex items-center justify-between py-1.5 px-2 rounded text-sm"
               >
                 <span className="text-gray-700">{r.label}</span>
-                <StatusBadge status={r.status} />
+                <StatusBadge status={r.status} mode={mode} />
               </li>
             ))}
           </ul>
@@ -331,7 +342,7 @@ export function DeployProgressModal({
                 onClick={onAbort}
                 className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100"
               >
-                Abort Deployment
+                Abort {mode === "teardown" ? "Teardown" : "Deployment"}
               </button>
               <button
                 onClick={onDismiss}

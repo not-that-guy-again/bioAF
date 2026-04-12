@@ -288,6 +288,76 @@ async def stack_deploy_background_endpoint(
     return {"message": "Deployment started"}
 
 
+@router.post("/api/v1/infrastructure/stack/teardown-background")
+async def stack_teardown_background_endpoint(
+    body: StackTeardownRequest | None = None,
+    current_user: dict = require_permission("infrastructure", "configure"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start a stack teardown in the background and return immediately."""
+    if body and not body.confirm:
+        raise HTTPException(status_code=400, detail="Confirmation required. Set confirm=true.")
+
+    user_id = int(current_user["sub"])
+    org_id = int(current_user["org_id"]) if current_user.get("org_id") else None
+
+    # Validate compute is deployed
+    compute_deployed = await session.execute(text("SELECT value FROM platform_config WHERE key = 'compute_deployed'"))
+    if compute_deployed.scalar_one_or_none() != "true":
+        raise HTTPException(status_code=400, detail="Compute stack is not deployed")
+
+    async def _run_teardown():
+        async with async_session_factory() as bg_session:
+            try:
+                async for _event in teardown_stack(bg_session, user_id, org_id=org_id):
+                    await bg_session.commit()
+                await bg_session.commit()
+            except Exception:
+                logger.exception("Background teardown failed")
+                await bg_session.rollback()
+
+    asyncio.get_event_loop().create_task(_run_teardown())
+
+    return {"message": "Teardown started"}
+
+
+@router.post("/api/v1/infrastructure/stack/destroy-storage-background")
+async def stack_destroy_storage_background_endpoint(
+    body: StorageDestroyRequest | None = None,
+    current_user: dict = require_permission("infrastructure", "configure"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start storage destruction in the background and return immediately."""
+    if body is not None and not body.confirm:
+        raise HTTPException(status_code=400, detail="Confirmation required. Set confirm=true.")
+
+    user_id = int(current_user["sub"])
+    org_id = int(current_user["org_id"]) if current_user.get("org_id") else None
+
+    # Validate storage is deployed and compute is not
+    compute_deployed = await session.execute(text("SELECT value FROM platform_config WHERE key = 'compute_deployed'"))
+    if compute_deployed.scalar_one_or_none() == "true":
+        raise HTTPException(status_code=400, detail="Teardown compute stack before destroying storage")
+
+    storage_deployed = await session.execute(text("SELECT value FROM platform_config WHERE key = 'storage_deployed'"))
+    if storage_deployed.scalar_one_or_none() != "true":
+        raise HTTPException(status_code=400, detail="Storage is not deployed")
+
+    async def _run_destroy_storage():
+        async with async_session_factory() as bg_session:
+            try:
+                async for _event in destroy_storage(bg_session, user_id, org_id=org_id):
+                    await bg_session.commit()
+                await bg_session.commit()
+            except Exception:
+                logger.exception("Background storage destroy failed")
+                await bg_session.rollback()
+
+    asyncio.get_event_loop().create_task(_run_destroy_storage())
+
+    return {"message": "Storage destruction started"}
+
+
 @router.get(
     "/api/v1/infrastructure/stack/deploy/progress",
     response_model=DeployProgressResponse,
