@@ -91,6 +91,46 @@ ensure_cloud_logging() {
     fi
 }
 
+ensure_update_agent() {
+    # Install the update agent systemd service so the backend can trigger
+    # host-level updates via a trigger file. Idempotent.
+
+    # Skip on non-systemd systems and non-Linux
+    if ! command -v systemctl &>/dev/null; then
+        return 0
+    fi
+
+    # Create directories
+    mkdir -p "$SCRIPT_DIR/update-requests" "$SCRIPT_DIR/update-status"
+
+    local service_name="bioaf-update-agent"
+    local service_file="/etc/systemd/system/${service_name}.service"
+    local current_user
+    current_user=$(whoami)
+    local current_group
+    current_group=$(id -gn)
+
+    # Check if already installed with correct paths
+    if [ -f "$service_file" ] && grep -q "$SCRIPT_DIR" "$service_file" 2>/dev/null; then
+        # Ensure it's running
+        if ! systemctl is-active --quiet "$service_name" 2>/dev/null; then
+            sudo systemctl start "$service_name"
+        fi
+        return 0
+    fi
+
+    bold "Installing update agent service..."
+    sed -e "s|__BIOAF_DIR__|$SCRIPT_DIR|g" \
+        -e "s|__BIOAF_USER__|$current_user|g" \
+        -e "s|__BIOAF_GROUP__|$current_group|g" \
+        "$SCRIPT_DIR/docker/bioaf-update-agent.service" | sudo tee "$service_file" > /dev/null
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable "$service_name"
+    sudo systemctl start "$service_name"
+    green "Update agent installed and running."
+}
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -157,6 +197,9 @@ for v in cfg.get('volumes', {}).values():
 
     # Cloud Logging (GCE only, idempotent)
     ensure_cloud_logging
+
+    # Update agent (idempotent)
+    ensure_update_agent
 
     # Build and start
     bold "Building and starting containers..."
