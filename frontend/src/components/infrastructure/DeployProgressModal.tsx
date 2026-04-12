@@ -192,9 +192,10 @@ export function DeployProgressModal({
   const listRef = useRef<HTMLUListElement | null>(null);
   const [patienceIndex, setPatienceIndex] = useState(0);
 
-  const isRunning = status === null || status === "planning" || status === "applying" || status === "awaiting_confirmation";
+  const isRunning = status === "planning" || status === "applying" || status === "awaiting_confirmation";
   const isComplete = status === "completed";
   const isError = status === "failed";
+  const isIdle = status === null;
   const showTimingWarning = phase === "compute";
 
   // Rotate patience messages every 10 seconds while running
@@ -252,11 +253,17 @@ export function DeployProgressModal({
         </h2>
 
         <div data-testid="deploy-modal-status" className="mb-4">
+          {isIdle && (
+            <p className="text-sm text-gray-500 flex items-center gap-2">
+              <span className="inline-block h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              Starting operation...
+            </p>
+          )}
           {isRunning && (
             <div>
               <p className="text-sm text-blue-600 flex items-center gap-2">
                 <span className="inline-block h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                {status === null || status === "planning" || status === "awaiting_confirmation"
+                {status === "planning" || status === "awaiting_confirmation"
                   ? "Planning resources..."
                   : mode === "teardown" ? "Removing resources..." : "Applying changes..."}
               </p>
@@ -336,7 +343,7 @@ export function DeployProgressModal({
               Close
             </button>
           )}
-          {isRunning && (
+          {(isRunning || isIdle) && (
             <>
               <button
                 onClick={onAbort}
