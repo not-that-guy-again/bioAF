@@ -165,11 +165,12 @@ if [ -n "$current_account" ] && [ "$current_account" != "(unset)" ]; then
     echo "  Currently authenticated as: $current_account"
     read -rp "  Use this account? [Y/n] " use_current
     if [ "$use_current" = "n" ] || [ "$use_current" = "N" ]; then
-        gcloud auth login --no-launch-browser 2>/dev/null || gcloud auth login
+        echo "  Opening browser for Google sign-in..."
+        gcloud auth login
     fi
 else
     echo "  Opening browser for Google sign-in..."
-    gcloud auth login --no-launch-browser 2>/dev/null || gcloud auth login
+    gcloud auth login
 fi
 green "  Authenticated as: $(gcloud config get-value account 2>/dev/null)"
 
