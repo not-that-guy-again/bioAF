@@ -87,7 +87,7 @@ echo "Estimated monthly cost: ~\$27/month for the VM + disk."
 echo "You can stop the VM at any time to pause billing."
 echo ""
 read -rp "Continue? [Y/n] " confirm
-if [ "${confirm,,}" = "n" ]; then
+if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
     echo "Cancelled."
     exit 0
 fi
@@ -114,7 +114,7 @@ else
     dim "    curl https://sdk.cloud.google.com | bash"
     echo ""
     read -rp "  Install gcloud now? (runs Google's installer) [Y/n] " install_gcloud
-    if [ "${install_gcloud,,}" = "n" ]; then
+    if [ "$install_gcloud" = "n" ] || [ "$install_gcloud" = "N" ]; then
         echo ""
         echo "  Install gcloud manually, then re-run this script."
         exit 0
@@ -164,7 +164,7 @@ current_account=$(gcloud config get-value account 2>/dev/null || true)
 if [ -n "$current_account" ] && [ "$current_account" != "(unset)" ]; then
     echo "  Currently authenticated as: $current_account"
     read -rp "  Use this account? [Y/n] " use_current
-    if [ "${use_current,,}" = "n" ]; then
+    if [ "$use_current" = "n" ] || [ "$use_current" = "N" ]; then
         gcloud auth login --no-launch-browser 2>/dev/null || gcloud auth login
     fi
 else
@@ -188,7 +188,7 @@ current_project=$(gcloud config get-value project 2>/dev/null || true)
 if [ -n "$current_project" ] && [ "$current_project" != "(unset)" ]; then
     echo "  Current project: $current_project"
     read -rp "  Use this project? [Y/n] " use_project
-    if [ "${use_project,,}" != "n" ]; then
+    if [ "$use_project" != "n" ] && [ "$use_project" != "N" ]; then
         PROJECT_ID="$current_project"
     else
         read -rp "  Enter project ID: " PROJECT_ID
@@ -214,7 +214,7 @@ if [ "$billing_status" != "True" ]; then
     echo "  Enable billing at: https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
     echo ""
     read -rp "  Continue anyway? [y/N] " continue_anyway
-    if [ "${continue_anyway,,}" != "y" ]; then
+    if [ "$continue_anyway" != "y" ] && [ "$continue_anyway" != "Y" ]; then
         exit 0
     fi
 fi
@@ -297,7 +297,7 @@ if [ -n "$existing_vm" ]; then
     echo "  Skipping VM creation."
 else
     read -rp "  Create this VM? [Y/n] " create_vm
-    if [ "${create_vm,,}" = "n" ]; then
+    if [ "$create_vm" = "n" ] || [ "$create_vm" = "N" ]; then
         echo "  Skipping VM creation."
     else
         echo "  Creating VM (this takes about 30 seconds)..."
@@ -349,7 +349,7 @@ echo ""
 read -rp "  Create a service account for bioAF? [Y/n] " create_sa
 
 SA_KEY_PATH=""
-if [ "${create_sa,,}" != "n" ]; then
+if [ "$create_sa" != "n" ] && [ "$create_sa" != "N" ]; then
     SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
     existing_sa=$(gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" --format="value(email)" 2>/dev/null || echo "")
