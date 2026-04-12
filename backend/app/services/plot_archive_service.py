@@ -133,9 +133,12 @@ class PlotArchiveService:
         try:
             from google.cloud import storage as gcs_storage
 
-            client = gcs_storage.Client()
+            from app.services.gcs_storage import GcsStorageService
 
-            # Get all organizations (simplified — in practice scope by active orgs)
+            credentials = await GcsStorageService.get_credentials(session)
+            client = gcs_storage.Client(credentials=credentials)
+
+            # Get all organizations (simplified -- in practice scope by active orgs)
             from app.models.organization import Organization
 
             orgs_result = await session.execute(select(Organization))
@@ -144,7 +147,7 @@ class PlotArchiveService:
             cfg_result = await session.execute(
                 text("SELECT value FROM platform_config WHERE key = 'results_bucket_name'")
             )
-            results_bucket = cfg_result.scalar_one_or_none()
+            results_bucket = cfg_result.scalars().first()
             if not results_bucket or results_bucket == "null":
                 logger.warning("results_bucket_name not configured in platform_config, skipping plot scan")
                 return 0

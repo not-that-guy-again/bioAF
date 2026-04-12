@@ -223,3 +223,31 @@ test("opens plot modal when thumbnail is clicked", async () => {
     expect(screen.getByTestId("plot-modal")).toBeInTheDocument();
   });
 });
+
+test("opens plot modal when failed-to-load thumbnail is clicked", async () => {
+  render(<PlotArchivePage />);
+
+  await waitFor(() => {
+    expect(screen.getByText("fastqc_heatmap.png")).toBeInTheDocument();
+  });
+
+  await waitFor(() => {
+    const images = screen.getAllByRole("img");
+    expect(images.length).toBeGreaterThan(0);
+  });
+
+  // Simulate image load failure on the first thumbnail
+  const images = screen.getAllByRole("img");
+  fireEvent.error(images[0]);
+
+  // The "Failed to load" text should appear and be clickable
+  await waitFor(() => {
+    expect(screen.getByText("Failed to load")).toBeInTheDocument();
+  });
+
+  fireEvent.click(screen.getByText("Failed to load"));
+
+  await waitFor(() => {
+    expect(screen.getByTestId("plot-modal")).toBeInTheDocument();
+  });
+});

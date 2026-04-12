@@ -26,7 +26,15 @@ function PlotThumbnail({
   const url = fileContentUrl(fileId);
 
   if (error) {
-    return <span className="text-gray-400 text-xs">Failed to load</span>;
+    return (
+      <button
+        type="button"
+        className="text-gray-400 text-xs cursor-pointer hover:text-gray-600"
+        onClick={() => onClick(url)}
+      >
+        Failed to load
+      </button>
+    );
   }
   return (
     <img
