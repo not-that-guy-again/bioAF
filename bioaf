@@ -163,6 +163,16 @@ cmd_setup() {
             ;;
     esac
 
+    # If Docker is installed but the socket is inaccessible, the user was likely
+    # added to the docker group by the VM startup script but hasn't re-logged in.
+    # Re-exec this script under `sg docker` to activate the group inline.
+    if command -v docker &>/dev/null && ! docker info &>/dev/null; then
+        if id -nG 2>/dev/null | grep -qw docker || grep -q "docker.*$(whoami)\|$(whoami).*docker" /etc/group 2>/dev/null; then
+            yellow "Activating docker group for this session..."
+            exec sg docker -c "'$0' setup"
+        fi
+    fi
+
     bold "=== bioAF First-Run Setup ==="
     echo ""
 

@@ -135,11 +135,8 @@ check_prereqs() {
     if ! docker info &>/dev/null; then
         echo ""
         red "Docker is installed but your user cannot connect to it."
-        echo ""
-        echo "This usually means you were added to the 'docker' group but"
-        echo "have not logged out and back in for it to take effect."
-        echo ""
-        bold "Fix: log out, SSH back in, then re-run ./bioaf setup"
+        echo "Add yourself to the docker group, then try again:"
+        bold "  sudo usermod -aG docker \$USER && newgrp docker"
         echo ""
         return 1
     fi
