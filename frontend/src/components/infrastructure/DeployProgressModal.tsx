@@ -212,7 +212,7 @@ export function DeployProgressModal({
   const completedSet = new Set(completedResources);
   let foundInProgress = false;
   const resources: TrackedResource[] =
-    plannedResources.length > 0
+    (plannedResources?.length ?? 0) > 0
       ? plannedResources.map((addr) => {
           if (completedSet.has(addr)) {
             return { address: addr, label: friendlyLabel(addr), status: "complete" as const };
