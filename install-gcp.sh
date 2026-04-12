@@ -284,12 +284,41 @@ fi
 echo ""
 bold "Step 7: Create VM"
 echo ""
+echo "  How will you access bioAF?"
+echo ""
+echo "    1. Public IP -- accessible from anywhere over the internet"
+echo "    2. Private IP -- accessible only through a VPN or internal network"
+echo ""
+read -rp "  Choose (1 or 2): [1] " access_choice
+access_choice="${access_choice:-1}"
+
+USE_PUBLIC_IP=true
+if [ "$access_choice" = "2" ]; then
+    USE_PUBLIC_IP=false
+    echo ""
+    yellow "  You chose private IP. The VM will not be reachable from the internet."
+    echo "  You will need a VPN or other connectivity to your GCP VPC to access"
+    echo "  the VM. This script cannot set up a VPN for you."
+    echo ""
+    read -rp "  Continue with private IP? [Y/n] " confirm_private
+    if [ "$confirm_private" = "n" ] || [ "$confirm_private" = "N" ]; then
+        echo "  Switching to public IP."
+        USE_PUBLIC_IP=true
+    fi
+fi
+
+echo ""
 echo "  Configuration:"
 echo "    Name:         $VM_NAME"
 echo "    Machine type: $MACHINE_TYPE (~\$25/month)"
 echo "    Disk:         $BOOT_DISK_SIZE SSD (~\$2/month)"
 echo "    OS:           Ubuntu 22.04 LTS"
 echo "    Zone:         $ZONE"
+if [ "$USE_PUBLIC_IP" = true ]; then
+    echo "    Network:      Public IP (internet-accessible)"
+else
+    echo "    Network:      Private IP only (VPN required)"
+fi
 echo ""
 
 existing_vm=$(gcloud compute instances describe "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" --format="value(name)" 2>/dev/null || echo "")
@@ -302,16 +331,26 @@ else
         echo "  Skipping VM creation."
     else
         echo "  Creating VM (this takes about 30 seconds)..."
+
+        # Build the gcloud command with or without a public IP
+        create_args=(
+            --project="$PROJECT_ID"
+            --zone="$ZONE"
+            --machine-type="$MACHINE_TYPE"
+            --image-family="$IMAGE_FAMILY"
+            --image-project="$IMAGE_PROJECT"
+            --boot-disk-size="$BOOT_DISK_SIZE"
+            --boot-disk-type=pd-ssd
+            --tags="$NETWORK_TAG"
+            --scopes=cloud-platform
+        )
+
+        if [ "$USE_PUBLIC_IP" = false ]; then
+            create_args+=(--no-address)
+        fi
+
         gcloud compute instances create "$VM_NAME" \
-            --project="$PROJECT_ID" \
-            --zone="$ZONE" \
-            --machine-type="$MACHINE_TYPE" \
-            --image-family="$IMAGE_FAMILY" \
-            --image-project="$IMAGE_PROJECT" \
-            --boot-disk-size="$BOOT_DISK_SIZE" \
-            --boot-disk-type=pd-ssd \
-            --tags="$NETWORK_TAG" \
-            --scopes=cloud-platform \
+            "${create_args[@]}" \
             --metadata=startup-script='#!/bin/bash
 # Install Docker on first boot
 if ! command -v docker &>/dev/null; then
@@ -331,11 +370,18 @@ fi' \
     fi
 fi
 
-# Get the VM's external IP
-VM_IP=$(gcloud compute instances describe "$VM_NAME" \
-    --zone="$ZONE" \
-    --project="$PROJECT_ID" \
-    --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || echo "")
+# Get the VM's IP address
+if [ "$USE_PUBLIC_IP" = true ]; then
+    VM_IP=$(gcloud compute instances describe "$VM_NAME" \
+        --zone="$ZONE" \
+        --project="$PROJECT_ID" \
+        --format="value(networkInterfaces[0].accessConfigs[0].natIP)" 2>/dev/null || echo "")
+else
+    VM_IP=$(gcloud compute instances describe "$VM_NAME" \
+        --zone="$ZONE" \
+        --project="$PROJECT_ID" \
+        --format="value(networkInterfaces[0].networkIP)" 2>/dev/null || echo "")
+fi
 
 # ---------------------------------------------------------------------------
 # Step 8: Service account (optional)
@@ -483,11 +529,15 @@ else
     green "     ./bioaf setup"
 fi
 
-if [ -n "$SA_KEY_PATH" ]; then
+if [ -n "$SA_KEY_PATH" ] && [ -f "$SA_KEY_PATH" ]; then
     echo ""
-    echo "  4. During the setup wizard, upload your service account key:"
+    echo "  During setup, the wizard will ask for your service account key."
+    echo "  Select the JSON option and paste this:"
     echo ""
-    dim "     $SA_KEY_PATH"
+    cat "$SA_KEY_PATH"
+    echo ""
+    echo ""
+    dim "  (This key is also saved at $SA_KEY_PATH)"
 fi
 
 echo ""
