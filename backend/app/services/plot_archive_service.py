@@ -10,6 +10,7 @@ from app.models.file import File
 from app.models.plot_archive_entry import PlotArchiveEntry
 from app.services.audit_service import log_action
 from app.services.file_service import FileService
+from app.services.thumbnail_service import THUMBNAIL_PREFIX, ThumbnailService
 
 logger = logging.getLogger("bioaf.plot_archive_service")
 
@@ -173,6 +174,10 @@ class PlotArchiveService:
                     blobs = bucket.list_blobs()
 
                     for blob in blobs:
+                        # Skip generated thumbnails
+                        if blob.name.startswith(THUMBNAIL_PREFIX):
+                            continue
+
                         # Filter image files
                         if not blob.name.lower().endswith((".png", ".svg", ".pdf")):
                             continue
@@ -210,7 +215,7 @@ class PlotArchiveService:
                         )
 
                         # Create archive entry
-                        await PlotArchiveService.index_plot(
+                        entry = await PlotArchiveService.index_plot(
                             session,
                             org_id=org_id,
                             file_id=file.id,
@@ -218,6 +223,13 @@ class PlotArchiveService:
                             pipeline_run_id=pipeline_run_id,
                             title=blob.name.split("/")[-1],
                         )
+
+                        # Generate PDF thumbnail
+                        if ext == "pdf":
+                            thumb_uri = await ThumbnailService.generate_and_upload(session, gcs_uri, entry.id)
+                            if thumb_uri:
+                                entry.thumbnail_gcs_uri = thumb_uri
+
                         indexed += 1
 
                 except Exception as e:
@@ -285,3 +297,29 @@ class PlotArchiveService:
             await session.commit()
             logger.info("Backfilled metadata for %d plot archive entries", updated)
         return updated
+
+    @staticmethod
+    async def backfill_thumbnails(session: AsyncSession) -> int:
+        """Generate missing thumbnails for PDF plot entries."""
+        result = await session.execute(
+            select(PlotArchiveEntry)
+            .options(selectinload(PlotArchiveEntry.file))
+            .where(PlotArchiveEntry.thumbnail_gcs_uri.is_(None))
+        )
+        entries = list(result.scalars().all())
+        generated = 0
+        for entry in entries:
+            if not entry.file or not entry.file.gcs_uri:
+                continue
+            if not entry.file.filename.lower().endswith(".pdf"):
+                continue
+
+            thumb_uri = await ThumbnailService.generate_and_upload(session, entry.file.gcs_uri, entry.id)
+            if thumb_uri:
+                entry.thumbnail_gcs_uri = thumb_uri
+                generated += 1
+
+        if generated > 0:
+            await session.commit()
+            logger.info("Generated thumbnails for %d PDF plot entries", generated)
+        return generated

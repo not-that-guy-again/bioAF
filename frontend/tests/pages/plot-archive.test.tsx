@@ -14,6 +14,7 @@ jest.mock("@/lib/api", () => ({
     get: (...args: unknown[]) => mockApiGet(...args),
   },
   fileContentUrl: (fileId: number) => `http://localhost:8000/api/files/${fileId}/content?token=fake`,
+  plotThumbnailContentUrl: (plotId: number) => `http://localhost:8000/api/plots/${plotId}/thumbnail/content?token=fake`,
 }));
 
 jest.mock("@/components/layout/Sidebar", () => ({
@@ -275,12 +276,11 @@ test("opens plot modal when failed-to-load thumbnail is clicked", async () => {
   const images = screen.getAllByRole("img");
   fireEvent.error(images[0]);
 
-  // The "Failed to load" text should appear and be clickable
-  await waitFor(() => {
-    expect(screen.getByText("Failed to load")).toBeInTheDocument();
-  });
+  // The fallback should appear and be clickable
+  const fallbacks = screen.getAllByText("No preview available");
+  expect(fallbacks.length).toBeGreaterThan(0);
 
-  fireEvent.click(screen.getByText("Failed to load"));
+  fireEvent.click(fallbacks[0]);
 
   await waitFor(() => {
     expect(screen.getByTestId("plot-modal")).toBeInTheDocument();

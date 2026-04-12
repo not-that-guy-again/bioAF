@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission
@@ -129,13 +130,51 @@ async def get_thumbnail(
     return {"thumbnail_url": None}
 
 
+@router.get("/{plot_id}/thumbnail/content")
+async def get_thumbnail_content(
+    plot_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    """Serve thumbnail PNG bytes for inline display in <img> tags."""
+    current_user = request.state.current_user
+    org_id = int(current_user["org_id"])
+
+    plot = await PlotArchiveService.get_plot(session, org_id, plot_id)
+    if not plot:
+        raise HTTPException(404, "Plot not found")
+    if not plot.thumbnail_gcs_uri:
+        raise HTTPException(404, "No thumbnail available")
+
+    try:
+        from google.cloud import storage as gcs_storage
+
+        from app.services.gcs_storage import GcsStorageService
+
+        credentials = await GcsStorageService.get_credentials(session)
+        client = gcs_storage.Client(credentials=credentials)
+        parts = plot.thumbnail_gcs_uri.replace("gs://", "").split("/", 1)
+        bucket = client.bucket(parts[0])
+        blob = bucket.blob(parts[1])
+        data = blob.download_as_bytes()
+
+        return Response(
+            content=data,
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    except Exception:
+        raise HTTPException(502, "Could not fetch thumbnail content")
+
+
 @router.post("/backfill")
 async def backfill_plot_metadata(
     current_user: dict = require_permission("experiments", "create"),
     session: AsyncSession = Depends(get_session),
 ):
-    updated = await PlotArchiveService.backfill_metadata(session)
-    return {"updated": updated}
+    metadata_updated = await PlotArchiveService.backfill_metadata(session)
+    thumbnails_generated = await PlotArchiveService.backfill_thumbnails(session)
+    return {"metadata_updated": metadata_updated, "thumbnails_generated": thumbnails_generated}
 
 
 @router.patch("/{plot_id}", response_model=PlotArchiveResponse)

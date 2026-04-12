@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { PlotModal } from "@/components/shared/PlotModal";
 import { ContentLoading } from "@/components/shared/ContentLoading";
-import { api, fileContentUrl } from "@/lib/api";
+import { api, fileContentUrl, plotThumbnailContentUrl } from "@/lib/api";
 import type {
   PlotArchiveResponse,
   PlotArchiveListResponse,
@@ -14,34 +14,62 @@ import type {
 } from "@/lib/types";
 
 function PlotThumbnail({
-  fileId,
-  title,
+  plot,
   onClick,
 }: {
-  fileId: number;
-  title: string;
-  onClick: (url: string) => void;
+  plot: PlotArchiveResponse;
+  onClick: () => void;
 }) {
   const [error, setError] = useState(false);
-  const url = fileContentUrl(fileId);
+  const fileType = plot.file?.file_type?.toLowerCase() ?? "";
+  const isPdf = fileType === "pdf";
+  const hasThumbnail = !!plot.thumbnail_url;
+
+  // For PDFs without a generated thumbnail, show file-type icon
+  if (isPdf && !hasThumbnail) {
+    return (
+      <button
+        type="button"
+        className="flex flex-col items-center gap-2 py-6 cursor-pointer hover:opacity-80"
+        onClick={onClick}
+      >
+        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-xs font-bold uppercase">
+          PDF
+        </div>
+        <span className="text-xs text-gray-400">No preview available</span>
+      </button>
+    );
+  }
+
+  // Determine the image source: thumbnail for PDFs, content for images
+  const imgUrl = isPdf && hasThumbnail
+    ? plotThumbnailContentUrl(plot.id)
+    : plot.file
+      ? fileContentUrl(plot.file.id)
+      : "";
 
   if (error) {
     return (
       <button
         type="button"
-        className="text-gray-400 text-xs cursor-pointer hover:text-gray-600"
-        onClick={() => onClick(url)}
+        className="flex flex-col items-center gap-2 py-6 cursor-pointer hover:opacity-80"
+        onClick={onClick}
       >
-        Failed to load
+        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center text-gray-500 text-xs font-bold uppercase">
+          {fileType || "?"}
+        </div>
+        <span className="text-xs text-gray-400">No preview available</span>
       </button>
     );
   }
+
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={url}
-      alt={title}
+      src={imgUrl}
+      alt={plot.title ?? "Plot"}
       className="w-full h-full object-cover cursor-pointer"
-      onClick={() => onClick(url)}
+      onClick={onClick}
       onError={() => setError(true)}
     />
   );
@@ -145,8 +173,14 @@ export default function PlotArchivePage() {
 
   const resetPage = () => setPage(1);
 
-  const handleExpand = (plot: PlotArchiveResponse, signedUrl: string) => {
-    setExpandedUrl(signedUrl);
+  const handleExpand = (plot: PlotArchiveResponse) => {
+    const isPdf = plot.file?.file_type?.toLowerCase() === "pdf";
+    const url = isPdf && plot.thumbnail_url
+      ? plotThumbnailContentUrl(plot.id)
+      : plot.file
+        ? fileContentUrl(plot.file.id)
+        : "";
+    setExpandedUrl(url);
     setExpandedTitle(plot.title ?? "Plot");
     setExpandedPlot(plot);
   };
@@ -266,9 +300,8 @@ export default function PlotArchivePage() {
                             <StorageDeletedPlaceholder />
                           ) : plot.file ? (
                             <PlotThumbnail
-                              fileId={plot.file.id}
-                              title={plot.title ?? "Plot"}
-                              onClick={(url) => handleExpand(plot, url)}
+                              plot={plot}
+                              onClick={() => handleExpand(plot)}
                             />
                           ) : (
                             <span className="text-gray-400 text-xs">
@@ -322,25 +355,22 @@ export default function PlotArchivePage() {
               </>
             )}
 
-            {expandedUrl && (
+            {expandedUrl && expandedPlot && (
               <PlotModal
                 url={expandedUrl}
                 title={expandedTitle}
-                metadata={
-                  expandedPlot
-                    ? {
-                        experimentName: expandedPlot.experiment_name,
-                        projectName: expandedPlot.project_name,
-                        pipelineRunId: expandedPlot.pipeline_run_id,
-                        pipelineRunName: expandedPlot.pipeline_run_name,
-                        notebookSessionId: expandedPlot.notebook_session_id,
-                        notebookSessionType: expandedPlot.notebook_session_type,
-                        sourceType: expandedPlot.source_type,
-                        tags: expandedPlot.tags,
-                        indexedAt: expandedPlot.indexed_at,
-                      }
-                    : undefined
-                }
+                metadata={{
+                  experimentName: expandedPlot.experiment_name,
+                  projectName: expandedPlot.project_name,
+                  pipelineRunId: expandedPlot.pipeline_run_id,
+                  pipelineRunName: expandedPlot.pipeline_run_name,
+                  notebookSessionId: expandedPlot.notebook_session_id,
+                  notebookSessionType: expandedPlot.notebook_session_type,
+                  sourceType: expandedPlot.source_type,
+                  tags: expandedPlot.tags,
+                  indexedAt: expandedPlot.indexed_at,
+                  file: expandedPlot.file,
+                }}
                 onClose={() => {
                   setExpandedUrl(null);
                   setExpandedPlot(null);
