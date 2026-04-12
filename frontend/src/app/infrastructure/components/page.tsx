@@ -174,12 +174,15 @@ export default function InfraComponentsPage() {
     }
   }, [deployProgress.active, deployStarted]);
 
-  // When a tracked deployment finishes, refresh page data
+  // When a tracked operation finishes, refresh page data.
+  // Keep the terminal status visible in the modal for 1 render cycle
+  // before clearing deployStarted so the modal can show Done/Error.
+  const [terminalStatus, setTerminalStatus] = useState<string | null>(null);
   useEffect(() => {
     if (!deployStarted) return;
     if (!deployProgress.active && deployProgress.status !== null) {
-      setDeployStarted(false);
-      setRefreshKey((k) => k + 1);
+      // Capture the terminal status so the modal can display it
+      setTerminalStatus(deployProgress.status);
     }
   }, [deployStarted, deployProgress.active, deployProgress.status]);
 
@@ -339,6 +342,7 @@ export default function InfraComponentsPage() {
   function handleDeployComplete() {
     setShowDeployModal(false);
     setDeployStarted(false);
+    setTerminalStatus(null);
     setRefreshKey((k) => k + 1);
   }
 
@@ -389,11 +393,15 @@ export default function InfraComponentsPage() {
 
   function handleTeardownComplete() {
     setShowTeardownProgress(false);
+    setDeployStarted(false);
+    setTerminalStatus(null);
     setRefreshKey((k) => k + 1);
   }
 
   function handleDestroyStorageComplete() {
     setShowDestroyStorageProgress(false);
+    setDeployStarted(false);
+    setTerminalStatus(null);
     setRefreshKey((k) => k + 1);
   }
 
@@ -1056,7 +1064,7 @@ export default function InfraComponentsPage() {
       {showDeployModal && (
         <DeployProgressModal
           phase={deployProgress.phase}
-          status={deployProgress.status ?? (deployStarted ? "planning" : null)}
+          status={deployProgress.status ?? terminalStatus ?? (deployStarted ? "planning" : null)}
           resourcesCompleted={deployProgress.resources_completed}
           resourcesTotal={deployProgress.resources_total}
           completedResources={deployProgress.completed_resources}
@@ -1212,7 +1220,7 @@ export default function InfraComponentsPage() {
         <DeployProgressModal
           mode="teardown"
           phase={deployProgress.phase}
-          status={deployProgress.status ?? (deployStarted ? "applying" : null)}
+          status={deployProgress.status ?? terminalStatus ?? (deployStarted ? "applying" : null)}
           resourcesCompleted={deployProgress.resources_completed}
           resourcesTotal={deployProgress.resources_total}
           completedResources={deployProgress.completed_resources}
@@ -1303,7 +1311,7 @@ export default function InfraComponentsPage() {
         <DeployProgressModal
           mode="teardown"
           phase={deployProgress.phase}
-          status={deployProgress.status ?? (deployStarted ? "applying" : null)}
+          status={deployProgress.status ?? terminalStatus ?? (deployStarted ? "applying" : null)}
           resourcesCompleted={deployProgress.resources_completed}
           resourcesTotal={deployProgress.resources_total}
           completedResources={deployProgress.completed_resources}
