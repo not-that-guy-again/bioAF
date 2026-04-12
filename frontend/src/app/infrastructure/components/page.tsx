@@ -13,6 +13,7 @@ import { OrphanedResourcesCard } from "@/components/infrastructure/OrphanedResou
 import { DeployRecoveryModal } from "@/components/infrastructure/DeployRecoveryModal";
 import { useDeploymentProgress } from "@/hooks/useDeploymentProgress";
 import { isAuthenticated } from "@/lib/auth";
+import { GCP_REGIONS, zonesForRegion } from "@/lib/gcp-regions";
 import { api } from "@/lib/api";
 import { invalidateComponentCache } from "@/hooks/useComponents";
 
@@ -152,6 +153,12 @@ export default function InfraComponentsPage() {
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [abandonLoading, setAbandonLoading] = useState(false);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [showDeployConfirm, setShowDeployConfirm] = useState(false);
+  const [defaultRegion, setDefaultRegion] = useState("us-central1");
+  const [defaultZone, setDefaultZone] = useState("us-central1-a");
+  const [deployRegion, setDeployRegion] = useState("us-central1");
+  const [deployZone, setDeployZone] = useState("us-central1-a");
+  const [useSpecificZone, setUseSpecificZone] = useState(false);
   const [recoveryCheckedOnLoad, setRecoveryCheckedOnLoad] = useState(false);
 
   const DESTROY_STORAGE_PHRASE = "delete my data";
@@ -186,12 +193,13 @@ export default function InfraComponentsPage() {
 
   async function loadData() {
     // Fetch all data in parallel so the page renders once with complete state
-    const [tfResult, runsResult, ssResult, cdResult, ccResult] = await Promise.allSettled([
+    const [tfResult, runsResult, ssResult, cdResult, ccResult, gcpResult] = await Promise.allSettled([
       api.get<TerraformStatus>("/api/v1/infrastructure/terraform/status"),
       api.get<{ runs: TerraformRun[] }>("/api/v1/infrastructure/terraform/runs"),
       api.get<StackStatus>("/api/v1/infrastructure/stack/status"),
       api.get<ComponentsData>("/api/v1/infrastructure/stack/components"),
       api.get<ClusterConfig>("/api/v1/infrastructure/cluster/config"),
+      api.get<{ gcp_region?: string; gcp_zone?: string }>("/api/v1/settings/gcp"),
     ]);
 
     if (tfResult.status === "fulfilled") setTfStatus(tfResult.value);
@@ -199,6 +207,17 @@ export default function InfraComponentsPage() {
     if (ssResult.status === "fulfilled") setStackStatus(ssResult.value);
     if (cdResult.status === "fulfilled") setComponentsData(cdResult.value);
     if (ccResult.status === "fulfilled") setClusterConfig(ccResult.value);
+    if (gcpResult.status === "fulfilled") {
+      const gcp = gcpResult.value;
+      if (gcp.gcp_region) {
+        setDefaultRegion(gcp.gcp_region);
+        setDeployRegion(gcp.gcp_region);
+      }
+      if (gcp.gcp_zone) {
+        setDefaultZone(gcp.gcp_zone);
+        setDeployZone(gcp.gcp_zone);
+      }
+    }
     setLoading(false);
   }
 
@@ -280,7 +299,7 @@ export default function InfraComponentsPage() {
 
   const [deployLoading, setDeployLoading] = useState(false);
 
-  async function handleStartDeploy() {
+  function handleStartDeploy() {
     if (deployLoading) return;
 
     // Check for orphaned clusters before deploying to prevent duplicates
@@ -289,11 +308,24 @@ export default function InfraComponentsPage() {
       return;
     }
 
+    setDeployRegion(defaultRegion);
+    setDeployZone(defaultZone);
+    setUseSpecificZone(false);
+    setShowDeployConfirm(true);
+  }
+
+  async function handleConfirmDeploy() {
+    setShowDeployConfirm(false);
     setDeployLoading(true);
     try {
-      await api.post("/api/v1/infrastructure/stack/deploy-background", {
-        stack_type: "kubernetes",
-      });
+      const body: Record<string, string> = { stack_type: "kubernetes" };
+      if (deployRegion !== defaultRegion) {
+        body.compute_region = deployRegion;
+      }
+      if (useSpecificZone && deployZone) {
+        body.compute_zone = deployZone;
+      }
+      await api.post("/api/v1/infrastructure/stack/deploy-background", body);
       setDeployStarted(true);
       setShowDeployModal(true);
     } catch (e) {
@@ -1037,6 +1069,92 @@ export default function InfraComponentsPage() {
           }}
           onDone={handleDeployComplete}
         />
+      )}
+
+      {/* Deploy Confirmation Modal - Region/Zone Selection */}
+      {showDeployConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-lg font-semibold mb-4">Deploy Compute Infrastructure</h2>
+
+            {/* Region */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+              <select
+                value={deployRegion}
+                onChange={(e) => {
+                  setDeployRegion(e.target.value);
+                  setDeployZone(zonesForRegion(e.target.value)[0]);
+                }}
+                className="w-full px-3 py-2 border rounded text-sm"
+              >
+                {GCP_REGIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}{r === defaultRegion ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+              {deployRegion !== defaultRegion && (
+                <p className="text-xs text-amber-600 mt-1 flex items-start gap-1">
+                  <span className="mt-0.5">&#9888;</span>
+                  Your storage is in {defaultRegion}. Deploying compute in {deployRegion} may
+                  incur cross-region network costs in GCP.
+                </p>
+              )}
+            </div>
+
+            {/* Zone toggle */}
+            <div className="mb-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useSpecificZone}
+                  onChange={(e) => setUseSpecificZone(e.target.checked)}
+                />
+                <span className="text-sm text-gray-700">Deploy to a specific zone</span>
+                <span
+                  className="text-gray-400 cursor-help"
+                  title="Without a specific zone, GKE creates a multi-zonal cluster with nodes distributed across availability zones. This provides better resilience but may cost slightly more."
+                >
+                  &#9432;
+                </span>
+              </label>
+              {useSpecificZone && (
+                <select
+                  value={deployZone}
+                  onChange={(e) => setDeployZone(e.target.value)}
+                  className="w-full px-3 py-2 border rounded text-sm mt-2"
+                >
+                  {zonesForRegion(deployRegion).map((z) => (
+                    <option key={z} value={z}>{z}</option>
+                  ))}
+                </select>
+              )}
+              {!useSpecificZone && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Multi-zonal deployment across {deployRegion}. Greater flexibility,
+                  slightly higher GCP cost.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowDeployConfirm(false)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeploy}
+                disabled={deployLoading}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {deployLoading ? "Starting..." : "Deploy"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Teardown Confirmation Modal */}

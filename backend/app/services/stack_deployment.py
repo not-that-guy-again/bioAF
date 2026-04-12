@@ -288,11 +288,17 @@ async def deploy_stack(
     stack_type: str,
     user_id: int,
     org_id: int | None = None,
+    compute_region: str | None = None,
+    compute_zone: str | None = None,
 ) -> AsyncGenerator[TerraformProgressEvent, None]:
     """Deploy a full compute stack (storage + compute).
 
     Validates pre-conditions, runs storage (if needed), then compute.
     Yields progress events throughout.
+
+    When *compute_region* or *compute_zone* are provided, the compute
+    module uses those values instead of the defaults from platform_config.
+    Storage always uses the default region.
     """
     # Validate pre-conditions
     gcp_configured = await _read_config(session, "gcp_credentials_configured")
@@ -403,6 +409,20 @@ async def deploy_stack(
             return
 
     # Step 2: Deploy compute
+    # If the user chose a different region/zone for compute, temporarily
+    # override the config so _write_tfvars picks up the override values.
+    # Restore defaults after deploy completes (success or failure).
+    original_region = None
+    original_zone = None
+    if compute_region:
+        original_region = await _read_config(session, "gcp_region")
+        await _set_config(session, "gcp_region", compute_region)
+        if not compute_zone:
+            compute_zone = f"{compute_region}-a"
+    if compute_zone:
+        original_zone = await _read_config(session, "gcp_zone")
+        await _set_config(session, "gcp_zone", compute_zone)
+
     await _set_config(session, "deploy_suffix", secrets.token_hex(3))
     await session.flush()
     yield TerraformProgressEvent(
@@ -492,6 +512,12 @@ async def deploy_stack(
                 log_line=event.log_line,
                 extra=event.extra,
             )
+
+    # Restore default region/zone if we overrode them for compute
+    if original_region is not None:
+        await _set_config(session, "gcp_region", original_region)
+    if original_zone is not None:
+        await _set_config(session, "gcp_zone", original_zone)
 
     if compute_failed:
         # Log the expected cluster and its service accounts as orphaned

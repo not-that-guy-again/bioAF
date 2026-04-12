@@ -54,6 +54,8 @@ router = APIRouter(tags=["stack_deploy"])
 
 class StackDeployRequest(BaseModel):
     stack_type: str = "kubernetes"
+    compute_region: str | None = None
+    compute_zone: str | None = None
 
 
 class StackTeardownRequest(BaseModel):
@@ -250,6 +252,8 @@ async def stack_deploy_background_endpoint(
     user_id = int(current_user["sub"])
     org_id = int(current_user["org_id"]) if current_user.get("org_id") else None
     stack_type = body.stack_type if body else "kubernetes"
+    compute_region = body.compute_region if body else None
+    compute_zone = body.compute_zone if body else None
 
     # Validate preconditions synchronously so we can return a clear error.
     gcp_configured = await session.execute(
@@ -267,16 +271,17 @@ async def stack_deploy_background_endpoint(
         raise HTTPException(status_code=400, detail="Terraform has not been initialized")
 
     async def _run_deploy():
-        """Drain the deploy_stack generator in the background with its own session.
-
-        Commits after each event so the progress polling endpoint can see
-        intermediate state (resource counts, phase, completed_resources).
-        Without per-event commits, all flush() calls stay invisible to
-        other sessions under PostgreSQL READ COMMITTED isolation.
-        """
+        """Drain the deploy_stack generator in the background with its own session."""
         async with async_session_factory() as bg_session:
             try:
-                async for _event in deploy_stack(bg_session, stack_type, user_id, org_id=org_id):
+                async for _event in deploy_stack(
+                    bg_session,
+                    stack_type,
+                    user_id,
+                    org_id=org_id,
+                    compute_region=compute_region,
+                    compute_zone=compute_zone,
+                ):
                     await bg_session.commit()
                 await bg_session.commit()
             except Exception:
