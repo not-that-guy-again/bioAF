@@ -114,7 +114,7 @@ interface DeployProgressModalProps {
   onDone: () => void;
 }
 
-type ResourceStatus = "pending" | "complete";
+type ResourceStatus = "pending" | "in_progress" | "complete";
 
 interface TrackedResource {
   address: string;
@@ -140,6 +140,14 @@ function StatusBadge({ status }: { status: ResourceStatus }) {
     return (
       <span className="text-xs font-medium text-green-600 uppercase tracking-wide">
         Done
+      </span>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <span className="text-xs font-medium text-blue-600 uppercase tracking-wide flex items-center gap-1.5">
+        <span className="inline-block h-1.5 w-1.5 bg-blue-600 rounded-full animate-pulse" />
+        Setting up
       </span>
     );
   }
@@ -191,16 +199,22 @@ export function DeployProgressModal({
     return () => clearInterval(interval);
   }, [isRunning]);
 
-  // Build the full resource list from plannedResources, marking completed ones.
-  // If plannedResources is empty (older backend), fall back to completedResources only.
+  // Build the full resource list from plannedResources, marking completed ones
+  // and the first non-completed resource as in_progress.
   const completedSet = new Set(completedResources);
+  let foundInProgress = false;
   const resources: TrackedResource[] =
     plannedResources.length > 0
-      ? plannedResources.map((addr) => ({
-          address: addr,
-          label: friendlyLabel(addr),
-          status: completedSet.has(addr) ? ("complete" as const) : ("pending" as const),
-        }))
+      ? plannedResources.map((addr) => {
+          if (completedSet.has(addr)) {
+            return { address: addr, label: friendlyLabel(addr), status: "complete" as const };
+          }
+          if (!foundInProgress && isRunning) {
+            foundInProgress = true;
+            return { address: addr, label: friendlyLabel(addr), status: "in_progress" as const };
+          }
+          return { address: addr, label: friendlyLabel(addr), status: "pending" as const };
+        })
       : completedResources.map((addr) => ({
           address: addr,
           label: friendlyLabel(addr),
@@ -279,7 +293,7 @@ export function DeployProgressModal({
         {resources.length > 0 && (
           <ul
             ref={listRef}
-            className="space-y-0.5 mb-4 max-h-52 overflow-y-auto"
+            className="space-y-0.5 mb-4 max-h-52 overflow-y-scroll border-b border-gray-100"
           >
             {resources.map((r) => (
               <li
