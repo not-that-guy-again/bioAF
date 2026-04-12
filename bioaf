@@ -47,9 +47,19 @@ slugify() {
 
 get_access_url() {
     # Try to detect the best URL for accessing the web UI.
-    # Prefer the machine's public/private IP; fall back to localhost.
-    local host
-    host=$(hostname -I 2>/dev/null | awk '{print $1}') || true
+    # On GCE, the external IP is NAT'd and not visible to the OS,
+    # so we query the metadata server for it.
+    local host=""
+
+    if is_gce; then
+        host=$(curl -sf -m 2 -H "Metadata-Flavor: Google" \
+            "http://169.254.169.254/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip" \
+            2>/dev/null) || true
+    fi
+
+    if [ -z "$host" ]; then
+        host=$(hostname -I 2>/dev/null | awk '{print $1}') || true
+    fi
     if [ -z "$host" ]; then
         host=$(ipconfig getifaddr en0 2>/dev/null) || true
     fi
