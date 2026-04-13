@@ -330,7 +330,7 @@ class BackupService:
         page_files = files[start : start + page_size]
         snapshots = [
             {
-                "date": f["timestamp"].strftime("%Y-%m-%d"),
+                "date": f["timestamp"].isoformat(),
                 "size_bytes": f["size_bytes"],
                 "tier": "nightly",
             }
@@ -374,7 +374,7 @@ class BackupService:
         snapshots = [
             {
                 "filename": f["filename"],
-                "date": f["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+                "date": f["timestamp"].isoformat(),
                 "size_bytes": f["size_bytes"],
             }
             for f in files

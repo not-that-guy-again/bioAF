@@ -643,7 +643,7 @@ export default function InfraBackupPage() {
                       pgSnapshots.map((s) => (
                         <tr key={s.filename} className="border-b hover:bg-gray-50">
                           <td className="px-4 py-2.5 text-gray-900 font-mono text-xs">{s.filename}</td>
-                          <td className="px-4 py-2.5 text-gray-600">{s.date}</td>
+                          <td className="px-4 py-2.5 text-gray-600">{new Date(s.date).toLocaleString()}</td>
                           <td className="px-4 py-2.5 text-gray-600">{formatBytes(s.size_bytes)}</td>
                           {canAccess("backups", "restore") && (
                             <td className="px-4 py-2.5">
@@ -683,7 +683,7 @@ export default function InfraBackupPage() {
                     ) : (
                       snapshots.map((s) => (
                         <tr key={s.date} className="border-b hover:bg-gray-50">
-                          <td className="px-4 py-2.5 text-gray-900">{s.date}</td>
+                          <td className="px-4 py-2.5 text-gray-900">{new Date(s.date).toLocaleString()}</td>
                           <td className="px-4 py-2.5 text-gray-600">{formatBytes(s.size_bytes)}</td>
                           <td className="px-4 py-2.5 text-gray-600">{s.tier}</td>
                         </tr>
