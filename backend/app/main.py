@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.config import settings
+from app.config import settings, validate_jwt_secret
 from app.database import engine
 from app.logging_config import attach_cloud_logging, configure_logging
 from app.middleware.auth_middleware import AuthMiddleware
@@ -47,6 +47,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error("Failed to fetch secrets from Secret Manager: %s", e)
             raise RuntimeError(f"Secret Manager unreachable: {e}") from e
+
+    # Block startup if the JWT secret is a known insecure default
+    validate_jwt_secret(settings.jwt_secret_key)
 
     # Verify database connection
     from sqlalchemy import text
