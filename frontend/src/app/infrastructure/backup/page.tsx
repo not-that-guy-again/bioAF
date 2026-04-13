@@ -283,12 +283,16 @@ export default function InfraBackupPage() {
         config_schedule_hours: settings.config_schedule_hours,
         config_schedule_enabled: settings.config_schedule_enabled,
       };
-      // Only send first_run when enabling a schedule
+      // Only send first_run when enabling a schedule that has no next_run yet
       if (settings.postgres_schedule_enabled && !settings.postgres_next_run) {
-        payload.postgres_first_run = pgFirstRun;
+        payload.postgres_first_run = pgFirstRun === "now"
+          ? "now"
+          : new Date(pgFirstRun).toISOString();
       }
       if (settings.config_schedule_enabled && !settings.config_next_run) {
-        payload.config_first_run = cfgFirstRun;
+        payload.config_first_run = cfgFirstRun === "now"
+          ? "now"
+          : new Date(cfgFirstRun).toISOString();
       }
       const result = await api.put<{ status: string; settings: BackupSettings }>(
         "/api/backups/settings", payload
