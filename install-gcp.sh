@@ -62,6 +62,7 @@ REQUIRED_APIS=(
     "bigquery.googleapis.com"
     "artifactregistry.googleapis.com"
     "cloudbuild.googleapis.com"
+    "secretmanager.googleapis.com"
     "serviceusage.googleapis.com"
     "logging.googleapis.com"
 )
