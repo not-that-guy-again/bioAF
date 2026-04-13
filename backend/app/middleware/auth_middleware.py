@@ -32,8 +32,17 @@ _PLOT_THUMBNAIL_CONTENT_RE = re.compile(r"^/api/plots/\d+/thumbnail/content$")
 
 
 def _is_file_content_path(path: str) -> bool:
-    """Return True for paths that legitimately need query-param token auth."""
+    """Return True for paths that accept content-token query-param auth."""
     return _FILE_CONTENT_RE.match(path) is not None or _PLOT_THUMBNAIL_CONTENT_RE.match(path) is not None
+
+
+_RESOURCE_ID_RE = re.compile(r"/(\d+)/(?:content|thumbnail/content)$")
+
+
+def _extract_resource_id(path: str) -> int | None:
+    """Pull the numeric resource ID from a content path."""
+    m = _RESOURCE_ID_RE.search(path)
+    return int(m.group(1)) if m else None
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -57,15 +66,29 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     pass
             return await call_next(request)
 
-        # Extract token from Authorization header.
-        # Query parameter tokens are only accepted on file content paths
-        # (used by <img src> tags that cannot send Authorization headers).
+        # Content paths (file/plot inline display) accept short-lived content
+        # tokens in query params instead of full session JWTs. This prevents
+        # the 24-hour session token from leaking into logs, referrer headers,
+        # and browser history (pentest finding #5).
+        if _is_file_content_path(path) and request.query_params.get("token"):
+            from app.api.content_tokens import validate_content_token
+
+            try:
+                payload = validate_content_token(request.query_params["token"])
+                # Verify the token is scoped to the requested resource
+                resource_id = _extract_resource_id(path)
+                if payload.get("resource_id") != resource_id:
+                    return JSONResponse(status_code=401, content={"detail": "Token not valid for this resource"})
+                request.state.current_user = payload
+                return await call_next(request)
+            except (ValueError, Exception):
+                return JSONResponse(status_code=401, content={"detail": "Invalid or expired content token"})
+
+        # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
         token: str | None = None
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.split(" ", 1)[1]
-        elif request.query_params.get("token") and _is_file_content_path(path):
-            token = request.query_params["token"]
 
         if not token:
             return JSONResponse(status_code=401, content={"detail": "Missing or invalid authorization header"})
