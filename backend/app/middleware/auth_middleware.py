@@ -10,7 +10,6 @@ from app.services.auth_service import AuthService
 PUBLIC_PATHS = {
     "/api/health/live",
     "/api/health/ready",
-    "/api/health/status",
     "/api/auth/login",
     "/api/auth/verify-email",
     "/api/auth/request-reset",
@@ -41,12 +40,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # Skip auth for public endpoints
-        if (
-            path in PUBLIC_PATHS
-            or path.startswith("/api/health")
-            or (path.startswith("/api/v1/work-nodes/sessions/") and path.endswith("/heartbeat"))
-        ):
+        is_public = path in PUBLIC_PATHS or (
+            path.startswith("/api/v1/work-nodes/sessions/") and path.endswith("/heartbeat")
+        )
+
+        # For public endpoints, still attempt to populate current_user if a
+        # valid token is present so handlers can adjust their response for
+        # authenticated vs unauthenticated callers.
+        if is_public:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                try:
+                    payload = AuthService.validate_token(auth_header.split(" ", 1)[1])
+                    request.state.current_user = payload
+                except Exception:
+                    pass
             return await call_next(request)
 
         # Extract token from Authorization header.
