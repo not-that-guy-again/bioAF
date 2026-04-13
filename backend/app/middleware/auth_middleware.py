@@ -21,6 +21,8 @@ PUBLIC_PATHS = {
     "/api/bootstrap/verify-setup-code",
     "/api/users/accept-invite",
     "/api/notifications/slack/callback",
+    # Docs paths pass through to FastAPI which returns 404 in production
+    # (docs_url=None) or serves Swagger UI in development.
     "/docs",
     "/openapi.json",
 }
