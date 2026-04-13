@@ -26,6 +26,11 @@ function PlotThumbnail({
   const isPdf = fileType === "pdf";
   const hasThumbnail = !!plot.thumbnail_url;
 
+  // Hooks must be called unconditionally (before any early returns)
+  const thumbnailUrl = usePlotThumbnailContentUrl(isPdf && hasThumbnail ? plot.id : null);
+  const fileUrl = useFileContentUrl(!isPdf || !hasThumbnail ? (plot.file?.id ?? null) : null);
+  const imgUrl = (isPdf && hasThumbnail ? thumbnailUrl : fileUrl) ?? "";
+
   // For PDFs without a generated thumbnail, show file-type icon
   if (isPdf && !hasThumbnail) {
     return (
@@ -41,11 +46,6 @@ function PlotThumbnail({
       </button>
     );
   }
-
-  // Determine the image source: thumbnail for PDFs, content for images
-  const thumbnailUrl = usePlotThumbnailContentUrl(isPdf && hasThumbnail ? plot.id : null);
-  const fileUrl = useFileContentUrl(!isPdf || !hasThumbnail ? (plot.file?.id ?? null) : null);
-  const imgUrl = (isPdf && hasThumbnail ? thumbnailUrl : fileUrl) ?? "";
 
   if (error) {
     return (
