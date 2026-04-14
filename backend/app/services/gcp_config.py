@@ -12,6 +12,7 @@ patches (``service_account``, ``resourcemanager_v3``, ``storage``,
 """
 
 import json
+import logging
 
 import google.auth as _google_auth
 from google.auth import impersonated_credentials as _impersonated_credentials
@@ -20,6 +21,8 @@ from google.cloud import service_usage_v1
 from google.oauth2 import service_account
 
 from app.schemas.gcp_config import GCPValidationCheck, GCPValidationResult, PermissionDetail
+
+logger = logging.getLogger("bioaf.gcp_config")
 
 # Aliases for patching in tests
 google_auth_default = _google_auth.default
@@ -241,8 +244,8 @@ def validate_gcp_credentials(
     # Some permissions (storage.buckets.*, pubsub.topics.*) cannot be
     # tested via testIamPermissions on a project resource -- the API
     # simply doesn't return them even when the role is granted.  For
-    # those, fall back to checking whether the SA has the required
-    # role binding on the project IAM policy.
+    # those, verify that the SA has the required role bound in the
+    # project IAM policy instead.
     # ------------------------------------------------------------------
     # Permissions that testIamPermissions on projects/ can't validate
     _ROLE_CHECK_PERMISSIONS = {
@@ -259,6 +262,7 @@ def validate_gcp_credentials(
     granted: set[str] = set()
 
     # Part A: testIamPermissions for permissions the API supports
+    rm_client = None
     try:
         rm_client = resourcemanager_v3.ProjectsClient(credentials=creds)
         resp = rm_client.test_iam_permissions(
@@ -269,8 +273,9 @@ def validate_gcp_credentials(
     except Exception as exc:
         checks.append(GCPValidationCheck(name="iam_permissions", passed=False, message=str(exc)))
 
-    # Part B: for permissions the API can't test, verify the SA has
-    # the required role bound at the project level.
+    # Part B: for permissions the API can't test, check role bindings
+    # in the project IAM policy.  Determine the SA email from the key
+    # JSON or the configured email.
     sa_email_for_check = service_account_email
     if not sa_email_for_check and service_account_key:
         import json as _json
@@ -280,16 +285,21 @@ def validate_gcp_credentials(
         except Exception:
             pass
 
+    # For vm_default credentials without an explicit email, try to
+    # extract the SA email from the credentials object itself.
+    if not sa_email_for_check and creds is not None:
+        sa_email_for_check = getattr(creds, "service_account_email", "") or ""
+
     bound_roles: set[str] = set()
-    if sa_email_for_check and role_check_permissions:
+    if sa_email_for_check and role_check_permissions and rm_client is not None:
         try:
             policy = rm_client.get_iam_policy(resource=f"projects/{project_id}")
             sa_member = f"serviceAccount:{sa_email_for_check}"
             for binding in policy.bindings:
                 if sa_member in binding.members:
                     bound_roles.add(binding.role)
-        except Exception:
-            pass  # If we can't read the policy, these will show as missing
+        except Exception as exc:
+            logger.warning("Could not read IAM policy for role-binding check: %s", exc)
 
     for perm in role_check_permissions:
         required_role = _PERMISSION_ROLE_MAP[perm]
