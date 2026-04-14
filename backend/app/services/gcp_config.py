@@ -236,46 +236,95 @@ def validate_gcp_credentials(
 
     # ------------------------------------------------------------------
     # Check 6: IAM permissions -- verify the service account has the
-    # required project-level permissions via testIamPermissions
+    # required project-level permissions via testIamPermissions.
+    #
+    # Some permissions (storage.buckets.*, pubsub.topics.*) cannot be
+    # tested via testIamPermissions on a project resource -- the API
+    # simply doesn't return them even when the role is granted.  For
+    # those, fall back to checking whether the SA has the required
+    # role binding on the project IAM policy.
     # ------------------------------------------------------------------
-    required_permissions = list(_PERMISSION_ROLE_MAP.keys())
+    # Permissions that testIamPermissions on projects/ can't validate
+    _ROLE_CHECK_PERMISSIONS = {
+        "storage.buckets.create",
+        "pubsub.topics.create",
+        "pubsub.topics.getIamPolicy",
+        "pubsub.topics.setIamPolicy",
+    }
+
+    testable_permissions = [p for p in _PERMISSION_ROLE_MAP if p not in _ROLE_CHECK_PERMISSIONS]
+    role_check_permissions = [p for p in _PERMISSION_ROLE_MAP if p in _ROLE_CHECK_PERMISSIONS]
+
     permission_details: list[PermissionDetail] = []
+    granted: set[str] = set()
+
+    # Part A: testIamPermissions for permissions the API supports
     try:
         rm_client = resourcemanager_v3.ProjectsClient(credentials=creds)
         resp = rm_client.test_iam_permissions(
             resource=f"projects/{project_id}",
-            permissions=required_permissions,
+            permissions=testable_permissions,
         )
         granted = set(resp.permissions)
-        missing_perms = [p for p in required_permissions if p not in granted]
-
-        for perm in required_permissions:
-            permission_details.append(
-                PermissionDetail(
-                    permission=perm,
-                    granted=perm in granted,
-                    recommended_role=_PERMISSION_ROLE_MAP[perm],
-                )
-            )
-
-        if missing_perms:
-            checks.append(
-                GCPValidationCheck(
-                    name="iam_permissions",
-                    passed=False,
-                    message=f"Missing permissions: {', '.join(missing_perms)}",
-                )
-            )
-        else:
-            checks.append(
-                GCPValidationCheck(
-                    name="iam_permissions",
-                    passed=True,
-                    message="All required IAM permissions are granted",
-                )
-            )
     except Exception as exc:
         checks.append(GCPValidationCheck(name="iam_permissions", passed=False, message=str(exc)))
+
+    # Part B: for permissions the API can't test, verify the SA has
+    # the required role bound at the project level.
+    sa_email_for_check = service_account_email
+    if not sa_email_for_check and service_account_key:
+        import json as _json
+
+        try:
+            sa_email_for_check = _json.loads(service_account_key).get("client_email", "")
+        except Exception:
+            pass
+
+    bound_roles: set[str] = set()
+    if sa_email_for_check and role_check_permissions:
+        try:
+            policy = rm_client.get_iam_policy(resource=f"projects/{project_id}")
+            sa_member = f"serviceAccount:{sa_email_for_check}"
+            for binding in policy.bindings:
+                if sa_member in binding.members:
+                    bound_roles.add(binding.role)
+        except Exception:
+            pass  # If we can't read the policy, these will show as missing
+
+    for perm in role_check_permissions:
+        required_role = _PERMISSION_ROLE_MAP[perm]
+        if required_role in bound_roles:
+            granted.add(perm)
+
+    # Build the results
+    all_permissions = list(_PERMISSION_ROLE_MAP.keys())
+    missing_perms = [p for p in all_permissions if p not in granted]
+
+    for perm in all_permissions:
+        permission_details.append(
+            PermissionDetail(
+                permission=perm,
+                granted=perm in granted,
+                recommended_role=_PERMISSION_ROLE_MAP[perm],
+            )
+        )
+
+    if missing_perms:
+        checks.append(
+            GCPValidationCheck(
+                name="iam_permissions",
+                passed=False,
+                message=f"Missing permissions: {', '.join(missing_perms)}",
+            )
+        )
+    else:
+        checks.append(
+            GCPValidationCheck(
+                name="iam_permissions",
+                passed=True,
+                message="All required IAM permissions are granted",
+            )
+        )
 
     # ------------------------------------------------------------------
     # Check 6: Storage write access -- attempt to get bucket metadata
