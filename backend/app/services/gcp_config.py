@@ -12,7 +12,6 @@ patches (``service_account``, ``resourcemanager_v3``, ``storage``,
 """
 
 import json
-import logging
 
 import google.auth as _google_auth
 from google.auth import impersonated_credentials as _impersonated_credentials
@@ -21,8 +20,6 @@ from google.cloud import service_usage_v1
 from google.oauth2 import service_account
 
 from app.schemas.gcp_config import GCPValidationCheck, GCPValidationResult, PermissionDetail
-
-logger = logging.getLogger("bioaf.gcp_config")
 
 # Aliases for patching in tests
 google_auth_default = _google_auth.default
@@ -239,87 +236,46 @@ def validate_gcp_credentials(
 
     # ------------------------------------------------------------------
     # Check 6: IAM permissions -- verify the service account has the
-    # required project-level permissions via testIamPermissions.
-    #
-    # Some permissions (storage.buckets.*, pubsub.topics.*) cannot be
-    # tested via testIamPermissions on a project resource -- the API
-    # simply does not return them even when the role is granted.  For
-    # those, verify access by calling the actual service API.
+    # required project-level permissions via testIamPermissions
     # ------------------------------------------------------------------
-    _API_CHECK_PERMISSIONS = {
-        "storage.buckets.create",
-        "pubsub.topics.create",
-        "pubsub.topics.getIamPolicy",
-        "pubsub.topics.setIamPolicy",
-    }
-
-    testable_permissions = [p for p in _PERMISSION_ROLE_MAP if p not in _API_CHECK_PERMISSIONS]
-
+    required_permissions = list(_PERMISSION_ROLE_MAP.keys())
     permission_details: list[PermissionDetail] = []
-    granted: set[str] = set()
-
-    # Part A: testIamPermissions for permissions the API supports
     try:
         rm_client = resourcemanager_v3.ProjectsClient(credentials=creds)
         resp = rm_client.test_iam_permissions(
             resource=f"projects/{project_id}",
-            permissions=testable_permissions,
+            permissions=required_permissions,
         )
         granted = set(resp.permissions)
+        missing_perms = [p for p in required_permissions if p not in granted]
+
+        for perm in required_permissions:
+            permission_details.append(
+                PermissionDetail(
+                    permission=perm,
+                    granted=perm in granted,
+                    recommended_role=_PERMISSION_ROLE_MAP[perm],
+                )
+            )
+
+        if missing_perms:
+            checks.append(
+                GCPValidationCheck(
+                    name="iam_permissions",
+                    passed=False,
+                    message=f"Missing permissions: {', '.join(missing_perms)}",
+                )
+            )
+        else:
+            checks.append(
+                GCPValidationCheck(
+                    name="iam_permissions",
+                    passed=True,
+                    message="All required IAM permissions are granted",
+                )
+            )
     except Exception as exc:
         checks.append(GCPValidationCheck(name="iam_permissions", passed=False, message=str(exc)))
-
-    # Part B: for storage and pubsub permissions that testIamPermissions
-    # cannot validate, probe the actual APIs.
-    # Storage: if we can list buckets, roles/storage.admin is working.
-    try:
-        storage_client = storage.Client(project=project_id, credentials=creds)
-        list(storage_client.list_buckets(max_results=1))
-        granted.add("storage.buckets.create")
-    except Exception as exc:
-        logger.warning("Storage API probe failed: %s", exc)
-
-    # Pub/Sub: if we can list topics, roles/pubsub.admin is working.
-    try:
-        from google.cloud import pubsub_v1
-
-        publisher = pubsub_v1.PublisherClient(credentials=creds)
-        list(publisher.list_topics(request={"project": f"projects/{project_id}"}, timeout=10))
-        granted.add("pubsub.topics.create")
-        granted.add("pubsub.topics.getIamPolicy")
-        granted.add("pubsub.topics.setIamPolicy")
-    except Exception as exc:
-        logger.warning("Pub/Sub API probe failed: %s", exc)
-
-    # Build the results
-    all_permissions = list(_PERMISSION_ROLE_MAP.keys())
-    missing_perms = [p for p in all_permissions if p not in granted]
-
-    for perm in all_permissions:
-        permission_details.append(
-            PermissionDetail(
-                permission=perm,
-                granted=perm in granted,
-                recommended_role=_PERMISSION_ROLE_MAP[perm],
-            )
-        )
-
-    if missing_perms:
-        checks.append(
-            GCPValidationCheck(
-                name="iam_permissions",
-                passed=False,
-                message=f"Missing permissions: {', '.join(missing_perms)}",
-            )
-        )
-    else:
-        checks.append(
-            GCPValidationCheck(
-                name="iam_permissions",
-                passed=True,
-                message="All required IAM permissions are granted",
-            )
-        )
 
     # ------------------------------------------------------------------
     # Check 6: Storage write access -- attempt to get bucket metadata
