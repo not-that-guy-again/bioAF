@@ -45,7 +45,7 @@ IMAGE_FAMILY="ubuntu-2204-lts"
 IMAGE_PROJECT="ubuntu-os-cloud"
 FIREWALL_RULE_NAME="bioaf-allow-web"
 NETWORK_TAG="bioaf"
-SA_NAME="bioaf-app"
+SA_NAME_PREFIX="bioaf-app"
 SA_DISPLAY_NAME="bioAF Application"
 
 # Regions that tend to have lower costs and good availability
@@ -479,30 +479,37 @@ read -rp "  Create a service account for bioAF? [Y/n] " create_sa
 
 SA_KEY_PATH=""
 if [ "$create_sa" != "n" ] && [ "$create_sa" != "N" ]; then
+    SA_SUFFIX=$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 6)
+    SA_NAME="${SA_NAME_PREFIX}-${SA_SUFFIX}"
     SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-    existing_sa=$(gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" --format="value(email)" 2>/dev/null || echo "")
-    if [ -n "$existing_sa" ]; then
-        yellow "  Service account '$SA_EMAIL' already exists."
-    else
-        echo "  Creating service account..."
-        gcloud iam service-accounts create "$SA_NAME" \
-            --project="$PROJECT_ID" \
-            --display-name="$SA_DISPLAY_NAME" \
-            --description="Service account for bioAF application" \
-            --quiet
-        green "  Service account created: $SA_EMAIL"
-    fi
+    echo "  Creating service account..."
+    gcloud iam service-accounts create "$SA_NAME" \
+        --project="$PROJECT_ID" \
+        --display-name="$SA_DISPLAY_NAME" \
+        --description="Service account for bioAF application" \
+        --quiet
+    green "  Service account created: $SA_EMAIL"
 
-    # Grant roles
+    # Grant roles and verify each one took effect
     echo "  Granting permissions..."
+    grant_failures=0
     for role in "${SA_ROLES[@]}"; do
-        gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+        if ! gcloud projects add-iam-policy-binding "$PROJECT_ID" \
             --member="serviceAccount:$SA_EMAIL" \
             --role="$role" \
-            --quiet >/dev/null 2>&1 || true
+            --quiet >/dev/null 2>&1; then
+            red "  Failed to grant $role"
+            grant_failures=$((grant_failures + 1))
+        fi
     done
-    green "  Permissions granted."
+
+    if [ "$grant_failures" -gt 0 ]; then
+        red "  $grant_failures role(s) failed to grant. The service account may not"
+        red "  have all required permissions. Check the GCP console."
+    else
+        green "  All permissions granted."
+    fi
 
     # Generate key
     SA_KEY_PATH="$HOME/Desktop/bioaf-sa-key.json"
