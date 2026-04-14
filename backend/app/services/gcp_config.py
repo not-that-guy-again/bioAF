@@ -243,26 +243,22 @@ def validate_gcp_credentials(
     #
     # Some permissions (storage.buckets.*, pubsub.topics.*) cannot be
     # tested via testIamPermissions on a project resource -- the API
-    # simply doesn't return them even when the role is granted.  For
-    # those, verify that the SA has the required role bound in the
-    # project IAM policy instead.
+    # simply does not return them even when the role is granted.  For
+    # those, verify access by calling the actual service API.
     # ------------------------------------------------------------------
-    # Permissions that testIamPermissions on projects/ can't validate
-    _ROLE_CHECK_PERMISSIONS = {
+    _API_CHECK_PERMISSIONS = {
         "storage.buckets.create",
         "pubsub.topics.create",
         "pubsub.topics.getIamPolicy",
         "pubsub.topics.setIamPolicy",
     }
 
-    testable_permissions = [p for p in _PERMISSION_ROLE_MAP if p not in _ROLE_CHECK_PERMISSIONS]
-    role_check_permissions = [p for p in _PERMISSION_ROLE_MAP if p in _ROLE_CHECK_PERMISSIONS]
+    testable_permissions = [p for p in _PERMISSION_ROLE_MAP if p not in _API_CHECK_PERMISSIONS]
 
     permission_details: list[PermissionDetail] = []
     granted: set[str] = set()
 
     # Part A: testIamPermissions for permissions the API supports
-    rm_client = None
     try:
         rm_client = resourcemanager_v3.ProjectsClient(credentials=creds)
         resp = rm_client.test_iam_permissions(
@@ -273,38 +269,27 @@ def validate_gcp_credentials(
     except Exception as exc:
         checks.append(GCPValidationCheck(name="iam_permissions", passed=False, message=str(exc)))
 
-    # Part B: for permissions the API can't test, check role bindings
-    # in the project IAM policy.  Determine the SA email from the key
-    # JSON or the configured email.
-    sa_email_for_check = service_account_email
-    if not sa_email_for_check and service_account_key:
-        import json as _json
+    # Part B: for storage and pubsub permissions that testIamPermissions
+    # cannot validate, probe the actual APIs.
+    # Storage: if we can list buckets, roles/storage.admin is working.
+    try:
+        storage_client = storage.Client(project=project_id, credentials=creds)
+        list(storage_client.list_buckets(max_results=1))
+        granted.add("storage.buckets.create")
+    except Exception as exc:
+        logger.warning("Storage API probe failed: %s", exc)
 
-        try:
-            sa_email_for_check = _json.loads(service_account_key).get("client_email", "")
-        except Exception:
-            pass
+    # Pub/Sub: if we can list topics, roles/pubsub.admin is working.
+    try:
+        from google.cloud import pubsub_v1
 
-    # For vm_default credentials without an explicit email, try to
-    # extract the SA email from the credentials object itself.
-    if not sa_email_for_check and creds is not None:
-        sa_email_for_check = getattr(creds, "service_account_email", "") or ""
-
-    bound_roles: set[str] = set()
-    if sa_email_for_check and role_check_permissions and rm_client is not None:
-        try:
-            policy = rm_client.get_iam_policy(resource=f"projects/{project_id}")
-            sa_member = f"serviceAccount:{sa_email_for_check}"
-            for binding in policy.bindings:
-                if sa_member in binding.members:
-                    bound_roles.add(binding.role)
-        except Exception as exc:
-            logger.warning("Could not read IAM policy for role-binding check: %s", exc)
-
-    for perm in role_check_permissions:
-        required_role = _PERMISSION_ROLE_MAP[perm]
-        if required_role in bound_roles:
-            granted.add(perm)
+        publisher = pubsub_v1.PublisherClient(credentials=creds)
+        list(publisher.list_topics(request={"project": f"projects/{project_id}"}, timeout=10))
+        granted.add("pubsub.topics.create")
+        granted.add("pubsub.topics.getIamPolicy")
+        granted.add("pubsub.topics.setIamPolicy")
+    except Exception as exc:
+        logger.warning("Pub/Sub API probe failed: %s", exc)
 
     # Build the results
     all_permissions = list(_PERMISSION_ROLE_MAP.keys())
