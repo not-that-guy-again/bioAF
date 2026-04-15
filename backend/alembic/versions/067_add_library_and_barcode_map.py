@@ -88,12 +88,8 @@ def upgrade() -> None:
         ),
     )
     op.create_index("idx_libraries_sample_id", "libraries", ["sample_id"])
-    op.create_index(
-        "idx_libraries_sequencing_batch_id", "libraries", ["sequencing_batch_id"]
-    )
-    op.create_index(
-        "idx_libraries_i7_i5", "libraries", ["i7_sequence", "i5_sequence"]
-    )
+    op.create_index("idx_libraries_sequencing_batch_id", "libraries", ["sequencing_batch_id"])
+    op.create_index("idx_libraries_i7_i5", "libraries", ["i7_sequence", "i5_sequence"])
 
     op.create_table(
         "barcode_maps",
@@ -116,9 +112,7 @@ def upgrade() -> None:
         sa.Column("read_position", sa.String(length=8), nullable=True),
         sa.Column("offset_in_read", sa.Integer(), nullable=True),
         sa.Column("length", sa.Integer(), nullable=True),
-        sa.Column(
-            "allowed_mismatches", sa.Integer(), nullable=True, server_default="1"
-        ),
+        sa.Column("allowed_mismatches", sa.Integer(), nullable=True, server_default="1"),
         sa.Column("whitelist_reference", sa.String(length=255), nullable=True),
         sa.Column("attributes_json", postgresql.JSONB(), nullable=True),
         sa.Column(

@@ -40,9 +40,7 @@ def _canonicalize(seq: str | None) -> str | None:
 
 class LibraryService:
     @staticmethod
-    async def _assert_sample_in_org(
-        session: AsyncSession, org_id: int, sample_id: int
-    ) -> Sample:
+    async def _assert_sample_in_org(session: AsyncSession, org_id: int, sample_id: int) -> Sample:
         """Verify sample belongs to an experiment in the caller's organization."""
         from app.models.experiment import Experiment
 
@@ -61,27 +59,27 @@ class LibraryService:
         return sample
 
     @staticmethod
-    async def _get_library_in_org(
-        session: AsyncSession, org_id: int, library_id: int
-    ) -> Library:
+    async def _get_library_in_org(session: AsyncSession, org_id: int, library_id: int) -> Library:
         lib = await session.get(Library, library_id)
         if lib is None or lib.organization_id != org_id:
             raise HTTPException(status_code=404, detail="Library not found")
         return lib
 
     @staticmethod
-    async def rebuild_library_index_barcodes(
-        session: AsyncSession, library: Library
-    ) -> None:
+    async def rebuild_library_index_barcodes(session: AsyncSession, library: Library) -> None:
         """Delete and regenerate library_index BarcodeMap rows from the library's index fields."""
         existing = (
-            await session.execute(
-                select(BarcodeMap).where(
-                    BarcodeMap.library_id == library.id,
-                    BarcodeMap.barcode_type == "library_index",
+            (
+                await session.execute(
+                    select(BarcodeMap).where(
+                        BarcodeMap.library_id == library.id,
+                        BarcodeMap.barcode_type == "library_index",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in existing:
             await session.delete(row)
         await session.flush()
@@ -153,7 +151,11 @@ class LibraryService:
         await LibraryService.rebuild_library_index_barcodes(session, lib)
 
         await log_action(
-            session, user_id, "library", lib.id, "created",
+            session,
+            user_id,
+            "library",
+            lib.id,
+            "created",
             details={"sample_id": lib.sample_id, "index_type": lib.index_type},
         )
         asyncio.create_task(
@@ -195,7 +197,11 @@ class LibraryService:
             await LibraryService.rebuild_library_index_barcodes(session, lib)
 
         await log_action(
-            session, user_id, "library", lib.id, "updated",
+            session,
+            user_id,
+            "library",
+            lib.id,
+            "updated",
             details={k: v for k, v in data.items()},
         )
         asyncio.create_task(
@@ -212,45 +218,47 @@ class LibraryService:
         return lib
 
     @staticmethod
-    async def get_library(
-        session: AsyncSession, org_id: int, library_id: int
-    ) -> Library:
+    async def get_library(session: AsyncSession, org_id: int, library_id: int) -> Library:
         return await LibraryService._get_library_in_org(session, org_id, library_id)
 
     @staticmethod
-    async def list_libraries_for_sample(
-        session: AsyncSession, org_id: int, sample_id: int
-    ) -> list[Library]:
+    async def list_libraries_for_sample(session: AsyncSession, org_id: int, sample_id: int) -> list[Library]:
         await LibraryService._assert_sample_in_org(session, org_id, sample_id)
         rows = (
-            await session.execute(
-                select(Library).where(
-                    Library.organization_id == org_id,
-                    Library.sample_id == sample_id,
+            (
+                await session.execute(
+                    select(Library).where(
+                        Library.organization_id == org_id,
+                        Library.sample_id == sample_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return list(rows)
 
     @staticmethod
-    async def list_libraries_for_experiment(
-        session: AsyncSession, org_id: int, experiment_id: int
-    ) -> list[Library]:
+    async def list_libraries_for_experiment(session: AsyncSession, org_id: int, experiment_id: int) -> list[Library]:
         from app.models.experiment import Experiment
 
         exp = await session.get(Experiment, experiment_id)
         if exp is None or exp.organization_id != org_id:
             raise HTTPException(status_code=404, detail="Experiment not found")
         rows = (
-            await session.execute(
-                select(Library)
-                .join(Sample, Library.sample_id == Sample.id)
-                .where(
-                    Library.organization_id == org_id,
-                    Sample.experiment_id == experiment_id,
+            (
+                await session.execute(
+                    select(Library)
+                    .join(Sample, Library.sample_id == Sample.id)
+                    .where(
+                        Library.organization_id == org_id,
+                        Sample.experiment_id == experiment_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         return list(rows)
 
     @staticmethod
@@ -277,14 +285,16 @@ class LibraryService:
             )
         ).first()
         if existing is None:
-            await session.execute(
-                sample_files.insert().values(sample_id=lib.sample_id, file_id=f.id)
-            )
+            await session.execute(sample_files.insert().values(sample_id=lib.sample_id, file_id=f.id))
 
         await session.flush()
 
         await log_action(
-            session, user_id, "library", lib.id, "file_attached",
+            session,
+            user_id,
+            "library",
+            lib.id,
+            "file_attached",
             details={"file_id": f.id, "sample_id": lib.sample_id},
         )
         asyncio.create_task(

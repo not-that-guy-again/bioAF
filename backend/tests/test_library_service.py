@@ -45,13 +45,17 @@ async def test_create_library_populates_library_index_barcodes(session):
     assert lib.i7_sequence == "GCATACGA"
 
     rows = (
-        await session.execute(
-            select(BarcodeMap).where(
-                BarcodeMap.library_id == lib.id,
-                BarcodeMap.barcode_type == "library_index",
+        (
+            await session.execute(
+                select(BarcodeMap).where(
+                    BarcodeMap.library_id == lib.id,
+                    BarcodeMap.barcode_type == "library_index",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     by_position = {r.read_position: r.sequence for r in rows}
     assert by_position == {"I1": "GCATACGA", "I2": "AAGTCCGT"}
 
@@ -70,11 +74,7 @@ async def test_create_library_single_index_only_i7(session):
     lib = await LibraryService.create_library(session, org.id, payload)
     await session.commit()
 
-    rows = (
-        await session.execute(
-            select(BarcodeMap).where(BarcodeMap.library_id == lib.id)
-        )
-    ).scalars().all()
+    rows = (await session.execute(select(BarcodeMap).where(BarcodeMap.library_id == lib.id))).scalars().all()
     assert len(rows) == 1
     assert rows[0].read_position == "I1"
     assert rows[0].sequence == "GCATACGA"
@@ -120,13 +120,17 @@ async def test_update_library_rebuilds_library_index_rows(session):
     await session.commit()
 
     rows = (
-        await session.execute(
-            select(BarcodeMap).where(
-                BarcodeMap.library_id == lib.id,
-                BarcodeMap.barcode_type == "library_index",
+        (
+            await session.execute(
+                select(BarcodeMap).where(
+                    BarcodeMap.library_id == lib.id,
+                    BarcodeMap.barcode_type == "library_index",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     by_position = {r.read_position: r.sequence for r in rows}
     assert by_position == {"I1": "CCCC", "I2": "TTTT"}
 
@@ -170,9 +174,7 @@ async def test_attach_file_sets_library_and_sample_link(session):
     from app.services.library_service import LibraryService
 
     org, _, sample = await _setup(session)
-    lib = await LibraryService.create_library(
-        session, org.id, LibraryCreate(sample_id=sample.id)
-    )
+    lib = await LibraryService.create_library(session, org.id, LibraryCreate(sample_id=sample.id))
     f = File(
         organization_id=org.id,
         gcs_uri="gs://x/a.fq.gz",

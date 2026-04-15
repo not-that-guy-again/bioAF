@@ -57,9 +57,7 @@ class Library(Base):
     qc_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     qc_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    sequencing_batch_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("sequencing_batches.id"), nullable=True
-    )
+    sequencing_batch_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sequencing_batches.id"), nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, server_default="planned")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

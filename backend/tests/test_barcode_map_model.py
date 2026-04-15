@@ -120,7 +120,5 @@ async def test_library_cascades_to_barcode_maps(session):
     await session.delete(await session.get(Library, lib.id))
     await session.flush()
 
-    remaining = (
-        await session.execute(select(BarcodeMap).where(BarcodeMap.library_id == lib.id))
-    ).scalars().all()
+    remaining = (await session.execute(select(BarcodeMap).where(BarcodeMap.library_id == lib.id))).scalars().all()
     assert remaining == []

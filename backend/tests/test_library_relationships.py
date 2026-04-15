@@ -33,9 +33,7 @@ async def test_sample_has_libraries_relationship(session):
     await session.flush()
 
     fetched = (
-        await session.execute(
-            select(Sample).options(selectinload(Sample.libraries)).where(Sample.id == sample.id)
-        )
+        await session.execute(select(Sample).options(selectinload(Sample.libraries)).where(Sample.id == sample.id))
     ).scalar_one()
     external_ids = sorted(lib.library_id_external for lib in fetched.libraries)
     assert external_ids == ["A", "B"]
@@ -66,13 +64,9 @@ async def test_file_library_id_nullable_and_relationship(session):
     await session.flush()
 
     fetched_linked = (
-        await session.execute(
-            select(File).options(selectinload(File.library)).where(File.id == f_linked.id)
-        )
+        await session.execute(select(File).options(selectinload(File.library)).where(File.id == f_linked.id))
     ).scalar_one()
-    fetched_unlinked = (
-        await session.execute(select(File).where(File.id == f_unlinked.id))
-    ).scalar_one()
+    fetched_unlinked = (await session.execute(select(File).where(File.id == f_unlinked.id))).scalar_one()
 
     assert fetched_linked.library_id == lib.id
     assert fetched_linked.library.id == lib.id
@@ -99,9 +93,7 @@ async def test_library_files_backref(session):
     await session.flush()
 
     fetched = (
-        await session.execute(
-            select(Library).options(selectinload(Library.files)).where(Library.id == lib.id)
-        )
+        await session.execute(select(Library).options(selectinload(Library.files)).where(Library.id == lib.id))
     ).scalar_one()
     assert len(fetched.files) == 1
     assert fetched.files[0].filename == "c.fastq.gz"

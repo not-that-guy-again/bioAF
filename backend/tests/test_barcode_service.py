@@ -74,9 +74,7 @@ async def test_lookup_by_sequence_returns_matches(session):
     from app.schemas.barcode_map import BarcodeMapCreate
     from app.services.barcode_service import BarcodeService
 
-    org, _, lib = await _make_library(
-        session, index_type="dual", i5_sequence="TTTT", i7_sequence="AAAA"
-    )
+    org, _, lib = await _make_library(session, index_type="dual", i5_sequence="TTTT", i7_sequence="AAAA")
     await BarcodeService.create_barcode_map(
         session,
         org.id,
@@ -89,9 +87,7 @@ async def test_lookup_by_sequence_returns_matches(session):
     matches = await BarcodeService.lookup_by_sequence(session, org.id, "aaaa")
     assert any(m.sequence == "AAAA" and m.barcode_type == "library_index" for m in matches)
 
-    filtered = await BarcodeService.lookup_by_sequence(
-        session, org.id, "GGGG", barcode_type="hashtag"
-    )
+    filtered = await BarcodeService.lookup_by_sequence(session, org.id, "GGGG", barcode_type="hashtag")
     assert len(filtered) == 1
     assert filtered[0].name == "HT-A"
 
@@ -102,9 +98,7 @@ async def test_lookup_is_org_scoped(session):
     from app.models.sample import Sample
     from app.services.barcode_service import BarcodeService
 
-    org_a, _, lib_a = await _make_library(
-        session, index_type="single", i7_sequence="AAAA"
-    )
+    org_a, _, lib_a = await _make_library(session, index_type="single", i7_sequence="AAAA")
     # Other org with colliding sequence.
     org_b = Organization(name="Other BC Org", setup_complete=True)
     session.add(org_b)
@@ -115,9 +109,7 @@ async def test_lookup_is_org_scoped(session):
     sample_b = Sample(experiment_id=exp_b.id)
     session.add(sample_b)
     await session.flush()
-    await _make_library(
-        session, org=org_b, sample=sample_b, index_type="single", i7_sequence="AAAA"
-    )
+    await _make_library(session, org=org_b, sample=sample_b, index_type="single", i7_sequence="AAAA")
 
     matches_a = await BarcodeService.lookup_by_sequence(session, org_a.id, "AAAA")
     for m in matches_a:
@@ -133,9 +125,7 @@ async def test_detect_collisions_in_batch(session):
     from app.services.barcode_service import BarcodeService
     from app.services.library_service import LibraryService
 
-    org, seed_sample, _ = await _make_library(
-        session, index_type="dual", i5_sequence="TTTT", i7_sequence="AAAA"
-    )
+    org, seed_sample, _ = await _make_library(session, index_type="dual", i5_sequence="TTTT", i7_sequence="AAAA")
 
     batch = SequencingBatch(organization_id=org.id, code="BC-1", status="pending")
     session.add(batch)
@@ -205,12 +195,8 @@ async def test_bulk_create_barcode_maps(session):
     org, _, lib = await _make_library(session)
     payload = BarcodeMapBulkCreate(
         entries=[
-            BarcodeMapCreate(
-                barcode_type="sgrna", sequence="AAAAAA", name="g1", read_position="R1"
-            ),
-            BarcodeMapCreate(
-                barcode_type="sgrna", sequence="CCCCCC", name="g2", read_position="R1"
-            ),
+            BarcodeMapCreate(barcode_type="sgrna", sequence="AAAAAA", name="g1", read_position="R1"),
+            BarcodeMapCreate(barcode_type="sgrna", sequence="CCCCCC", name="g2", read_position="R1"),
         ]
     )
     rows = await BarcodeService.bulk_create_barcode_maps(session, org.id, lib.id, payload)

@@ -34,9 +34,7 @@ class File(Base):
     sha256_checksum: Mapped[str | None] = mapped_column(String(64), nullable=True)
     artifact_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     sequencing_batch_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("sequencing_batches.id"), nullable=True)
-    library_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("libraries.id"), nullable=True, index=True
-    )
+    library_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("libraries.id"), nullable=True, index=True)
     storage_deleted: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

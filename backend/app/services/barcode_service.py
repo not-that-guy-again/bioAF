@@ -24,9 +24,7 @@ MAX_BARCODES_PER_LIBRARY = 10_000
 
 class BarcodeService:
     @staticmethod
-    def _build_row(
-        org_id: int, library_id: int, payload: BarcodeMapCreate
-    ) -> BarcodeMap:
+    def _build_row(org_id: int, library_id: int, payload: BarcodeMapCreate) -> BarcodeMap:
         seq = _canonicalize(payload.sequence)
         if payload.barcode_type == "library_index" and seq is None:
             raise HTTPException(
@@ -41,11 +39,7 @@ class BarcodeService:
                 status_code=422,
                 detail="library_index rows require read_position in {I1, I2}",
             )
-        if (
-            seq is not None
-            and payload.length is not None
-            and len(seq) != payload.length
-        ):
+        if seq is not None and payload.length is not None and len(seq) != payload.length:
             raise HTTPException(
                 status_code=422,
                 detail="sequence length does not match declared length",
@@ -87,10 +81,8 @@ class BarcodeService:
         await LibraryService._get_library_in_org(session, org_id, library_id)
 
         existing_count = (
-            await session.execute(
-                select(BarcodeMap).where(BarcodeMap.library_id == library_id)
-            )
-        ).scalars().all()
+            (await session.execute(select(BarcodeMap).where(BarcodeMap.library_id == library_id))).scalars().all()
+        )
         if len(existing_count) + len(payload.entries) > MAX_BARCODES_PER_LIBRARY:
             raise HTTPException(
                 status_code=422,
@@ -100,10 +92,7 @@ class BarcodeService:
                 ),
             )
 
-        rows = [
-            BarcodeService._build_row(org_id, library_id, entry)
-            for entry in payload.entries
-        ]
+        rows = [BarcodeService._build_row(org_id, library_id, entry) for entry in payload.entries]
         session.add_all(rows)
         await session.flush()
         return rows
@@ -146,19 +135,16 @@ class BarcodeService:
         """Return pairs of libraries in the batch sharing an (i5, i7)."""
         a = aliased(Library)
         b = aliased(Library)
-        stmt = (
-            select(a, b)
-            .where(
-                a.organization_id == org_id,
-                b.organization_id == org_id,
-                a.sequencing_batch_id == sequencing_batch_id,
-                b.sequencing_batch_id == sequencing_batch_id,
-                a.id < b.id,
-                a.i5_sequence.isnot(None),
-                a.i7_sequence.isnot(None),
-                a.i5_sequence == b.i5_sequence,
-                a.i7_sequence == b.i7_sequence,
-            )
+        stmt = select(a, b).where(
+            a.organization_id == org_id,
+            b.organization_id == org_id,
+            a.sequencing_batch_id == sequencing_batch_id,
+            b.sequencing_batch_id == sequencing_batch_id,
+            a.id < b.id,
+            a.i5_sequence.isnot(None),
+            a.i7_sequence.isnot(None),
+            a.i5_sequence == b.i5_sequence,
+            a.i7_sequence == b.i7_sequence,
         )
         results = (await session.execute(stmt)).all()
         out = [

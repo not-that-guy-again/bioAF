@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission
@@ -14,9 +14,7 @@ from app.services.barcode_service import BarcodeService
 router = APIRouter(tags=["barcode_maps"])
 
 
-@router.post(
-    "/api/libraries/{library_id}/barcodes", response_model=BarcodeMapResponse
-)
+@router.post("/api/libraries/{library_id}/barcodes", response_model=BarcodeMapResponse)
 async def create_barcode(
     library_id: int,
     body: BarcodeMapCreate,
@@ -40,16 +38,12 @@ async def bulk_create_barcodes(
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
-    rows = await BarcodeService.bulk_create_barcode_maps(
-        session, org_id, library_id, body
-    )
+    rows = await BarcodeService.bulk_create_barcode_maps(session, org_id, library_id, body)
     await session.commit()
     return [BarcodeMapResponse.model_validate(r) for r in rows]
 
 
-@router.get(
-    "/api/libraries/{library_id}/barcodes", response_model=list[BarcodeMapResponse]
-)
+@router.get("/api/libraries/{library_id}/barcodes", response_model=list[BarcodeMapResponse])
 async def list_barcodes(
     library_id: int,
     barcode_type: str | None = Query(default=None),
@@ -57,9 +51,7 @@ async def list_barcodes(
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
-    rows = await BarcodeService.list_barcode_maps_for_library(
-        session, org_id, library_id, barcode_type
-    )
+    rows = await BarcodeService.list_barcode_maps_for_library(session, org_id, library_id, barcode_type)
     return [BarcodeMapResponse.model_validate(r) for r in rows]
 
 

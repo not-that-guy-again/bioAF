@@ -37,7 +37,6 @@ async def _create_sample(client, token, experiment_id: int) -> int:
 
 
 async def test_create_library_via_api(client, admin_token, session):
-    from app.models import Library
 
     exp_id = await _create_experiment(client, admin_token)
     sample_id = await _create_sample(client, admin_token, exp_id)
@@ -70,9 +69,7 @@ async def test_create_library_via_api(client, admin_token, session):
     assert positions == {"I1": "GCATACGA", "I2": "AAGTCCGT"}
 
 
-async def test_viewer_cannot_create_library(
-    client, admin_token, viewer_token
-):
+async def test_viewer_cannot_create_library(client, admin_token, viewer_token):
     exp_id = await _create_experiment(client, admin_token)
     sample_id = await _create_sample(client, admin_token, exp_id)
     r = await client.post(
@@ -219,9 +216,7 @@ async def test_batch_collision_endpoint(client, admin_token, session):
     from app.models.user import User
 
     admin = (await session.execute(select(User).limit(1))).scalar_one()
-    batch = SequencingBatch(
-        organization_id=admin.organization_id, code="COL-1", status="pending"
-    )
+    batch = SequencingBatch(organization_id=admin.organization_id, code="COL-1", status="pending")
     session.add(batch)
     await session.flush()
     await session.commit()
@@ -258,9 +253,7 @@ async def test_batch_collision_endpoint(client, admin_token, session):
 # --- 3. Lineage traversal ---
 
 
-async def test_upstream_lineage_file_to_library_to_sample_to_experiment(
-    client, admin_token, session
-):
+async def test_upstream_lineage_file_to_library_to_sample_to_experiment(client, admin_token, session):
     from app.models import File
 
     exp_id = await _create_experiment(client, admin_token)
@@ -308,9 +301,7 @@ async def test_upstream_lineage_file_to_library_to_sample_to_experiment(
     assert exp_row.id == exp_id
 
 
-async def test_downstream_lineage_sample_to_libraries_to_files(
-    client, admin_token, session
-):
+async def test_downstream_lineage_sample_to_libraries_to_files(client, admin_token, session):
     from app.models import File
     from sqlalchemy.orm import selectinload
 
@@ -370,9 +361,7 @@ async def test_downstream_lineage_sample_to_libraries_to_files(
     from app.models.library import Library
 
     lib_row = (
-        await session.execute(
-            select(Library).options(selectinload(Library.files)).where(Library.id == lib_a["id"])
-        )
+        await session.execute(select(Library).options(selectinload(Library.files)).where(Library.id == lib_a["id"]))
     ).scalar_one()
     assert [lf.id for lf in lib_row.files] == [f.id]
 

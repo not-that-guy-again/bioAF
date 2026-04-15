@@ -47,16 +47,12 @@ async def update_library(
 ):
     org_id = int(current_user["org_id"])
     user_id = int(current_user["sub"])
-    lib = await LibraryService.update_library(
-        session, org_id, library_id, body, user_id=user_id
-    )
+    lib = await LibraryService.update_library(session, org_id, library_id, body, user_id=user_id)
     await session.commit()
     return _response(lib)
 
 
-@router.get(
-    "/api/samples/{sample_id}/libraries", response_model=list[LibraryResponse]
-)
+@router.get("/api/samples/{sample_id}/libraries", response_model=list[LibraryResponse])
 async def list_libraries_for_sample(
     sample_id: int,
     current_user: dict = require_permission("libraries", "view"),
@@ -77,9 +73,7 @@ async def list_libraries_for_experiment(
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
-    libs = await LibraryService.list_libraries_for_experiment(
-        session, org_id, experiment_id
-    )
+    libs = await LibraryService.list_libraries_for_experiment(session, org_id, experiment_id)
     return [_response(lib) for lib in libs]
 
 
@@ -97,15 +91,11 @@ async def attach_file(
     # Files permission is additionally enforced so users without file edit can't mutate file rows.
     from app.services import role_service
 
-    if not await role_service.has_permission(
-        session, int(current_user["role_id"]), "files", "edit"
-    ):
+    if not await role_service.has_permission(session, int(current_user["role_id"]), "files", "edit"):
         from fastapi import HTTPException
 
         raise HTTPException(403, "Insufficient permissions")
 
-    lib = await LibraryService.attach_file(
-        session, org_id, library_id, file_id, user_id=user_id
-    )
+    lib = await LibraryService.attach_file(session, org_id, library_id, file_id, user_id=user_id)
     await session.commit()
     return _response(lib)
