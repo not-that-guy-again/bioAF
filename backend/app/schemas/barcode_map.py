@@ -58,3 +58,15 @@ class BarcodeCollisionEntry(BaseModel):
     library_b_id: int
     i5_sequence: str | None
     i7_sequence: str | None
+
+
+class BarcodeFuzzyMatch(BaseModel):
+    id: int
+    organization_id: int
+    library_id: int
+    barcode_type: str
+    sequence: str
+    name: str | None = None
+    distance: int
+
+    model_config = {"from_attributes": True}

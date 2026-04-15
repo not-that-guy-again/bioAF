@@ -5,6 +5,7 @@ from app.api.dependencies import require_permission
 from app.database import get_session
 from app.schemas.barcode_map import (
     BarcodeCollisionEntry,
+    BarcodeFuzzyMatch,
     BarcodeMapBulkCreate,
     BarcodeMapCreate,
     BarcodeMapResponse,
@@ -69,6 +70,32 @@ async def lookup_barcode(
     org_id = int(current_user["org_id"])
     rows = await BarcodeService.lookup_by_sequence(session, org_id, sequence, barcode_type)
     return [BarcodeMapResponse.model_validate(r) for r in rows]
+
+
+@router.get("/api/barcodes/fuzzy-lookup", response_model=list[BarcodeFuzzyMatch])
+async def fuzzy_lookup_barcode(
+    sequence: str = Query(...),
+    barcode_type: str | None = Query(default=None),
+    max_mismatches: int = Query(default=1, ge=0, le=2),
+    current_user: dict = require_permission("libraries", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    pairs = await BarcodeService.fuzzy_lookup(
+        session, org_id, sequence, barcode_type, max_mismatches
+    )
+    return [
+        BarcodeFuzzyMatch(
+            id=row.id,
+            organization_id=row.organization_id,
+            library_id=row.library_id,
+            barcode_type=row.barcode_type,
+            sequence=row.sequence or "",
+            name=row.name,
+            distance=distance,
+        )
+        for row, distance in pairs
+    ]
 
 
 @router.get(

@@ -21,6 +21,34 @@ from app.services.library_service import LibraryService, _canonicalize
 
 MAX_BARCODES_PER_LIBRARY = 10_000
 
+# Neighbour enumeration grows as C(n, k) * 3^k for length n and k mismatches;
+# above this length the trigram-index path should be used (not yet implemented).
+FUZZY_MAX_LENGTH_WITH_MISMATCHES = 16
+_ACGTN = "ACGTN"
+
+
+def _hamming_neighbours(seq: str, max_mismatches: int) -> set[str]:
+    """All ACGTN strings within ``max_mismatches`` Hamming distance of ``seq``."""
+    results = {seq}
+    frontier = {seq}
+    for _ in range(max_mismatches):
+        next_frontier: set[str] = set()
+        for s in frontier:
+            for i in range(len(s)):
+                for c in _ACGTN:
+                    if c == s[i]:
+                        continue
+                    neighbour = s[:i] + c + s[i + 1 :]
+                    if neighbour not in results:
+                        results.add(neighbour)
+                        next_frontier.add(neighbour)
+        frontier = next_frontier
+    return results
+
+
+def _hamming_distance(a: str, b: str) -> int:
+    return sum(1 for x, y in zip(a, b) if x != y) + abs(len(a) - len(b))
+
 
 class BarcodeService:
     @staticmethod
@@ -125,6 +153,50 @@ class BarcodeService:
         if barcode_type is not None:
             stmt = stmt.where(BarcodeMap.barcode_type == barcode_type)
         return list((await session.execute(stmt)).scalars().all())
+
+    @staticmethod
+    async def fuzzy_lookup(
+        session: AsyncSession,
+        org_id: int,
+        sequence: str,
+        barcode_type: str | None = None,
+        max_mismatches: int = 1,
+    ) -> list[tuple[BarcodeMap, int]]:
+        """Return (BarcodeMap, distance) pairs with Hamming distance <= max_mismatches."""
+        canon = _canonicalize(sequence)
+        if canon is None:
+            raise HTTPException(status_code=422, detail="Empty sequence")
+        if max_mismatches < 0 or max_mismatches > 2:
+            raise HTTPException(
+                status_code=422,
+                detail="max_mismatches must be between 0 and 2",
+            )
+        if max_mismatches > 0 and len(canon) > FUZZY_MAX_LENGTH_WITH_MISMATCHES:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Fuzzy lookup with mismatches is not supported for sequences "
+                    f"longer than {FUZZY_MAX_LENGTH_WITH_MISMATCHES}bp. Use exact lookup "
+                    "or a whitelist-backed search."
+                ),
+            )
+
+        neighbours = _hamming_neighbours(canon, max_mismatches)
+        stmt = select(BarcodeMap).where(
+            BarcodeMap.organization_id == org_id,
+            BarcodeMap.sequence.in_(neighbours),
+        )
+        if barcode_type is not None:
+            stmt = stmt.where(BarcodeMap.barcode_type == barcode_type)
+        rows = list((await session.execute(stmt)).scalars().all())
+        out: list[tuple[BarcodeMap, int]] = []
+        for row in rows:
+            if row.sequence is None or len(row.sequence) != len(canon):
+                continue
+            d = _hamming_distance(row.sequence, canon)
+            if d <= max_mismatches:
+                out.append((row, d))
+        return out
 
     @staticmethod
     async def detect_collisions_in_batch(
