@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -6,6 +8,7 @@ from fastapi import HTTPException
 from app.models.experiment import Experiment
 from app.models.experiment_field_default import ExperimentFieldDefault, DEFAULTABLE_SAMPLE_FIELDS
 from app.models.experiment_template import ExperimentTemplate
+from app.models.library import Library
 from app.models.sample import Sample
 from app.models.sample_batch import SampleBatch
 from app.models.sample_custom_field import SampleCustomField
@@ -14,6 +17,11 @@ from app.schemas.sample import SampleCreate, SampleUpdate
 from app.services.audit_service import log_action
 from app.services.snapshot_utils import serialize_entity
 from app.services.vocabulary_validator import VocabularyValidator
+
+
+_deprecation_logger = logging.getLogger("bioaf.sample_deprecation")
+
+DEPRECATED_SAMPLE_PREP_FIELDS = ("library_prep_method", "library_layout")
 
 
 SAMPLE_STATUS_TRANSITIONS = {
@@ -75,6 +83,49 @@ class SampleService:
             ).bindparams(bid=sequencing_batch_id)
         )
         return result.scalar_one()
+
+    @staticmethod
+    async def get_prep_metadata(
+        session: AsyncSession, org_id: int, sample_id: int
+    ) -> dict:
+        """Return prep metadata preferring Library fields when a Library exists.
+
+        Shape: ``{"source": "library"|"sample", "prep_kit": ..., "read_layout": ...,
+        "library_count": int}``. Callers that need the full Library row should
+        go through LibraryService directly.
+        """
+        sample = await session.get(Sample, sample_id)
+        if sample is None:
+            raise HTTPException(status_code=404, detail="Sample not found")
+        exp = await session.get(Experiment, sample.experiment_id)
+        if exp is None or exp.organization_id != org_id:
+            raise HTTPException(status_code=404, detail="Sample not found")
+
+        libs = list(
+            (
+                await session.execute(
+                    select(Library)
+                    .where(Library.sample_id == sample_id)
+                    .order_by(Library.created_at.asc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if libs:
+            lib = libs[0]
+            return {
+                "source": "library",
+                "prep_kit": lib.prep_kit,
+                "read_layout": lib.read_layout,
+                "library_count": len(libs),
+            }
+        return {
+            "source": "sample",
+            "prep_kit": sample.library_prep_method,
+            "read_layout": sample.library_layout,
+            "library_count": 0,
+        }
 
     @staticmethod
     async def resolve_by_batch_position(
@@ -411,6 +462,14 @@ class SampleService:
         ]:
             new_val = getattr(data, field, None)
             if new_val is not None:
+                if field in DEPRECATED_SAMPLE_PREP_FIELDS:
+                    _deprecation_logger.warning(
+                        "Write to deprecated Sample.%s on sample %s. "
+                        "New callers should populate Library.%s instead.",
+                        field,
+                        sample_id,
+                        "prep_kit" if field == "library_prep_method" else "read_layout",
+                    )
                 old_val = getattr(sample, field)
                 previous[field] = str(old_val) if old_val is not None else None
                 setattr(sample, field, new_val)
