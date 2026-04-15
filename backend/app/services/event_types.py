@@ -95,6 +95,7 @@ LIBRARY_UPDATED = "library.updated"
 LIBRARY_FILE_ATTACHED = "library.file_attached"
 BARCODE_COLLISION_DETECTED = "barcode.collision_detected"
 DEMUX_RECONCILED = "demux.reconciled"
+LIBRARY_BACKFILLED = "library.backfilled"
 
 ALL_EVENT_TYPES = [
     PIPELINE_STARTED,
@@ -149,6 +150,7 @@ ALL_EVENT_TYPES = [
     LIBRARY_FILE_ATTACHED,
     BARCODE_COLLISION_DETECTED,
     DEMUX_RECONCILED,
+    LIBRARY_BACKFILLED,
 ]
 
 # Severity mapping for event types
@@ -205,4 +207,5 @@ EVENT_SEVERITY = {
     LIBRARY_FILE_ATTACHED: "info",
     BARCODE_COLLISION_DETECTED: "warning",
     DEMUX_RECONCILED: "info",
+    LIBRARY_BACKFILLED: "info",
 }

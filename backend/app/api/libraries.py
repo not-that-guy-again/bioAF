@@ -5,6 +5,11 @@ from app.api.dependencies import require_permission
 from app.database import get_session
 from app.models.library import Library
 from app.schemas.library import LibraryCreate, LibraryResponse, LibraryUpdate
+from app.services.library_backfill_service import (
+    BackfillPreview,
+    BackfillResult,
+    LibraryBackfillService,
+)
 from app.services.library_service import LibraryService
 
 router = APIRouter(tags=["libraries"])
@@ -99,3 +104,32 @@ async def attach_file(
     lib = await LibraryService.attach_file(session, org_id, library_id, file_id, user_id=user_id)
     await session.commit()
     return _response(lib)
+
+
+@router.post(
+    "/api/experiments/{experiment_id}/backfill-libraries/preview",
+    response_model=BackfillPreview,
+)
+async def preview_backfill(
+    experiment_id: int,
+    current_user: dict = require_permission("libraries", "create"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    return await LibraryBackfillService.preview(session, org_id, experiment_id)
+
+
+@router.post(
+    "/api/experiments/{experiment_id}/backfill-libraries/commit",
+    response_model=BackfillResult,
+)
+async def commit_backfill(
+    experiment_id: int,
+    current_user: dict = require_permission("libraries", "create"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+    result = await LibraryBackfillService.commit(session, org_id, experiment_id, user_id=user_id)
+    await session.commit()
+    return result
