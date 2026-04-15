@@ -19,6 +19,7 @@ from app.schemas.library import LibraryCreate, LibraryUpdate
 from app.services import event_types
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
+from app.services.sequencing_conventions import infer_i5_orientation
 
 
 _SEQ_RE = re.compile(r"^[ACGTN]+$")
@@ -121,6 +122,14 @@ class LibraryService:
         i5 = _canonicalize(payload.i5_sequence)
         i7 = _canonicalize(payload.i7_sequence)
 
+        i5_orientation = payload.i5_orientation_convention
+        if i5_orientation is None and payload.sequencing_batch_id is not None:
+            from app.models.sequencing_batch import SequencingBatch
+
+            batch = await session.get(SequencingBatch, payload.sequencing_batch_id)
+            if batch is not None:
+                i5_orientation = infer_i5_orientation(batch.instrument_model)
+
         lib = Library(
             organization_id=org_id,
             sample_id=payload.sample_id,
@@ -136,7 +145,7 @@ class LibraryService:
             index_type=payload.index_type,
             i5_sequence=i5,
             i7_sequence=i7,
-            i5_orientation_convention=payload.i5_orientation_convention,
+            i5_orientation_convention=i5_orientation,
             insert_size_mean=payload.insert_size_mean,
             molarity_nm=payload.molarity_nm,
             concentration_ng_ul=payload.concentration_ng_ul,
