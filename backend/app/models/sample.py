@@ -80,3 +80,4 @@ class Sample(Base):
     parent_sample = relationship("Sample", remote_side="Sample.id", foreign_keys=[parent_sample_id])
     derived_samples = relationship("Sample", foreign_keys=[parent_sample_id], overlaps="parent_sample")
     custom_fields = relationship("SampleCustomField", back_populates="sample", cascade="all, delete-orphan")
+    libraries = relationship("Library", back_populates="sample", cascade="all, delete-orphan")

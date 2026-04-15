@@ -63,6 +63,8 @@ from app.api.sequencing_batches import router as sequencing_batches_router
 from app.api.slack_oauth import router as slack_oauth_router
 from app.api.experiment_auto_runs import router as experiment_auto_runs_router
 from app.api.content_tokens import router as content_tokens_router
+from app.api.libraries import router as libraries_router
+from app.api.barcode_maps import router as barcode_maps_router
 
 api_router = APIRouter()
 
@@ -129,3 +131,5 @@ api_router.include_router(sequencing_batches_router)
 api_router.include_router(slack_oauth_router)
 api_router.include_router(experiment_auto_runs_router)
 api_router.include_router(content_tokens_router)
+api_router.include_router(libraries_router)
+api_router.include_router(barcode_maps_router)

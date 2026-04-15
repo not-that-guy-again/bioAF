@@ -89,6 +89,12 @@ AUTO_RUN_CANCELLED = "auto_run.cancelled"
 # Terraform events
 TERRAFORM_APPLY_FAILURE = "terraform.apply_failure"
 
+# Library / barcode events
+LIBRARY_CREATED = "library.created"
+LIBRARY_UPDATED = "library.updated"
+LIBRARY_FILE_ATTACHED = "library.file_attached"
+BARCODE_COLLISION_DETECTED = "barcode.collision_detected"
+
 ALL_EVENT_TYPES = [
     PIPELINE_STARTED,
     PIPELINE_COMPLETED,
@@ -137,6 +143,10 @@ ALL_EVENT_TYPES = [
     AUTO_RUN_BUDGET_DISABLED,
     AUTO_RUN_LAUNCHED,
     AUTO_RUN_CANCELLED,
+    LIBRARY_CREATED,
+    LIBRARY_UPDATED,
+    LIBRARY_FILE_ATTACHED,
+    BARCODE_COLLISION_DETECTED,
 ]
 
 # Severity mapping for event types
@@ -188,4 +198,8 @@ EVENT_SEVERITY = {
     AUTO_RUN_BUDGET_DISABLED: "critical",
     AUTO_RUN_LAUNCHED: "info",
     AUTO_RUN_CANCELLED: "warning",
+    LIBRARY_CREATED: "info",
+    LIBRARY_UPDATED: "info",
+    LIBRARY_FILE_ATTACHED: "info",
+    BARCODE_COLLISION_DETECTED: "warning",
 }
