@@ -10,6 +10,10 @@ from app.schemas.barcode_map import (
     BarcodeMapResponse,
 )
 from app.services.barcode_service import BarcodeService
+from app.services.demux_reconciliation_service import (
+    DemuxReconciliationService,
+    ReconciliationReport,
+)
 
 router = APIRouter(tags=["barcode_maps"])
 
@@ -78,3 +82,21 @@ async def list_batch_collisions(
 ):
     org_id = int(current_user["org_id"])
     return await BarcodeService.detect_collisions_in_batch(session, org_id, batch_id)
+
+
+@router.post(
+    "/api/sequencing-batches/{batch_id}/reconcile",
+    response_model=ReconciliationReport,
+)
+async def reconcile_batch(
+    batch_id: int,
+    current_user: dict = require_permission("libraries", "edit"),
+    session: AsyncSession = Depends(get_session),
+):
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+    report = await DemuxReconciliationService.reconcile_batch(
+        session, org_id, batch_id, user_id=user_id
+    )
+    await session.commit()
+    return report
