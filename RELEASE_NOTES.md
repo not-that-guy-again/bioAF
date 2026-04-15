@@ -1,5 +1,24 @@
 # Release Notes
 
+## v0.8.0
+
+Library and BarcodeMap data model groundwork. No user-visible changes in this release.
+
+This is a backend-only update that lays the foundation for a near-future release adding Library and Barcode support and mapping to the UI. Current installs will see no new screens, menus, or workflows.
+
+### Backend
+
+- New `Library` entity sitting between Sample and File, capturing prep metadata, indexing fields (i5 / i7, index type, orientation convention), QC snapshot at prep time, and lifecycle status
+- New `BarcodeMap` table covering both library-level sample indices and intra-library variant barcodes (cell barcodes, UMIs, sgRNAs, hashtags, lineage barcodes), with optional `whitelist_reference` for rule-based mappings against external reference sets
+- New nullable `files.library_id` foreign key so files can be attributed to a specific library. Existing sample-to-file links remain valid; library links are additive
+- New `libraries` resource in the permission model with `view` / `create` / `edit` / `delete` actions, wired into the built-in admin, comp_bio, bench, and viewer roles
+- New API surface: `POST/GET/PATCH /api/libraries`, `GET /api/samples/{id}/libraries`, `GET /api/experiments/{id}/libraries`, `POST /api/libraries/{id}/files/{file_id}`, `POST/GET /api/libraries/{id}/barcodes` (single and bulk), `GET /api/barcodes/lookup`, `GET /api/sequencing-batches/{id}/barcode-collisions`
+- Sequence canonicalisation (uppercase + ACGTN validation) applied at the service layer. Library index fields automatically materialise as `library_index` BarcodeMap rows for unified reverse lookup. Collision detection flags library pairs that share an (i5, i7) within the same sequencing batch
+
+### Database
+
+- Additive Alembic migration `067` adds the `libraries` and `barcode_maps` tables plus the nullable `files.library_id` column. No existing data is modified or backfilled
+
 ## v0.7.5
 
 Plot Archive thumbnail bug fix.
