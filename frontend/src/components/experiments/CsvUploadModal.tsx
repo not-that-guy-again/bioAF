@@ -87,6 +87,27 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Build a lookup of existing custom field names (lowercased) for auto-matching
+  const existingCustomFieldsLower = new Map(
+    existingCustomFields.map((name) => [name.toLowerCase().replace(/\s+/g, "_"), name])
+  );
+
+  function buildInitialMappings(unknownColumns: string[]): Record<string, string> {
+    const initial: Record<string, string> = {};
+    for (const col of unknownColumns) {
+      const normalized = col.toLowerCase().replace(/\s+/g, "_");
+      const match = existingCustomFieldsLower.get(normalized);
+      if (match) {
+        // Auto-map to the existing custom field
+        initial[col] = `custom:${match}`;
+      } else {
+        // Default to creating as a new custom field
+        initial[col] = `custom:${col}`;
+      }
+    }
+    return initial;
+  }
+
   async function handleFileSelect(selectedFile: File) {
     setFile(selectedFile);
     setError("");
@@ -100,12 +121,7 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
       setPreview(data);
 
       if (data.unknown_columns.length > 0) {
-        // Initialize mappings: default to "skip" for unknown columns
-        const initial: Record<string, string> = {};
-        for (const col of data.unknown_columns) {
-          initial[col] = "skip";
-        }
-        setColumnMappings(initial);
+        setColumnMappings(buildInitialMappings(data.unknown_columns));
         setStep("preview");
       } else if (data.errors.length > 0 && data.total_rows === 0) {
         setError(data.errors.join("; "));
@@ -133,11 +149,7 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
       setPreview(data);
 
       if (data.unknown_columns.length > 0) {
-        const initial: Record<string, string> = {};
-        for (const col of data.unknown_columns) {
-          initial[col] = "skip";
-        }
-        setColumnMappings(initial);
+        setColumnMappings(buildInitialMappings(data.unknown_columns));
         setStep("preview");
       } else if (data.errors.length > 0 && data.total_rows === 0) {
         setError(data.errors.join("; "));
