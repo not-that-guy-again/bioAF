@@ -11,6 +11,7 @@ table alongside other GCP configuration.
 import base64
 import json
 import secrets
+import time
 
 from google.oauth2 import service_account
 from googleapiclient import discovery as google_discovery
@@ -47,9 +48,7 @@ async def _upsert(session: AsyncSession, key: str, value: str) -> None:
 
 
 async def _delete_key(session: AsyncSession, key: str) -> None:
-    await session.execute(
-        text("DELETE FROM platform_config WHERE key = :k").bindparams(k=key)
-    )
+    await session.execute(text("DELETE FROM platform_config WHERE key = :k").bindparams(k=key))
 
 
 async def _read_keys(session: AsyncSession, keys: list[str]) -> dict[str, str]:
@@ -84,9 +83,7 @@ def _load_primary_credentials(config: dict[str, str]) -> tuple[object, str]:
     else:
         import google.auth as _google_auth
 
-        creds, _ = _google_auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
+        creds, _ = _google_auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         sa_email = config.get("gcp_service_account_email")
         if sa_email:
             from google.auth import impersonated_credentials
@@ -129,35 +126,56 @@ async def create_reader_sa(session: AsyncSession) -> dict[str, str]:
     iam_service = discovery_build("iam", "v1", credentials=creds, cache_discovery=False)
     account_id = f"bioaf-reader-{secrets.token_hex(4)}"
 
-    sa = iam_service.projects().serviceAccounts().create(
-        name=f"projects/{project_id}",
-        body={
-            "accountId": account_id,
-            "serviceAccount": {
-                "displayName": "bioAF Sheets Reader",
-                "description": "Read-only access to Google Sheets for bioAF field import",
+    sa = (
+        iam_service.projects()
+        .serviceAccounts()
+        .create(
+            name=f"projects/{project_id}",
+            body={
+                "accountId": account_id,
+                "serviceAccount": {
+                    "displayName": "bioAF Sheets Reader",
+                    "description": "Read-only access to Google Sheets for bioAF field import",
+                },
             },
-        },
-    ).execute()
+        )
+        .execute()
+    )
 
     sa_email = sa["email"]
 
-    # Create a JSON key for the new SA
-    key_response = iam_service.projects().serviceAccounts().keys().create(
-        name=f"projects/{project_id}/serviceAccounts/{sa_email}",
-        body={"keyAlgorithm": "KEY_ALG_RSA_2048"},
-    ).execute()
+    # Create a JSON key for the new SA.
+    # IAM has a propagation delay after SA creation -- retry up to 5
+    # times with backoff before giving up on key creation.
+    key_response = None
+    for attempt in range(5):
+        try:
+            key_response = (
+                iam_service.projects()
+                .serviceAccounts()
+                .keys()
+                .create(
+                    name=f"projects/{project_id}/serviceAccounts/{sa_email}",
+                    body={"keyAlgorithm": "KEY_ALG_RSA_2048"},
+                )
+                .execute()
+            )
+            break
+        except Exception as exc:
+            if attempt < 4 and ("404" in str(exc) or "does not exist" in str(exc).lower()):
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise
+
+    if key_response is None:
+        raise RuntimeError(f"Failed to create key for {sa_email} after retries")
 
     key_json = base64.b64decode(key_response["privateKeyData"]).decode("utf-8")
 
     # Enable the Sheets API in the project
     try:
-        service_usage = discovery_build(
-            "serviceusage", "v1", credentials=creds, cache_discovery=False
-        )
-        service_usage.services().enable(
-            name=f"projects/{project_id}/services/sheets.googleapis.com"
-        ).execute()
+        service_usage = discovery_build("serviceusage", "v1", credentials=creds, cache_discovery=False)
+        service_usage.services().enable(name=f"projects/{project_id}/services/sheets.googleapis.com").execute()
     except Exception:
         # Non-fatal: the API may already be enabled, or the SA may
         # not have serviceusage permissions. The user will see a clear
@@ -206,14 +224,11 @@ async def get_reader_credentials(session: AsyncSession) -> service_account.Crede
     config = await _read_keys(session, _READER_SA_KEYS)
     if config.get("sheets_reader_sa_created") != "true":
         raise RuntimeError(
-            "Google Sheets reader service account is not configured. "
-            "Set it up in Settings > Integrations > GCP."
+            "Google Sheets reader service account is not configured. Set it up in Settings > Integrations > GCP."
         )
     key_json = config.get("sheets_reader_sa_key", "")
     if not key_json:
         raise RuntimeError("Reader SA key is missing from configuration")
 
     key_data = json.loads(key_json)
-    return service_account.Credentials.from_service_account_info(
-        key_data, scopes=_SHEETS_SCOPE
-    )
+    return service_account.Credentials.from_service_account_info(key_data, scopes=_SHEETS_SCOPE)
