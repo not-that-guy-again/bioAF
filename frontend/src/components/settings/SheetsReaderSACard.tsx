@@ -9,6 +9,7 @@ export function SheetsReaderSACard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   async function loadStatus() {
     try {
@@ -68,7 +69,7 @@ export function SheetsReaderSACard() {
         <div>
           <h3 className="text-sm font-semibold text-gray-800">Google Sheets Reader</h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            A dedicated service account for reading column headers from shared Google Sheets.
+            A dedicated reader account for importing column headers from shared Google Sheets.
           </p>
         </div>
         <span
@@ -107,14 +108,14 @@ export function SheetsReaderSACard() {
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         {!status.exists ? (
           <button
             onClick={handleCreate}
             disabled={loading}
             className="text-sm px-3 py-1.5 bg-bioaf-600 text-white rounded-md hover:bg-bioaf-700 disabled:opacity-50"
           >
-            {loading ? "Creating..." : "Create Reader SA"}
+            {loading ? "Creating..." : "Create Reader Account"}
           </button>
         ) : (
           <button
@@ -122,10 +123,27 @@ export function SheetsReaderSACard() {
             disabled={loading}
             className="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-md hover:bg-red-50 disabled:opacity-50"
           >
-            {loading ? "Deleting..." : "Delete Reader SA"}
+            {loading ? "Deleting..." : "Delete Reader Account"}
           </button>
         )}
+        <button
+          onClick={() => setShowInfo(!showInfo)}
+          className="text-gray-400 hover:text-gray-600 w-5 h-5 flex items-center justify-center rounded-full border border-gray-300 text-xs font-medium"
+          title="What is a reader account?"
+        >
+          ?
+        </button>
       </div>
+
+      {showInfo && (
+        <div className="bg-gray-50 border border-gray-200 rounded-md p-3 text-xs text-gray-600">
+          <p>
+            A reader account lets bioAF securely access your Google Sheets without creating a
+            new Google Workspace user. You share your spreadsheet with this account the same way
+            you would share with a colleague. It can only read data, never edit or delete.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
