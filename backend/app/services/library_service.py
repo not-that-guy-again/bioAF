@@ -27,6 +27,14 @@ from app.services.sequencing_conventions import (
 
 _SEQ_RE = re.compile(r"^[ACGTN]+$")
 
+# Workspace-level toggle recognising that some lab workflows ingest FASTQs
+# before demultiplexing, so one file may carry reads for multiple libraries.
+# Default is False — v1 assumes one-file-one-library (the 10x post-demux
+# case). When a real workflow requires multi-library attribution, a follow-up
+# migration introduces the ``file_libraries`` junction table and this toggle
+# gates the service / API paths that use it.
+PRE_DEMUX_ENABLED_KEY = "ingest.pre_demux_enabled"
+
 
 def _canonicalize(seq: str | None) -> str | None:
     if seq is None:
@@ -43,6 +51,26 @@ def _canonicalize(seq: str | None) -> str | None:
 
 
 class LibraryService:
+    @staticmethod
+    async def is_pre_demux_enabled(session: AsyncSession) -> bool:
+        """Workspace-level flag for pre-demux (multi-library) FASTQ ingest.
+
+        Currently scaffolding only: the junction table and multi-library
+        attachment paths will be added when a concrete lab workflow requires
+        them. Kept here as a single read point so the future work only has
+        to wire the new paths against this getter.
+        """
+        from app.models.component import PlatformConfig
+
+        row = (
+            await session.execute(
+                select(PlatformConfig).where(PlatformConfig.key == PRE_DEMUX_ENABLED_KEY)
+            )
+        ).scalar_one_or_none()
+        if row is None or row.value is None:
+            return False
+        return row.value.strip().lower() in ("true", "1", "yes", "on")
+
     @staticmethod
     async def _assert_sample_in_org(session: AsyncSession, org_id: int, sample_id: int) -> Sample:
         """Verify sample belongs to an experiment in the caller's organization."""
