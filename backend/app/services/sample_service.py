@@ -85,9 +85,7 @@ class SampleService:
         return result.scalar_one()
 
     @staticmethod
-    async def get_prep_metadata(
-        session: AsyncSession, org_id: int, sample_id: int
-    ) -> dict:
+    async def get_prep_metadata(session: AsyncSession, org_id: int, sample_id: int) -> dict:
         """Return prep metadata preferring Library fields when a Library exists.
 
         Shape: ``{"source": "library"|"sample", "prep_kit": ..., "read_layout": ...,
@@ -104,9 +102,7 @@ class SampleService:
         libs = list(
             (
                 await session.execute(
-                    select(Library)
-                    .where(Library.sample_id == sample_id)
-                    .order_by(Library.created_at.asc())
+                    select(Library).where(Library.sample_id == sample_id).order_by(Library.created_at.asc())
                 )
             )
             .scalars()
@@ -464,8 +460,7 @@ class SampleService:
             if new_val is not None:
                 if field in DEPRECATED_SAMPLE_PREP_FIELDS:
                     _deprecation_logger.warning(
-                        "Write to deprecated Sample.%s on sample %s. "
-                        "New callers should populate Library.%s instead.",
+                        "Write to deprecated Sample.%s on sample %s. New callers should populate Library.%s instead.",
                         field,
                         sample_id,
                         "prep_kit" if field == "library_prep_method" else "read_layout",

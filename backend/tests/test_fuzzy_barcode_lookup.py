@@ -34,9 +34,7 @@ async def test_fuzzy_lookup_hamming_zero(session):
     from app.services.barcode_service import BarcodeService
 
     org, lib = await _setup_lib(session)
-    matches = await BarcodeService.fuzzy_lookup(
-        session, org.id, "AAAACCCC", max_mismatches=1
-    )
+    matches = await BarcodeService.fuzzy_lookup(session, org.id, "AAAACCCC", max_mismatches=1)
     assert any(m.sequence == "AAAACCCC" and d == 0 for m, d in matches)
 
 
@@ -45,9 +43,7 @@ async def test_fuzzy_lookup_hamming_one(session):
 
     org, _ = await _setup_lib(session)
     # Query one base off: expect distance 1 match.
-    matches = await BarcodeService.fuzzy_lookup(
-        session, org.id, "AAAACCCG", max_mismatches=1
-    )
+    matches = await BarcodeService.fuzzy_lookup(session, org.id, "AAAACCCG", max_mismatches=1)
     distances = [d for m, d in matches if m.sequence == "AAAACCCC"]
     assert 1 in distances
 
@@ -57,9 +53,7 @@ async def test_fuzzy_lookup_rejects_beyond_budget(session):
 
     org, _ = await _setup_lib(session)
     # Two bases off with max=1 should return no match.
-    matches = await BarcodeService.fuzzy_lookup(
-        session, org.id, "AAAAGGGG", max_mismatches=1
-    )
+    matches = await BarcodeService.fuzzy_lookup(session, org.id, "AAAAGGGG", max_mismatches=1)
     assert [(m, d) for m, d in matches if m.sequence == "AAAACCCC"] == []
 
 
@@ -68,9 +62,7 @@ async def test_fuzzy_lookup_hamming_two(session):
 
     org, _ = await _setup_lib(session)
     # Two bases off with max=2 returns distance 2 match.
-    matches = await BarcodeService.fuzzy_lookup(
-        session, org.id, "AAAACCGG", max_mismatches=2
-    )
+    matches = await BarcodeService.fuzzy_lookup(session, org.id, "AAAACCGG", max_mismatches=2)
     distances = [d for m, d in matches if m.sequence == "AAAACCCC"]
     assert 2 in distances
 
@@ -81,9 +73,7 @@ async def test_fuzzy_lookup_is_org_scoped(session):
     _, lib_a = await _setup_lib(session, org_name="Fuzzy A")
     org_b, lib_b = await _setup_lib(session, org_name="Fuzzy B")
 
-    matches = await BarcodeService.fuzzy_lookup(
-        session, org_b.id, "AAAACCCC", max_mismatches=1
-    )
+    matches = await BarcodeService.fuzzy_lookup(session, org_b.id, "AAAACCCC", max_mismatches=1)
     for m, _d in matches:
         assert m.library_id == lib_b.id
 
@@ -106,9 +96,7 @@ async def test_fuzzy_lookup_rejects_long_sequence_with_mismatches(session):
 
     org, _ = await _setup_lib(session)
     with pytest.raises(HTTPException) as exc:
-        await BarcodeService.fuzzy_lookup(
-            session, org.id, "A" * 24, max_mismatches=1
-        )
+        await BarcodeService.fuzzy_lookup(session, org.id, "A" * 24, max_mismatches=1)
     assert exc.value.status_code == 422
 
 

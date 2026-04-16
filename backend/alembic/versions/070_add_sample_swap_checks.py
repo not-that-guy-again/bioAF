@@ -67,7 +67,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "idx_sample_swap_checks_library_id", table_name="sample_swap_checks"
-    )
+    op.drop_index("idx_sample_swap_checks_library_id", table_name="sample_swap_checks")
     op.drop_table("sample_swap_checks")

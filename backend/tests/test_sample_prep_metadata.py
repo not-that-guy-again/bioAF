@@ -84,9 +84,7 @@ async def test_prep_metadata_missing_sample_raises(session):
     assert exc.value.status_code == 404
 
 
-async def test_writing_sample_prep_columns_emits_deprecation_warning(
-    session, caplog
-):
+async def test_writing_sample_prep_columns_emits_deprecation_warning(session, caplog):
     from app.models.sample import Sample
     from app.schemas.sample import SampleUpdate
     from app.services.sample_service import SampleService
@@ -107,17 +105,12 @@ async def test_writing_sample_prep_columns_emits_deprecation_warning(
     await session.commit()
 
     deprecation = [
-        r
-        for r in caplog.records
-        if r.name == "bioaf.sample_deprecation"
-        and "library_prep_method" in r.getMessage()
+        r for r in caplog.records if r.name == "bioaf.sample_deprecation" and "library_prep_method" in r.getMessage()
     ]
     assert deprecation, "expected a deprecation warning log for Sample.library_prep_method"
 
 
-async def test_writing_non_deprecated_field_does_not_emit_warning(
-    session, caplog
-):
+async def test_writing_non_deprecated_field_does_not_emit_warning(session, caplog):
     from app.models.sample import Sample
     from app.schemas.sample import SampleUpdate
     from app.services.sample_service import SampleService
@@ -137,7 +130,5 @@ async def test_writing_non_deprecated_field_does_not_emit_warning(
         )
     await session.commit()
 
-    deprecation = [
-        r for r in caplog.records if r.name == "bioaf.sample_deprecation"
-    ]
+    deprecation = [r for r in caplog.records if r.name == "bioaf.sample_deprecation"]
     assert deprecation == []

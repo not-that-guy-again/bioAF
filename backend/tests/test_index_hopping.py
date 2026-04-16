@@ -101,9 +101,7 @@ async def test_no_batch_no_contamination_inference(session):
     from app.services.library_service import LibraryService
 
     org, sample, _ = await _bootstrap(session, instrument_model=None)
-    lib = await LibraryService.create_library(
-        session, org.id, LibraryCreate(sample_id=sample.id)
-    )
+    lib = await LibraryService.create_library(session, org.id, LibraryCreate(sample_id=sample.id))
     await session.commit()
     assert lib.expected_contamination_pct is None
 

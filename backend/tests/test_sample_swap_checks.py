@@ -22,9 +22,7 @@ async def _setup_lib(session, org_name="Swap Org"):
     sample = Sample(experiment_id=exp.id)
     session.add(sample)
     await session.flush()
-    lib = await LibraryService.create_library(
-        session, org.id, LibraryCreate(sample_id=sample.id)
-    )
+    lib = await LibraryService.create_library(session, org.id, LibraryCreate(sample_id=sample.id))
     await session.commit()
     return org, lib
 

@@ -63,9 +63,7 @@ class LibraryService:
         from app.models.component import PlatformConfig
 
         row = (
-            await session.execute(
-                select(PlatformConfig).where(PlatformConfig.key == PRE_DEMUX_ENABLED_KEY)
-            )
+            await session.execute(select(PlatformConfig).where(PlatformConfig.key == PRE_DEMUX_ENABLED_KEY))
         ).scalar_one_or_none()
         if row is None or row.value is None:
             return False
@@ -155,9 +153,7 @@ class LibraryService:
 
         i5_orientation = payload.i5_orientation_convention
         contamination_pct = payload.expected_contamination_pct
-        if payload.sequencing_batch_id is not None and (
-            i5_orientation is None or contamination_pct is None
-        ):
+        if payload.sequencing_batch_id is not None and (i5_orientation is None or contamination_pct is None):
             from decimal import Decimal as _D
 
             from app.models.sequencing_batch import SequencingBatch

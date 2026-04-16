@@ -51,15 +51,7 @@ async def _plan(
     if exp is None or exp.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Experiment not found")
 
-    samples = list(
-        (
-            await session.execute(
-                select(Sample).where(Sample.experiment_id == experiment_id)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    samples = list((await session.execute(select(Sample).where(Sample.experiment_id == experiment_id))).scalars().all())
 
     existing_library_sample_ids = set(
         (
@@ -111,9 +103,7 @@ async def _plan(
 
 class LibraryBackfillService:
     @staticmethod
-    async def preview(
-        session: AsyncSession, org_id: int, experiment_id: int
-    ) -> BackfillPreview:
+    async def preview(session: AsyncSession, org_id: int, experiment_id: int) -> BackfillPreview:
         preview, _, _ = await _plan(session, org_id, experiment_id)
         return preview
 

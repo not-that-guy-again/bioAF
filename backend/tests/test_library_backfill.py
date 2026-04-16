@@ -41,9 +41,7 @@ async def _file_on_sample(session, org_id, sample_id, filename):
     )
     session.add(f)
     await session.flush()
-    await session.execute(
-        sample_files.insert().values(sample_id=sample_id, file_id=f.id)
-    )
+    await session.execute(sample_files.insert().values(sample_id=sample_id, file_id=f.id))
     await session.flush()
     return f
 
@@ -150,9 +148,7 @@ async def test_commit_leaves_already_linked_files_untouched(session):
     from app.services.library_service import LibraryService
 
     s_other = await _sample(session, exp.id)
-    existing_lib = await LibraryService.create_library(
-        session, org.id, LibraryCreate(sample_id=s_other.id)
-    )
+    existing_lib = await LibraryService.create_library(session, org.id, LibraryCreate(sample_id=s_other.id))
     await session.commit()
 
     f = await _file_on_sample(session, org.id, s1.id, "linked.fastq.gz")

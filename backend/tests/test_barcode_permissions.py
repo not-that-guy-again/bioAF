@@ -28,9 +28,7 @@ async def _create_library(client, token) -> int:
     return lib.json()["id"]
 
 
-async def test_bench_user_can_view_and_create_barcodes(
-    client, admin_token, session
-):
+async def test_bench_user_can_view_and_create_barcodes(client, admin_token, session):
     from app.models.user import User
     from app.services.auth_service import AuthService
 
@@ -40,8 +38,7 @@ async def test_bench_user_can_view_and_create_barcodes(
         for r in (
             await session.execute(
                 select(__import__("app.models", fromlist=["Role"]).Role).where(
-                    __import__("app.models", fromlist=["Role"]).Role.organization_id
-                    == admin.organization_id
+                    __import__("app.models", fromlist=["Role"]).Role.organization_id == admin.organization_id
                 )
             )
         ).scalars()
@@ -179,9 +176,7 @@ async def test_bulk_guardrail_rejects_above_limit(session):
     sample = Sample(experiment_id=exp.id)
     session.add(sample)
     await session.flush()
-    lib = await LibraryService.create_library(
-        session, org.id, LibraryCreate(sample_id=sample.id)
-    )
+    lib = await LibraryService.create_library(session, org.id, LibraryCreate(sample_id=sample.id))
     await session.commit()
 
     # Build a payload just over the cap. Use distinct sequences per entry so the
@@ -205,8 +200,6 @@ async def test_bulk_guardrail_rejects_above_limit(session):
         for i in range(MAX_BARCODES_PER_LIBRARY + 1)
     ]
     with pytest.raises(HTTPException) as exc:
-        await BarcodeService.bulk_create_barcode_maps(
-            session, org.id, lib.id, BarcodeMapBulkCreate(entries=entries)
-        )
+        await BarcodeService.bulk_create_barcode_maps(session, org.id, lib.id, BarcodeMapBulkCreate(entries=entries))
     assert exc.value.status_code == 422
     assert "whitelist_reference" in exc.value.detail

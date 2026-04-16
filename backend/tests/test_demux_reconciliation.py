@@ -272,9 +272,7 @@ async def test_reconcile_api_endpoint(client, admin_token, session):
 
     admin = (await session.execute(select(User).limit(1))).scalar_one()
 
-    batch = SequencingBatch(
-        organization_id=admin.organization_id, code="RC-API", status="pending"
-    )
+    batch = SequencingBatch(organization_id=admin.organization_id, code="RC-API", status="pending")
     session.add(batch)
     await session.flush()
     await session.commit()

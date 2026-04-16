@@ -31,9 +31,7 @@ DEMUX_FILENAME_PATTERN_KEY = "demux.filename_pattern"
 #  2. Illumina dual-index pair inside the filename: ``_I7+I5_`` or ``_I7-I5_``.
 #     Example: ``sample_AAGTCCGT+GCATACGA_L001_R1_001.fastq.gz``.
 _DEFAULT_LIBRARY_ID_PATTERN = re.compile(r"^(?P<library_external_id>[^_]+)_")
-_DEFAULT_INDEX_PAIR_PATTERN = re.compile(
-    r"_(?P<i7>[ACGTN]{4,16})[+\-](?P<i5>[ACGTN]{4,16})_"
-)
+_DEFAULT_INDEX_PAIR_PATTERN = re.compile(r"_(?P<i7>[ACGTN]{4,16})[+\-](?P<i5>[ACGTN]{4,16})_")
 
 
 class FileReconciliationOutcome(BaseModel):
@@ -54,9 +52,7 @@ class ReconciliationReport(BaseModel):
 
 async def _load_custom_pattern(session: AsyncSession) -> re.Pattern | None:
     row = (
-        await session.execute(
-            select(PlatformConfig).where(PlatformConfig.key == DEMUX_FILENAME_PATTERN_KEY)
-        )
+        await session.execute(select(PlatformConfig).where(PlatformConfig.key == DEMUX_FILENAME_PATTERN_KEY))
     ).scalar_one_or_none()
     if row is None or not row.value:
         return None
@@ -66,9 +62,7 @@ async def _load_custom_pattern(session: AsyncSession) -> re.Pattern | None:
         return None
 
 
-def _extract_identifiers(
-    filename: str, custom: re.Pattern | None
-) -> dict[str, str]:
+def _extract_identifiers(filename: str, custom: re.Pattern | None) -> dict[str, str]:
     """Return any of library_external_id, i5, i7 that the filename exposes."""
     out: dict[str, str] = {}
     if custom is not None:
@@ -131,16 +125,10 @@ class DemuxReconciliationService:
             candidates: list[Library] = []
             if "library_external_id" in ids:
                 ext = ids["library_external_id"]
-                candidates = [
-                    lib for lib in libraries if lib.library_id_external == ext
-                ]
+                candidates = [lib for lib in libraries if lib.library_id_external == ext]
             if not candidates and "i5" in ids and "i7" in ids:
                 i5, i7 = ids["i5"], ids["i7"]
-                candidates = [
-                    lib
-                    for lib in libraries
-                    if lib.i5_sequence == i5 and lib.i7_sequence == i7
-                ]
+                candidates = [lib for lib in libraries if lib.i5_sequence == i5 and lib.i7_sequence == i7]
 
             if len(candidates) == 1:
                 lib = candidates[0]

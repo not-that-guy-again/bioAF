@@ -81,9 +81,7 @@ async def fuzzy_lookup_barcode(
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
-    pairs = await BarcodeService.fuzzy_lookup(
-        session, org_id, sequence, barcode_type, max_mismatches
-    )
+    pairs = await BarcodeService.fuzzy_lookup(session, org_id, sequence, barcode_type, max_mismatches)
     return [
         BarcodeFuzzyMatch(
             id=row.id,
@@ -122,8 +120,6 @@ async def reconcile_batch(
 ):
     org_id = int(current_user["org_id"])
     user_id = int(current_user["sub"])
-    report = await DemuxReconciliationService.reconcile_batch(
-        session, org_id, batch_id, user_id=user_id
-    )
+    report = await DemuxReconciliationService.reconcile_batch(session, org_id, batch_id, user_id=user_id)
     await session.commit()
     return report

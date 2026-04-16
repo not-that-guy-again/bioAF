@@ -49,9 +49,7 @@ class BarcodeMap(Base):
 
     # True for UMIs and other positional patterns that have no concrete sequence
     # (the reader just consumes ``length`` bases starting at ``offset_in_read``).
-    is_pattern_only: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
+    is_pattern_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
