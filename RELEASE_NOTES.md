@@ -1,5 +1,32 @@
 # Release Notes
 
+## v0.8.1
+
+Library and BarcodeMap operational completeness. No user-visible changes in this release.
+
+Second backend-only update building on the v0.8.0 data model. Adds the services, permissions, and edge-case handling the Library / Barcode feature needs before the UI ships. Current installs will see no new screens, menus, or workflows.
+
+### Backend
+
+- **Demux reconciliation**: new `POST /api/sequencing-batches/{id}/reconcile` walks unlinked files in a batch, extracts library identifiers from filenames, and sets `File.library_id` on unambiguous matches. Handles bcl-convert / bcl2fastq defaults and exposes a configurable regex override at the `demux.filename_pattern` platform config key. Re-runs are idempotent.
+- **Library backfill wizard (backend)**: preview-then-commit backfill for legacy Sample -> File data. `POST /api/experiments/{id}/backfill-libraries/preview` shows the plan; `.../commit` applies it. One Library per sample without one, Sample prep columns carried forward, existing `sample_files` links attached. Skips samples that already have a library; re-runs are a no-op.
+- **Fuzzy barcode lookup**: new `GET /api/barcodes/fuzzy-lookup?sequence=&max_mismatches=` returns hits within Hamming distance 0, 1, or 2. Short-barcode neighbour enumeration path for sequences up to 16bp; longer sequences are supported at exact match only.
+- **Sample column deprecation path**: `SampleService.get_prep_metadata` prefers Library fields and falls back to the legacy `Sample.library_prep_method` / `Sample.library_layout` when no Library exists. Writes to the deprecated Sample columns now emit a `bioaf.sample_deprecation` warning log. No columns dropped.
+- **i5 orientation inference**: Library creation now infers `i5_orientation_convention` from the linked sequencing batch's instrument model (NovaSeq / NextSeq / iSeq / HiSeq 3000+4000 => reverse_complement; MiSeq / HiSeq 1500+2000+2500 => forward). User-supplied values always win.
+- **Index hopping tracking**: new nullable `libraries.expected_contamination_pct` column. Default inferred per sequencer model (NovaSeq 0.5%, NextSeq 2000 1.0%, MiSeq 0.05%, etc).
+- **UMI / pattern-only barcode clarity**: new `barcode_maps.is_pattern_only` boolean distinguishes positional patterns (UMIs) from explicit-sequence rows, with stricter validation on either side.
+- **Sample swap detection (data model + API)**: new `sample_swap_checks` table records per-library attribute mismatches (wrong species, wrong donor sex, etc) with resolution tracking. Endpoints at `GET/POST /api/libraries/{id}/swap-checks` and `PATCH /api/swap-checks/{id}/resolve`. Pipeline step that detects swaps is out of scope.
+- **Barcode permission split**: new `barcodes` resource (view / create / edit / delete) gates every barcode-write endpoint, so bench users can create library-index rows without being granted full `libraries:edit`.
+- **Pre-demux ingest scaffolding**: new `ingest.pre_demux_enabled` platform config key (default false). Provides the hook for future multi-library attribution; no behaviour changes in this release.
+
+### Database
+
+- Migration `068` adds `libraries.expected_contamination_pct`.
+- Migration `069` adds `barcode_maps.is_pattern_only`.
+- Migration `070` creates the `sample_swap_checks` table.
+
+All three migrations are additive and independently reversible.
+
 ## v0.8.0
 
 Library and BarcodeMap data model groundwork. No user-visible changes in this release.
