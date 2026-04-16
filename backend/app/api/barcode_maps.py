@@ -23,7 +23,7 @@ router = APIRouter(tags=["barcode_maps"])
 async def create_barcode(
     library_id: int,
     body: BarcodeMapCreate,
-    current_user: dict = require_permission("libraries", "edit"),
+    current_user: dict = require_permission("barcodes", "create"),
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
@@ -39,7 +39,7 @@ async def create_barcode(
 async def bulk_create_barcodes(
     library_id: int,
     body: BarcodeMapBulkCreate,
-    current_user: dict = require_permission("libraries", "edit"),
+    current_user: dict = require_permission("barcodes", "create"),
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
@@ -52,7 +52,7 @@ async def bulk_create_barcodes(
 async def list_barcodes(
     library_id: int,
     barcode_type: str | None = Query(default=None),
-    current_user: dict = require_permission("libraries", "view"),
+    current_user: dict = require_permission("barcodes", "view"),
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
@@ -64,7 +64,7 @@ async def list_barcodes(
 async def lookup_barcode(
     sequence: str = Query(...),
     barcode_type: str | None = Query(default=None),
-    current_user: dict = require_permission("libraries", "view"),
+    current_user: dict = require_permission("barcodes", "view"),
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
@@ -77,7 +77,7 @@ async def fuzzy_lookup_barcode(
     sequence: str = Query(...),
     barcode_type: str | None = Query(default=None),
     max_mismatches: int = Query(default=1, ge=0, le=2),
-    current_user: dict = require_permission("libraries", "view"),
+    current_user: dict = require_permission("barcodes", "view"),
     session: AsyncSession = Depends(get_session),
 ):
     org_id = int(current_user["org_id"])
