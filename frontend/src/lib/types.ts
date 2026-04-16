@@ -1658,4 +1658,5 @@ export interface ReaderSAStatus {
 export interface ReaderSACreateResponse {
   email: string;
   message: string;
+  warning: string | null;
 }

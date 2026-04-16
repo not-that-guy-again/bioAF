@@ -173,14 +173,18 @@ async def create_reader_sa(session: AsyncSession) -> dict[str, str]:
     key_json = base64.b64decode(key_response["privateKeyData"]).decode("utf-8")
 
     # Enable the Sheets API in the project
+    sheets_api_enabled = False
     try:
         service_usage = discovery_build("serviceusage", "v1", credentials=creds, cache_discovery=False)
         service_usage.services().enable(name=f"projects/{project_id}/services/sheets.googleapis.com").execute()
+        sheets_api_enabled = True
     except Exception:
-        # Non-fatal: the API may already be enabled, or the SA may
-        # not have serviceusage permissions. The user will see a clear
-        # error when they try to preview a sheet.
-        pass
+        # The API may already be enabled -- check before warning
+        try:
+            svc = service_usage.services().get(name=f"projects/{project_id}/services/sheets.googleapis.com").execute()
+            sheets_api_enabled = svc.get("state") == "ENABLED"
+        except Exception:
+            pass
 
     # Persist to platform_config
     await _upsert(session, "sheets_reader_sa_email", sa_email)
@@ -188,7 +192,14 @@ async def create_reader_sa(session: AsyncSession) -> dict[str, str]:
     await _upsert(session, "sheets_reader_sa_created", "true")
     await session.commit()
 
-    return {"email": sa_email}
+    result: dict[str, object] = {"email": sa_email}
+    if not sheets_api_enabled:
+        result["warning"] = (
+            "The Google Sheets API could not be enabled automatically. "
+            "Enable it manually at: "
+            "https://console.cloud.google.com/apis/library/sheets.googleapis.com"
+        )
+    return result
 
 
 async def delete_reader_sa(session: AsyncSession) -> None:

@@ -54,8 +54,9 @@ async def create_reader_sa(
             detail=f"Failed to create reader service account: {exc}",
         ) from exc
     return ReaderSACreateResponse(
-        email=result["email"],
+        email=str(result["email"]),
         message="Reader service account created successfully",
+        warning=str(result["warning"]) if result.get("warning") else None,
     )
 
 
@@ -109,12 +110,18 @@ async def preview_sheet_headers(
         if "403" in msg or "PERMISSION_DENIED" in msg:
             status = await sheets_reader_sa_service.get_reader_sa_status(session)
             sa_email = status.get("email", "the reader service account")
+            # Distinguish "API not enabled" from "sheet not shared"
+            if "has not been used" in msg or "it is disabled" in msg or "FORBIDDEN" in msg:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "The Google Sheets API is not enabled in your GCP project. "
+                        "Enable it at: https://console.cloud.google.com/apis/library/sheets.googleapis.com"
+                    ),
+                ) from exc
             raise HTTPException(
                 status_code=403,
-                detail=(
-                    f"Cannot access this spreadsheet. "
-                    f"Share it with {sa_email} and try again."
-                ),
+                detail=(f"Cannot access this spreadsheet. Share it with {sa_email} and try again."),
             ) from exc
         if "404" in msg or "not found" in msg.lower():
             raise HTTPException(

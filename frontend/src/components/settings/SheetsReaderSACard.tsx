@@ -8,6 +8,7 @@ export function SheetsReaderSACard() {
   const [status, setStatus] = useState<ReaderSAStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
   const [copied, setCopied] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
 
@@ -30,6 +31,7 @@ export function SheetsReaderSACard() {
     try {
       const data = await api.post<ReaderSACreateResponse>("/api/v1/sheets/reader-sa", {});
       setStatus({ exists: true, email: data.email });
+      if (data.warning) setWarning(data.warning);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create reader service account");
     } finally {
@@ -105,6 +107,12 @@ export function SheetsReaderSACard() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-2">
           <p className="text-xs text-red-700">{error}</p>
+        </div>
+      )}
+
+      {warning && (
+        <div className="bg-amber-50 border border-amber-200 rounded-md p-2">
+          <p className="text-xs text-amber-700">{warning}</p>
         </div>
       )}
 

@@ -35,3 +35,4 @@ class ReaderSAStatusResponse(BaseModel):
 class ReaderSACreateResponse(BaseModel):
     email: str
     message: str
+    warning: str | None = None
