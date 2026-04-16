@@ -54,6 +54,29 @@ class BarcodeService:
     @staticmethod
     def _build_row(org_id: int, library_id: int, payload: BarcodeMapCreate) -> BarcodeMap:
         seq = _canonicalize(payload.sequence)
+        if payload.is_pattern_only:
+            if seq is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="is_pattern_only rows must not carry a sequence",
+                )
+            if payload.read_position is None or payload.offset_in_read is None or payload.length is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "is_pattern_only rows require read_position, "
+                        "offset_in_read, and length"
+                    ),
+                )
+        else:
+            if seq is None and not payload.whitelist_reference:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "Explicit-sequence rows require either a sequence or a "
+                        "whitelist_reference"
+                    ),
+                )
         if payload.barcode_type == "library_index" and seq is None:
             raise HTTPException(
                 status_code=422,
@@ -84,6 +107,7 @@ class BarcodeService:
             allowed_mismatches=payload.allowed_mismatches,
             whitelist_reference=payload.whitelist_reference,
             attributes_json=payload.attributes_json,
+            is_pattern_only=payload.is_pattern_only,
         )
 
     @staticmethod

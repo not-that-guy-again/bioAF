@@ -18,6 +18,16 @@ ReadPosition = Literal["R1", "R2", "I1", "I2"]
 
 
 class BarcodeMapCreate(BaseModel):
+    """A single barcode row.
+
+    Two modes:
+      - Explicit sequence (``is_pattern_only=False``, the default): ``sequence`` is
+        required unless ``whitelist_reference`` is set.
+      - Pattern-only (``is_pattern_only=True``): used for UMIs and other
+        positional patterns. ``read_position``, ``offset_in_read``, and ``length``
+        are required; ``sequence`` must be null.
+    """
+
     barcode_type: BarcodeType
     sequence: str | None = None
     name: str | None = None
@@ -27,6 +37,7 @@ class BarcodeMapCreate(BaseModel):
     allowed_mismatches: int | None = 1
     whitelist_reference: str | None = None
     attributes_json: dict | None = None
+    is_pattern_only: bool = False
 
 
 class BarcodeMapBulkCreate(BaseModel):
@@ -46,6 +57,7 @@ class BarcodeMapResponse(BaseModel):
     allowed_mismatches: int | None = None
     whitelist_reference: str | None = None
     attributes_json: dict | None = None
+    is_pattern_only: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

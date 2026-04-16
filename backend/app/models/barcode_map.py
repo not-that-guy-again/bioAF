@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -45,6 +46,12 @@ class BarcodeMap(Base):
 
     whitelist_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attributes_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # True for UMIs and other positional patterns that have no concrete sequence
+    # (the reader just consumes ``length`` bases starting at ``offset_in_read``).
+    is_pattern_only: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
