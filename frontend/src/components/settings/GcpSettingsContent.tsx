@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { SheetsReaderSACard } from "@/components/settings/SheetsReaderSACard";
 
 interface GCPConfig {
   gcp_project_id: string | null;
@@ -473,6 +474,8 @@ ${RECOMMENDED_ROLES.map(({ role }) => `gcloud projects add-iam-policy-binding $P
               </div>
             )}
           </div>
+
+          <SheetsReaderSACard />
     </>
   );
 }
