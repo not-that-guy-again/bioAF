@@ -99,7 +99,7 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
       const match = existingCustomFieldsLower.get(normalized);
       if (match) {
         // Auto-map to the existing custom field
-        initial[col] = `custom:${match}`;
+        initial[col] = `existing:${match}`;
       } else {
         // Default to creating as a new custom field
         initial[col] = `custom:${col}`;
@@ -167,12 +167,7 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
     setLoading(true);
     setError("");
 
-    const activeMappings: Record<string, string> = {};
-    for (const [col, target] of Object.entries(mappings)) {
-      if (target !== "skip") {
-        activeMappings[col] = target;
-      }
-    }
+    const activeMappings = resolveActiveMappings(mappings);
 
     try {
       const data = await api.post<ConfirmResponse>(
@@ -191,17 +186,21 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
     }
   }
 
+  function resolveActiveMappings(mappings: Record<string, string>): Record<string, string> {
+    const active: Record<string, string> = {};
+    for (const [col, target] of Object.entries(mappings)) {
+      if (target === "skip") continue;
+      // Normalize "existing:X" to "custom:X" -- the backend treats both the same
+      active[col] = target.startsWith("existing:") ? `custom:${target.slice("existing:".length)}` : target;
+    }
+    return active;
+  }
+
   async function submitConfirm(confirmFile: File, mappings: Record<string, string>) {
     setLoading(true);
     setError("");
 
-    // Filter out "skip" mappings
-    const activeMappings: Record<string, string> = {};
-    for (const [col, target] of Object.entries(mappings)) {
-      if (target !== "skip") {
-        activeMappings[col] = target;
-      }
-    }
+    const activeMappings = resolveActiveMappings(mappings);
 
     try {
       const data = await api.upload<ConfirmResponse>(
@@ -228,7 +227,7 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
   // Fields already claimed by recognized columns or other mappings
   const usedFields = new Set<string>([
     ...(preview?.recognized_columns.map((c) => c.mapped_to) ?? []),
-    ...Object.values(columnMappings).filter((v) => v !== "skip" && !v.startsWith("custom:")),
+    ...Object.values(columnMappings).filter((v) => v !== "skip" && !v.startsWith("custom:") && !v.startsWith("existing:")),
   ]);
 
   return (
@@ -447,7 +446,7 @@ export function CsvUploadModal({ experimentId, existingCustomFields = [], onClos
                         {existingCustomFields.length > 0 && (
                           <optgroup label="Map to existing custom field">
                             {existingCustomFields.map((cf) => (
-                              <option key={`cf:${cf}`} value={`custom:${cf}`}>
+                              <option key={`cf:${cf}`} value={`existing:${cf}`}>
                                 {cf}
                               </option>
                             ))}
