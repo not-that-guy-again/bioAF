@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.google_sheets_service import (
+    _resolve_sheet_name,
+    get_sheet_names,
     parse_sheet_url,
     read_header_row,
-    get_sheet_names,
-    _resolve_sheet_name,
 )
 
 
@@ -78,25 +78,31 @@ def _mock_spreadsheet_meta(sheets_data: list[dict]) -> MagicMock:
 
 
 def test_resolve_first_sheet_when_no_gid():
-    service = _mock_spreadsheet_meta([
-        {"properties": {"sheetId": 0, "title": "Sheet1"}},
-        {"properties": {"sheetId": 123, "title": "Data"}},
-    ])
+    service = _mock_spreadsheet_meta(
+        [
+            {"properties": {"sheetId": 0, "title": "Sheet1"}},
+            {"properties": {"sheetId": 123, "title": "Data"}},
+        ]
+    )
     assert _resolve_sheet_name(service, "abc", None) == "Sheet1"
 
 
 def test_resolve_sheet_by_gid():
-    service = _mock_spreadsheet_meta([
-        {"properties": {"sheetId": 0, "title": "Sheet1"}},
-        {"properties": {"sheetId": 456, "title": "Samples"}},
-    ])
+    service = _mock_spreadsheet_meta(
+        [
+            {"properties": {"sheetId": 0, "title": "Sheet1"}},
+            {"properties": {"sheetId": 456, "title": "Samples"}},
+        ]
+    )
     assert _resolve_sheet_name(service, "abc", 456) == "Samples"
 
 
 def test_resolve_sheet_unknown_gid_raises():
-    service = _mock_spreadsheet_meta([
-        {"properties": {"sheetId": 0, "title": "Sheet1"}},
-    ])
+    service = _mock_spreadsheet_meta(
+        [
+            {"properties": {"sheetId": 0, "title": "Sheet1"}},
+        ]
+    )
     with pytest.raises(ValueError, match="No sheet found with gid=999"):
         _resolve_sheet_name(service, "abc", 999)
 
