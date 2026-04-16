@@ -4,20 +4,33 @@ import { useState } from "react";
 import { api } from "@/lib/api";
 import type { FieldDefaultValue, SheetPreviewResponse } from "@/lib/types";
 
-// Sample fields that can be set as experiment-level defaults.
-// Must match DEFAULTABLE_SAMPLE_FIELDS on the backend.
-const DEFAULTABLE_FIELDS = [
-  { value: "organism", label: "Organism" },
-  { value: "tissue_type", label: "Tissue Type" },
-  { value: "donor_source", label: "Donor ID" },
-  { value: "treatment_condition", label: "Treatment Condition" },
-  { value: "chemistry_version", label: "Chemistry Version" },
-  { value: "sample_batch_code", label: "Sample Batch" },
-  { value: "sequencing_batch_code", label: "Sequencing Batch" },
-  { value: "molecule_type", label: "Molecule Type" },
-  { value: "library_prep_method", label: "Library Prep Method" },
-  { value: "library_layout", label: "Library Layout" },
+// All user-facing sample fields. Must match SAMPLE_FIELDS + DEFAULTABLE_SAMPLE_FIELDS
+// on the backend. Fields marked defaultable can have experiment-level defaults set.
+const ALL_SAMPLE_FIELDS = [
+  { value: "sample_id_unique", label: "Sample ID", defaultable: false },
+  { value: "organism", label: "Organism", defaultable: true },
+  { value: "tissue_type", label: "Tissue Type", defaultable: true },
+  { value: "donor_source", label: "Donor ID", defaultable: true },
+  { value: "treatment_condition", label: "Treatment Condition", defaultable: true },
+  { value: "chemistry_version", label: "Chemistry Version", defaultable: true },
+  { value: "viability_pct", label: "Viability %", defaultable: false },
+  { value: "cell_count", label: "Cell Count", defaultable: false },
+  { value: "prep_notes", label: "Prep Notes", defaultable: false },
+  { value: "molecule_type", label: "Molecule Type", defaultable: true },
+  { value: "library_prep_method", label: "Library Prep Method", defaultable: true },
+  { value: "library_layout", label: "Library Layout", defaultable: true },
+  { value: "qc_status", label: "QC Status", defaultable: false },
+  { value: "qc_notes", label: "QC Notes", defaultable: false },
+  { value: "collection_timestamp", label: "Collection Timestamp", defaultable: false },
+  { value: "collection_method", label: "Collection Method", defaultable: false },
+  { value: "sample_batch_code", label: "Sample Batch", defaultable: true },
+  { value: "sequencing_batch_code", label: "Sequencing Batch", defaultable: true },
+  { value: "sequencing_batch_position", label: "Batch Position", defaultable: false },
 ];
+
+const DEFAULTABLE_VALUES = new Set(
+  ALL_SAMPLE_FIELDS.filter((f) => f.defaultable).map((f) => f.value)
+);
 
 interface SheetImportModalProps {
   onClose: () => void;
@@ -101,29 +114,30 @@ export function SheetImportModal({
     const newFieldDefaults: FieldDefaultValue[] = [];
     const newCustomFields: { name: string; value: string; required: boolean }[] = [];
 
-    // Add recognized columns as field defaults (if not already set)
+    // Add recognized defaultable columns as field defaults (if not already set)
     for (const col of preview.recognized_columns) {
-      if (!existingFieldDefaults.some((d) => d.field_name === col.mapped_to)) {
+      if (col.defaultable && !existingFieldDefaults.some((d) => d.field_name === col.mapped_to)) {
         newFieldDefaults.push({
           field_name: col.mapped_to,
           default_value: null,
           is_required: null,
         });
       }
+      // Non-defaultable recognized fields (sample_id_unique, viability_pct, etc.)
+      // don't need any action -- they'll be handled during sample CSV import
     }
 
     // Process user mappings for unknown columns
-    for (const [header, mapping] of Object.entries(columnMappings)) {
+    for (const [, mapping] of Object.entries(columnMappings)) {
       if (mapping === "skip") continue;
 
       if (mapping.startsWith("custom:")) {
         const fieldName = mapping.slice("custom:".length);
-        // Don't add if already exists
         if (!existingCustomFields.some((f) => f.name === fieldName)) {
           newCustomFields.push({ name: fieldName, value: "", required: false });
         }
-      } else {
-        // Mapped to a defaultable field
+      } else if (DEFAULTABLE_VALUES.has(mapping)) {
+        // Mapped to a defaultable sample field
         if (!existingFieldDefaults.some((d) => d.field_name === mapping)) {
           newFieldDefaults.push({
             field_name: mapping,
@@ -132,6 +146,8 @@ export function SheetImportModal({
           });
         }
       }
+      // Non-defaultable sample field mappings are informational --
+      // the user now knows the field exists and will be used on sample import
     }
 
     onApply({ fieldDefaults: newFieldDefaults, customFields: newCustomFields });
@@ -207,19 +223,35 @@ export function SheetImportModal({
               {preview.recognized_columns.length > 0 && (
                 <div>
                   <h3 className="text-sm font-medium text-gray-700 mb-2">Recognized Columns</h3>
+                  <p className="text-xs text-gray-500 mb-2">
+                    These columns match existing sample fields and will be handled automatically during sample import.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {preview.recognized_columns.map((col) => {
-                      const label = DEFAULTABLE_FIELDS.find((f) => f.value === col.mapped_to)?.label ?? col.mapped_to;
+                      const label = ALL_SAMPLE_FIELDS.find((f) => f.value === col.mapped_to)?.label ?? col.mapped_to;
                       return (
                         <span
                           key={col.header}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            col.defaultable
+                              ? "bg-green-100 text-green-800"
+                              : "bg-blue-100 text-blue-800"
+                          }`}
                         >
                           {col.header} &rarr; {label}
+                          {col.defaultable && (
+                            <span className="ml-1 text-green-600" title="Can set a default value">*</span>
+                          )}
                         </span>
                       );
                     })}
                   </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-200 mr-1" />
+                    Default value can be set &nbsp;
+                    <span className="inline-block w-2 h-2 rounded-full bg-blue-200 mr-1" />
+                    Tracked per sample
+                  </p>
                 </div>
               )}
 
@@ -245,9 +277,18 @@ export function SheetImportModal({
                         >
                           <option value={`custom:${col}`}>Add as custom field &quot;{col}&quot;</option>
                           <option value="skip">Skip this column</option>
-                          <optgroup label="Map to sample field default">
-                            {DEFAULTABLE_FIELDS.filter(
-                              (f) => !usedFields.has(f.value) || columnMappings[col] === f.value
+                          <optgroup label="Sample fields (default value can be set)">
+                            {ALL_SAMPLE_FIELDS.filter(
+                              (f) => f.defaultable && (!usedFields.has(f.value) || columnMappings[col] === f.value)
+                            ).map((f) => (
+                              <option key={f.value} value={f.value}>
+                                {f.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Sample fields (tracked per sample)">
+                            {ALL_SAMPLE_FIELDS.filter(
+                              (f) => !f.defaultable && (!usedFields.has(f.value) || columnMappings[col] === f.value)
                             ).map((f) => (
                               <option key={f.value} value={f.value}>
                                 {f.label}

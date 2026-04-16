@@ -1640,6 +1640,7 @@ export interface DataMount {
 export interface SheetRecognizedColumn {
   header: string;
   mapped_to: string;
+  defaultable: boolean;
 }
 
 export interface SheetPreviewResponse {

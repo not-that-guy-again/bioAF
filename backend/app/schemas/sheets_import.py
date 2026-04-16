@@ -17,6 +17,7 @@ class SheetPreviewRequest(BaseModel):
 class RecognizedColumn(BaseModel):
     header: str
     mapped_to: str
+    defaultable: bool
 
 
 class SheetPreviewResponse(BaseModel):

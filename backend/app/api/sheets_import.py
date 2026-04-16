@@ -14,15 +14,15 @@ from app.schemas.sheets_import import (
     SheetPreviewResponse,
 )
 from app.services import sheets_reader_sa_service
-from app.services.csv_service import COLUMN_MAP, _normalize_header
+from app.services.csv_service import COLUMN_MAP, SAMPLE_FIELDS, _normalize_header
 from app.services.google_sheets_service import parse_sheet_url, read_header_row
 
 router = APIRouter(prefix="/api/v1/sheets", tags=["sheets_import"])
 
-# Sample fields that can be mapped as experiment-level field defaults.
-# We only surface DEFAULTABLE_SAMPLE_FIELDS as mapping targets since those
-# are the fields that cascade to every sample in an experiment.
-_MAPPABLE_FIELDS = set(DEFAULTABLE_SAMPLE_FIELDS)
+# All user-facing sample fields that column headers can be recognized against.
+_ALL_SAMPLE_FIELDS = set(SAMPLE_FIELDS)
+# The subset that can be configured as experiment-level field defaults.
+_DEFAULTABLE_FIELDS = set(DEFAULTABLE_SAMPLE_FIELDS)
 
 
 @router.get("/reader-sa", response_model=ReaderSAStatusResponse)
@@ -137,8 +137,14 @@ async def preview_sheet_headers(
     for header in headers:
         normalized = _normalize_header(header)
         mapped_field = COLUMN_MAP.get(normalized)
-        if mapped_field and mapped_field in _MAPPABLE_FIELDS:
-            recognized.append(RecognizedColumn(header=header, mapped_to=mapped_field))
+        if mapped_field and mapped_field in _ALL_SAMPLE_FIELDS:
+            recognized.append(
+                RecognizedColumn(
+                    header=header,
+                    mapped_to=mapped_field,
+                    defaultable=mapped_field in _DEFAULTABLE_FIELDS,
+                )
+            )
         else:
             unknown.append(header)
 

@@ -5,7 +5,7 @@ All GCP / Sheets API calls are mocked.
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import text
@@ -18,16 +18,18 @@ from sqlalchemy import text
 
 async def _seed_reader_sa(session, email: str = "bioaf-reader-abc1@proj.iam.gserviceaccount.com"):
     """Insert reader SA config into platform_config."""
-    sa_key = json.dumps({
-        "type": "service_account",
-        "project_id": "my-project",
-        "private_key_id": "key123",
-        "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n",
-        "client_email": email,
-        "client_id": "123456789",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-    })
+    sa_key = json.dumps(
+        {
+            "type": "service_account",
+            "project_id": "my-project",
+            "private_key_id": "key123",
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n",
+            "client_email": email,
+            "client_id": "123456789",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    )
     await session.execute(
         text("""
         INSERT INTO platform_config (key, value) VALUES
@@ -42,16 +44,18 @@ async def _seed_reader_sa(session, email: str = "bioaf-reader-abc1@proj.iam.gser
 
 async def _seed_gcp_config(session):
     """Insert minimal GCP config for SA creation tests."""
-    sa_key = json.dumps({
-        "type": "service_account",
-        "project_id": "my-project",
-        "private_key_id": "key123",
-        "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n",
-        "client_email": "bioaf@my-project.iam.gserviceaccount.com",
-        "client_id": "123456789",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-    })
+    sa_key = json.dumps(
+        {
+            "type": "service_account",
+            "project_id": "my-project",
+            "private_key_id": "key123",
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----\n",
+            "client_email": "bioaf@my-project.iam.gserviceaccount.com",
+            "client_id": "123456789",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    )
     await session.execute(
         text("""
         INSERT INTO platform_config (key, value) VALUES
@@ -135,7 +139,10 @@ async def test_create_reader_sa_success(client, admin_token, session):
 
     with (
         patch("app.services.sheets_reader_sa_service.discovery_build", side_effect=fake_build),
-        patch("app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info", return_value=MagicMock()),
+        patch(
+            "app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
     ):
         response = await client.post(
             "/api/v1/sheets/reader-sa",
@@ -235,7 +242,10 @@ async def test_preview_sheet_headers(client, admin_token, session):
 
     with (
         patch("app.services.google_sheets_service.discovery_build") as mock_build,
-        patch("app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info", return_value=MagicMock()),
+        patch(
+            "app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
     ):
         mock_service = MagicMock()
         mock_service.spreadsheets().get().execute.return_value = {
@@ -258,10 +268,12 @@ async def test_preview_sheet_headers(client, admin_token, session):
     assert data["sheet_name"] == "Sheet1"
     assert len(data["columns"]) == 4
 
-    # organism and tissue_type should be recognized
-    recognized_fields = {c["mapped_to"] for c in data["recognized_columns"]}
-    assert "organism" in recognized_fields
-    assert "tissue_type" in recognized_fields
+    # organism and tissue_type should be recognized and defaultable
+    recognized = {c["mapped_to"]: c for c in data["recognized_columns"]}
+    assert "organism" in recognized
+    assert recognized["organism"]["defaultable"] is True
+    assert "tissue_type" in recognized
+    assert recognized["tissue_type"]["defaultable"] is True
 
     # centrifuge_rpm and barcode should be unknown
     assert "centrifuge_rpm" in data["unknown_columns"]
@@ -275,7 +287,10 @@ async def test_preview_sheet_with_aliases(client, admin_token, session):
 
     with (
         patch("app.services.google_sheets_service.discovery_build") as mock_build,
-        patch("app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info", return_value=MagicMock()),
+        patch(
+            "app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
     ):
         mock_service = MagicMock()
         mock_service.spreadsheets().get().execute.return_value = {
@@ -331,7 +346,10 @@ async def test_preview_sheet_not_shared(client, admin_token, session):
 
     with (
         patch("app.services.google_sheets_service.discovery_build") as mock_build,
-        patch("app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info", return_value=MagicMock()),
+        patch(
+            "app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
     ):
         mock_service = MagicMock()
         mock_service.spreadsheets().get().execute.side_effect = Exception(
@@ -350,22 +368,23 @@ async def test_preview_sheet_not_shared(client, admin_token, session):
 
 
 @pytest.mark.asyncio
-async def test_preview_non_defaultable_fields_are_unknown(client, admin_token, session):
-    """Fields that match COLUMN_MAP but are not in DEFAULTABLE_SAMPLE_FIELDS go to unknown."""
+async def test_preview_non_defaultable_fields_recognized_with_flag(client, admin_token, session):
+    """Fields that match COLUMN_MAP but are not defaultable are recognized with defaultable=false."""
     await _seed_reader_sa(session)
 
     with (
         patch("app.services.google_sheets_service.discovery_build") as mock_build,
-        patch("app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info", return_value=MagicMock()),
+        patch(
+            "app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
     ):
         mock_service = MagicMock()
         mock_service.spreadsheets().get().execute.return_value = {
             "sheets": [{"properties": {"sheetId": 0, "title": "Sheet1"}}]
         }
         # qc_status maps via COLUMN_MAP but is NOT in DEFAULTABLE_SAMPLE_FIELDS
-        mock_service.spreadsheets().values().get().execute.return_value = {
-            "values": [["organism", "qc_status"]]
-        }
+        mock_service.spreadsheets().values().get().execute.return_value = {"values": [["organism", "qc_status"]]}
         mock_build.return_value = mock_service
 
         response = await client.post(
@@ -376,7 +395,10 @@ async def test_preview_non_defaultable_fields_are_unknown(client, admin_token, s
 
     assert response.status_code == 200
     data = response.json()
-    recognized_fields = {c["mapped_to"] for c in data["recognized_columns"]}
-    assert "organism" in recognized_fields
-    # qc_status should be in unknown since it's not defaultable
-    assert "qc_status" in data["unknown_columns"]
+    recognized = {c["mapped_to"]: c for c in data["recognized_columns"]}
+    assert "organism" in recognized
+    assert recognized["organism"]["defaultable"] is True
+    # qc_status is recognized but not defaultable
+    assert "qc_status" in recognized
+    assert recognized["qc_status"]["defaultable"] is False
+    assert "qc_status" not in data["unknown_columns"]
