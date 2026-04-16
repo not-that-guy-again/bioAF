@@ -63,6 +63,7 @@ from app.models.experiment_auto_run import ExperimentAutoRun
 from app.models.pending_auto_run import PendingAutoRun
 from app.models.library import Library
 from app.models.barcode_map import BarcodeMap
+from app.models.sample_swap_check import SampleSwapCheck
 
 __all__ = [
     "User",
@@ -136,4 +137,5 @@ __all__ = [
     "PendingAutoRun",
     "Library",
     "BarcodeMap",
+    "SampleSwapCheck",
 ]
