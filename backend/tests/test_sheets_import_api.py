@@ -402,3 +402,70 @@ async def test_preview_non_defaultable_fields_recognized_with_flag(client, admin
     assert "qc_status" in recognized
     assert recognized["qc_status"]["defaultable"] is False
     assert "qc_status" not in data["unknown_columns"]
+
+
+# ---------------------------------------------------------------------------
+# POST /{experiment_id}/samples/preview (Google Sheet -> sample preview)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sheet_sample_preview(client, admin_token, session):
+    """POST /api/v1/sheets/{id}/samples/preview returns CSV-style preview from a sheet."""
+    await _seed_reader_sa(session)
+
+    # Create an experiment first
+    exp_resp = await client.post(
+        "/api/experiments",
+        json={"name": "Sheet Sample Test"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert exp_resp.status_code == 200
+    exp_id = exp_resp.json()["id"]
+
+    with (
+        patch("app.services.google_sheets_service.discovery_build") as mock_build,
+        patch(
+            "app.services.sheets_reader_sa_service.service_account.Credentials.from_service_account_info",
+            return_value=MagicMock(),
+        ),
+    ):
+        mock_service = MagicMock()
+        mock_service.spreadsheets().get().execute.return_value = {
+            "sheets": [{"properties": {"sheetId": 0, "title": "Sheet1"}}]
+        }
+        # Full sheet with header + 2 data rows
+        mock_service.spreadsheets().values().get().execute.return_value = {
+            "values": [
+                ["organism", "tissue_type", "custom_col"],
+                ["human", "PBMC", "val1"],
+                ["mouse", "brain", "val2"],
+            ]
+        }
+        mock_build.return_value = mock_service
+
+        response = await client.post(
+            f"/api/v1/sheets/{exp_id}/samples/preview",
+            json={"sheet_url": "https://docs.google.com/spreadsheets/d/abc123/edit"},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_rows"] == 2
+    assert len(data["recognized_columns"]) >= 2
+    recognized_fields = {c["mapped_to"] for c in data["recognized_columns"]}
+    assert "organism" in recognized_fields
+    assert "tissue_type" in recognized_fields
+
+
+@pytest.mark.asyncio
+async def test_sheet_sample_preview_no_reader_sa(client, admin_token, session):
+    """Sheet sample preview returns 400 when reader SA not configured."""
+    response = await client.post(
+        "/api/v1/sheets/1/samples/preview",
+        json={"sheet_url": "https://docs.google.com/spreadsheets/d/abc123/edit"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert response.status_code == 400
+    assert "not configured" in response.json()["detail"]
