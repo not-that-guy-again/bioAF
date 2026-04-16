@@ -72,6 +72,7 @@ ALL_REQUIRED_PERMISSIONS = [
     "artifactregistry.repositories.create",
     "cloudbuild.builds.create",
     "logging.logEntries.create",
+    "serviceusage.services.enable",
 ]
 
 
