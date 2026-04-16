@@ -562,7 +562,7 @@ def test_result_includes_recommended_roles(mock_sa, mock_rm, mock_storage, mock_
     assert "roles/bigquery.dataEditor" in result.recommended_roles
     assert "roles/storage.admin" in result.recommended_roles
     assert "roles/viewer" in result.recommended_roles
-    assert "roles/serviceusage.serviceUsageViewer" in result.recommended_roles
+    assert "roles/serviceusage.serviceUsageAdmin" in result.recommended_roles
 
 
 # ---------------------------------------------------------------------------
