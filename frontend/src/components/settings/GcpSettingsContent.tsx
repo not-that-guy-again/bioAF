@@ -69,6 +69,7 @@ const RECOMMENDED_ROLES = [
   { role: "roles/pubsub.admin", description: "Pub/Sub Admin" },
   { role: "roles/container.admin", description: "Kubernetes Engine Admin" },
   { role: "roles/iam.serviceAccountUser", description: "Service Account User" },
+  { role: "roles/iam.serviceAccountKeyAdmin", description: "Service Account Key Admin" },
   { role: "roles/compute.admin", description: "Compute Admin" },
   { role: "roles/resourcemanager.projectIamAdmin", description: "Project IAM Admin" },
   { role: "roles/bigquery.dataEditor", description: "BigQuery Data Editor" },
