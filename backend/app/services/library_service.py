@@ -19,7 +19,10 @@ from app.schemas.library import LibraryCreate, LibraryUpdate
 from app.services import event_types
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
-from app.services.sequencing_conventions import infer_i5_orientation
+from app.services.sequencing_conventions import (
+    infer_expected_contamination_pct,
+    infer_i5_orientation,
+)
 
 
 _SEQ_RE = re.compile(r"^[ACGTN]+$")
@@ -123,12 +126,22 @@ class LibraryService:
         i7 = _canonicalize(payload.i7_sequence)
 
         i5_orientation = payload.i5_orientation_convention
-        if i5_orientation is None and payload.sequencing_batch_id is not None:
+        contamination_pct = payload.expected_contamination_pct
+        if payload.sequencing_batch_id is not None and (
+            i5_orientation is None or contamination_pct is None
+        ):
+            from decimal import Decimal as _D
+
             from app.models.sequencing_batch import SequencingBatch
 
             batch = await session.get(SequencingBatch, payload.sequencing_batch_id)
             if batch is not None:
-                i5_orientation = infer_i5_orientation(batch.instrument_model)
+                if i5_orientation is None:
+                    i5_orientation = infer_i5_orientation(batch.instrument_model)
+                if contamination_pct is None:
+                    inferred = infer_expected_contamination_pct(batch.instrument_model)
+                    if inferred is not None:
+                        contamination_pct = _D(inferred)
 
         lib = Library(
             organization_id=org_id,
@@ -151,6 +164,7 @@ class LibraryService:
             concentration_ng_ul=payload.concentration_ng_ul,
             qc_status=payload.qc_status,
             qc_notes=payload.qc_notes,
+            expected_contamination_pct=contamination_pct,
             sequencing_batch_id=payload.sequencing_batch_id,
             notes=payload.notes,
         )

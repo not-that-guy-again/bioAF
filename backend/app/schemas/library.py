@@ -25,6 +25,7 @@ class LibraryCreate(BaseModel):
     concentration_ng_ul: Decimal | None = None
     qc_status: Literal["pass", "warning", "fail"] | None = None
     qc_notes: str | None = None
+    expected_contamination_pct: Decimal | None = None
     sequencing_batch_id: int | None = None
     notes: str | None = None
 
@@ -48,6 +49,7 @@ class LibraryUpdate(BaseModel):
     concentration_ng_ul: Decimal | None = None
     qc_status: Literal["pass", "warning", "fail"] | None = None
     qc_notes: str | None = None
+    expected_contamination_pct: Decimal | None = None
     sequencing_batch_id: int | None = None
     status: str | None = None
     notes: str | None = None
@@ -75,6 +77,7 @@ class LibraryResponse(BaseModel):
     concentration_ng_ul: Decimal | None = None
     qc_status: str | None = None
     qc_notes: str | None = None
+    expected_contamination_pct: Decimal | None = None
     sequencing_batch_id: int | None = None
     status: str
     notes: str | None = None

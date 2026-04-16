@@ -41,3 +41,30 @@ def infer_i5_orientation(instrument_model: str | None) -> str | None:
         if needle.startswith(prefix):
             return "forward"
     return None
+
+
+# Expected cross-library contamination from index hopping, by sequencer model.
+# Patterned flow cells (NovaSeq, NextSeq 2000) misassign a small percentage of
+# reads across libraries on the same lane; non-patterned machines are lower.
+# Values are percentages (0.5 == 0.5%).
+_CONTAMINATION_BY_PREFIX: list[tuple[str, str]] = [
+    ("nextseq 2", "1.000"),
+    ("nextseq 1", "1.000"),
+    ("novaseq", "0.500"),
+    ("hiseq 3", "0.200"),
+    ("hiseq 4", "0.200"),
+    ("miseq", "0.050"),
+    ("iseq", "0.050"),
+    ("nextseq", "0.500"),
+]
+
+
+def infer_expected_contamination_pct(instrument_model: str | None) -> str | None:
+    """Return a string-formatted Numeric(5,3) default, or None for unknown models."""
+    if not instrument_model:
+        return None
+    needle = instrument_model.strip().lower()
+    for prefix, pct in _CONTAMINATION_BY_PREFIX:
+        if needle.startswith(prefix):
+            return pct
+    return None
