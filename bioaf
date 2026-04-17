@@ -543,6 +543,8 @@ STATUSEOF
         cat > "$status_dir/current.json" <<STATUSEOF
 {"status": "in_progress", "from_version": "$current_version", "to_version": "$target_version", "step": "warn", "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 STATUSEOF
+        echo ""
+        yellow "Restarting in ${warn_seconds}s (notifying active users)..."
         sleep "$warn_seconds"
     fi
 
