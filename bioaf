@@ -294,9 +294,6 @@ cmd_start() {
     bold "=== Starting Services ==="
     set_image_tag
 
-    # Cloud Logging (GCE only, idempotent)
-    ensure_cloud_logging
-
     for svc in db backend frontend nginx; do
         echo "Starting $svc..."
         $DC up -d "$svc"
