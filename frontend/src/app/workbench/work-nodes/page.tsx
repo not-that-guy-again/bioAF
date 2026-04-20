@@ -18,6 +18,8 @@ import type {
   EnvironmentResponse,
   EnvironmentListResponse,
   EnvironmentDetailResponse,
+  GitHubRepo,
+  GitHubRepoListResponse,
 } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -44,6 +46,14 @@ export default function WorkNodesPage() {
   const [showLaunch, setShowLaunch] = useState(false);
   const [viewingNode, setViewingNode] = useState<WorkNode | null>(null);
 
+  // GitHub repos state
+  const [repos, setRepos] = useState<GitHubRepo[]>([]);
+  const [showRepos, setShowRepos] = useState(false);
+  const [newRepoUrl, setNewRepoUrl] = useState("");
+  const [newRepoName, setNewRepoName] = useState("");
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [addingRepo, setAddingRepo] = useState(false);
+
   // Launch form state
   const [launchStep, setLaunchStep] = useState(1);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -54,6 +64,7 @@ export default function WorkNodesPage() {
   const [selectedEnvId, setSelectedEnvId] = useState<number | null>(null);
   const [envDetail, setEnvDetail] = useState<EnvironmentDetailResponse | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([]);
   const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
   const [selectedMachineType, setSelectedMachineType] = useState<string>("");
   const [launching, setLaunching] = useState(false);
@@ -66,6 +77,7 @@ export default function WorkNodesPage() {
     if (permLoading) return;
     if (!canAccess("work_nodes", "view")) { router.push("/dashboard"); return; }
     loadNodes();
+    loadRepos();
   }, [router, permLoading, canAccess]);
 
   // Auto-refresh while starting
@@ -87,6 +99,39 @@ export default function WorkNodesPage() {
     }
   }, []);
 
+  async function loadRepos() {
+    try {
+      const data = await api.get<GitHubRepoListResponse>("/api/v1/github-repos");
+      setRepos(data.repos);
+    } catch {}
+  }
+
+  async function handleAddRepo() {
+    if (!newRepoUrl.trim()) return;
+    setAddingRepo(true);
+    setRepoError(null);
+    try {
+      await api.post("/api/v1/github-repos", {
+        git_ssh_url: newRepoUrl.trim(),
+        display_name: newRepoName.trim() || null,
+      });
+      setNewRepoUrl("");
+      setNewRepoName("");
+      loadRepos();
+    } catch (err) {
+      setRepoError(err instanceof ApiError ? err.message : "Failed to add repo");
+    } finally {
+      setAddingRepo(false);
+    }
+  }
+
+  async function handleDeleteRepo(repoId: number) {
+    try {
+      await api.delete(`/api/v1/github-repos/${repoId}`);
+      loadRepos();
+    } catch {}
+  }
+
   async function openLaunchDialog() {
     setShowLaunch(true);
     setLaunchStep(1);
@@ -95,6 +140,7 @@ export default function WorkNodesPage() {
     setSelectedEnvId(null);
     setEnvDetail(null);
     setSelectedVersionId(null);
+    setSelectedRepoIds([]);
     setSelectedMachineType("");
     setLaunchError(null);
 
@@ -102,7 +148,7 @@ export default function WorkNodesPage() {
       const [projectData, mtData, envData] = await Promise.all([
         api.get<{ projects: Project[]; total: number }>("/api/projects?page_size=100"),
         api.get<MachineType[]>("/api/v1/work-nodes/machine-types"),
-        api.get<EnvironmentListResponse>("/api/v1/environments"),
+        api.get<EnvironmentListResponse>("/api/v1/environments?type=work_node"),
       ]);
       setProjects(projectData.projects);
       setMachineTypes(mtData);
@@ -137,6 +183,12 @@ export default function WorkNodesPage() {
     );
   }
 
+  function toggleRepo(repoId: number) {
+    setSelectedRepoIds((prev) =>
+      prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]
+    );
+  }
+
   async function handleLaunch() {
     if (!selectedProjectId || !selectedVersionId || !selectedMachineType) return;
     setLaunching(true);
@@ -147,6 +199,7 @@ export default function WorkNodesPage() {
         environment_version_id: selectedVersionId,
         machine_type: selectedMachineType,
         data_mount_paths: selectedMounts.length > 0 ? selectedMounts : undefined,
+        github_repo_ids: selectedRepoIds.length > 0 ? selectedRepoIds : undefined,
       };
       await api.post("/api/v1/work-nodes/sessions", req);
       setShowLaunch(false);
@@ -187,6 +240,13 @@ export default function WorkNodesPage() {
   function formatTimestamp(ts: string | null): string {
     if (!ts) return "-";
     return new Date(ts).toLocaleString();
+  }
+
+  function extractSshCommand(accessUrl: string | null): string {
+    if (!accessUrl) return "";
+    // access_url is like ssh://1.2.3.4:22
+    const ip = accessUrl.replace("ssh://", "").replace(/:\d+$/, "");
+    return `ssh ${ip}`;
   }
 
   if (permLoading || loading) {
@@ -236,14 +296,87 @@ export default function WorkNodesPage() {
               <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 p-4">
                 <div className="text-sm text-blue-800 space-y-2">
                   <ul className="space-y-1.5 text-blue-700">
-                    <li><strong>Input files</strong> are mounted at <code className="bg-blue-100 px-1 rounded">/data/</code>. Select data mounts during launch to access pipeline outputs, uploads, and shared results for your project.</li>
-                    <li><strong>Output files</strong> should be saved to <code className="bg-blue-100 px-1 rounded">/outputs/</code>. Everything in this directory is automatically synced to GCS and registered when you stop the node.</li>
+                    <li><strong>Work nodes</strong> are full Linux VMs with SSH access. They run conda environments you configure on the <a href="/environments" className="underline font-medium">Environments</a> page.</li>
+                    <li><strong>Input files</strong> are mounted at <code className="bg-blue-100 px-1 rounded">/data/</code>. Select data mounts during launch to access pipeline outputs, uploads, and shared results.</li>
+                    <li><strong>GitHub repos</strong> are cloned at boot into <code className="bg-blue-100 px-1 rounded">~/repos/</code>. Add repos in the section below, then select them when launching.</li>
+                    <li><strong>Output files</strong> should be saved to <code className="bg-blue-100 px-1 rounded">/outputs/</code>. Everything here is automatically synced to GCS when you stop the node.</li>
                     <li><strong>Scratch space</strong> at <code className="bg-blue-100 px-1 rounded">/scratch/</code> is for temporary computation. This data is lost when the node stops.</li>
-                    <li><strong>Environments</strong> control the packages and tools available. Choose an environment and version when launching. Admins can create new environments from the <a href="/environments" className="underline font-medium">Environments</a> page.</li>
-                    <li><strong>SSH access</strong> uses the credentials you set in your <a href="/profile" className="underline font-medium">Profile Settings</a>. The connection command appears in the node detail panel after launch.</li>
-                    <li><strong>Machine types</strong> range from standard (4 CPU) to high-memory (128 GB) and GPU. Choose based on your workload.</li>
+                    <li><strong>SSH access</strong> uses the credentials from your <a href="/profile" className="underline font-medium">Profile Settings</a>. The SSH command appears after launch.</li>
                   </ul>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* GitHub Repos section */}
+          <div className="mb-6">
+            <button
+              onClick={() => setShowRepos(!showRepos)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${showRepos ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              GitHub Repos ({repos.length})
+            </button>
+            {showRepos && (
+              <div className="mt-2 bg-white rounded-lg border border-gray-200 p-4">
+                <p className="text-xs text-gray-500 mb-3">Add GitHub repos to clone into your work nodes at boot. Provide the git SSH URL from GitHub.</p>
+
+                {repoError && (
+                  <div className="bg-red-50 border border-red-200 rounded p-2 mb-3 text-xs text-red-700">{repoError}</div>
+                )}
+
+                {/* Add repo form */}
+                {canAccess("work_nodes", "launch") && (
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={newRepoUrl}
+                      onChange={(e) => setNewRepoUrl(e.target.value)}
+                      placeholder="git@github.com:owner/repo.git"
+                      className="flex-1 border rounded px-3 py-1.5 text-sm font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={newRepoName}
+                      onChange={(e) => setNewRepoName(e.target.value)}
+                      placeholder="Display name (optional)"
+                      className="w-48 border rounded px-3 py-1.5 text-sm"
+                    />
+                    <button
+                      onClick={handleAddRepo}
+                      disabled={addingRepo || !newRepoUrl.trim()}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {addingRepo ? "Adding..." : "Add"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Repo list */}
+                {repos.length === 0 ? (
+                  <p className="text-xs text-gray-400">No repos configured yet.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {repos.map((repo) => (
+                      <div key={repo.id} className="flex items-center justify-between py-1.5 px-2 bg-gray-50 rounded text-sm">
+                        <div>
+                          <span className="font-medium">{repo.display_name}</span>
+                          <span className="text-gray-400 font-mono text-xs ml-2">{repo.git_ssh_url}</span>
+                        </div>
+                        {canAccess("work_nodes", "launch") && (
+                          <button
+                            onClick={() => handleDeleteRepo(repo.id)}
+                            className="text-red-500 hover:text-red-700 text-xs"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -337,18 +470,45 @@ export default function WorkNodesPage() {
                     <span className="text-gray-500">Resources</span>
                     <span>{viewingNode.cpu_cores} CPU / {viewingNode.memory_gb} GB RAM</span>
                   </div>
+                  {viewingNode.gce_instance_name && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">VM Instance</span>
+                      <span className="font-mono text-xs">{viewingNode.gce_instance_name}</span>
+                    </div>
+                  )}
+                  {viewingNode.gce_zone && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Zone</span>
+                      <span>{viewingNode.gce_zone}</span>
+                    </div>
+                  )}
                   {viewingNode.access_url && viewingNode.status === "running" && (
                     <div>
                       <span className="text-gray-500 block mb-1">SSH Command</span>
                       <div className="bg-gray-900 text-green-400 rounded p-3 font-mono text-xs flex items-center justify-between">
-                        <code>ssh {viewingNode.access_url.replace("ssh://", "").replace(/:\d+/, "")}</code>
+                        <code>{extractSshCommand(viewingNode.access_url)}</code>
                         <button
-                          onClick={() => navigator.clipboard.writeText(`ssh ${viewingNode.access_url?.replace("ssh://", "").replace(/:\d+/, "") ?? ""}`)}
+                          onClick={() => navigator.clipboard.writeText(extractSshCommand(viewingNode.access_url))}
                           className="ml-2 text-gray-400 hover:text-white text-xs"
                         >
                           Copy
                         </button>
                       </div>
+                    </div>
+                  )}
+                  {viewingNode.github_repo_ids && viewingNode.github_repo_ids.length > 0 && (
+                    <div>
+                      <span className="text-gray-500 block mb-1">Cloned Repos</span>
+                      <ul className="text-xs text-gray-700 space-y-1">
+                        {viewingNode.github_repo_ids.map((repoId) => {
+                          const repo = repos.find((r) => r.id === repoId);
+                          return (
+                            <li key={repoId} className="font-mono bg-gray-50 px-2 py-1 rounded">
+                              ~/repos/{repo?.display_name || `repo-${repoId}`}
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
                   )}
                   {viewingNode.data_mount_paths && viewingNode.data_mount_paths.length > 0 && (
@@ -391,7 +551,7 @@ export default function WorkNodesPage() {
             </div>
           )}
 
-          {/* Launch dialog */}
+          {/* Launch dialog -- 6 steps */}
           {showLaunch && (
             <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowLaunch(false)}>
               <div className="bg-white rounded-lg shadow-xl max-w-xl w-full mx-4 p-6 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -402,7 +562,7 @@ export default function WorkNodesPage() {
 
                 {/* Step indicators */}
                 <div className="flex gap-2 mb-6">
-                  {[1, 2, 3, 4, 5].map((s) => (
+                  {[1, 2, 3, 4, 5, 6].map((s) => (
                     <div key={s} className={`h-1 flex-1 rounded ${s <= launchStep ? "bg-indigo-600" : "bg-gray-200"}`} />
                   ))}
                 </div>
@@ -466,23 +626,29 @@ export default function WorkNodesPage() {
                 {launchStep === 3 && (
                   <div>
                     <h3 className="font-medium mb-3">Select Environment</h3>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {environments.map((env) => (
-                        <button
-                          key={env.id}
-                          onClick={() => { handleEnvSelect(env.id); }}
-                          className={`w-full text-left p-3 border rounded-lg hover:border-indigo-400 transition-colors ${selectedEnvId === env.id ? "border-indigo-500 bg-indigo-50" : ""}`}
-                        >
-                          <div className="font-medium text-sm">{env.name}</div>
-                          {env.description && <div className="text-xs text-gray-500 mt-0.5">{env.description}</div>}
-                          {env.latest_version && (
-                            <div className="text-xs text-gray-400 mt-1">
-                              v{env.latest_version.version_number} - {env.latest_version.status}
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                    {environments.length === 0 ? (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-700">
+                        No work node environments found. Create one from the <a href="/environments" className="underline font-medium">Environments</a> page with type &quot;Work Node&quot;.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {environments.map((env) => (
+                          <button
+                            key={env.id}
+                            onClick={() => { handleEnvSelect(env.id); }}
+                            className={`w-full text-left p-3 border rounded-lg hover:border-indigo-400 transition-colors ${selectedEnvId === env.id ? "border-indigo-500 bg-indigo-50" : ""}`}
+                          >
+                            <div className="font-medium text-sm">{env.name}</div>
+                            {env.description && <div className="text-xs text-gray-500 mt-0.5">{env.description}</div>}
+                            {env.latest_version && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                v{env.latest_version.version_number} - {env.latest_version.status}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     {envDetail && (
                       <div className="mt-3">
                         <label className="text-xs font-medium text-gray-600">Version</label>
@@ -513,8 +679,42 @@ export default function WorkNodesPage() {
                   </div>
                 )}
 
-                {/* Step 4: Select machine type */}
+                {/* Step 4: Select GitHub repos */}
                 {launchStep === 4 && (
+                  <div>
+                    <h3 className="font-medium mb-3">Select GitHub Repos</h3>
+                    <p className="text-xs text-gray-500 mb-3">These repos will be cloned into ~/repos/ when the node boots.</p>
+                    {repos.length === 0 ? (
+                      <p className="text-sm text-gray-400">No repos configured. You can add them from the GitHub Repos section on this page.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {repos.map((repo) => (
+                          <label key={repo.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedRepoIds.includes(repo.id)}
+                              onChange={() => toggleRepo(repo.id)}
+                              className="mt-0.5"
+                            />
+                            <div>
+                              <div className="text-sm font-medium">{repo.display_name}</div>
+                              <div className="text-xs text-gray-400 font-mono mt-0.5">{repo.git_ssh_url}</div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={() => setLaunchStep(3)} className="px-4 py-2 border rounded text-sm">Back</button>
+                      <button onClick={() => setLaunchStep(5)} className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700">
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 5: Select machine type */}
+                {launchStep === 5 && (
                   <div>
                     <h3 className="font-medium mb-3">Select Machine Type</h3>
                     {Object.entries(
@@ -547,9 +747,9 @@ export default function WorkNodesPage() {
                       </div>
                     ))}
                     <div className="flex gap-2 mt-4">
-                      <button onClick={() => setLaunchStep(3)} className="px-4 py-2 border rounded text-sm">Back</button>
+                      <button onClick={() => setLaunchStep(4)} className="px-4 py-2 border rounded text-sm">Back</button>
                       <button
-                        onClick={() => setLaunchStep(5)}
+                        onClick={() => setLaunchStep(6)}
                         disabled={!selectedMachineType}
                         className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
                       >
@@ -559,8 +759,8 @@ export default function WorkNodesPage() {
                   </div>
                 )}
 
-                {/* Step 5: Review and launch */}
-                {launchStep === 5 && (
+                {/* Step 6: Review and launch */}
+                {launchStep === 6 && (
                   <div>
                     <h3 className="font-medium mb-3">Review</h3>
                     <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-4">
@@ -577,6 +777,10 @@ export default function WorkNodesPage() {
                         <span>{environments.find((e) => e.id === selectedEnvId)?.name}</span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-500">Repos</span>
+                        <span>{selectedRepoIds.length > 0 ? selectedRepoIds.length + " repos" : "None"}</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-500">Machine Type</span>
                         <span className="font-mono">{selectedMachineType}</span>
                       </div>
@@ -591,7 +795,7 @@ export default function WorkNodesPage() {
                       })()}
                     </div>
                     <div className="flex gap-2 mt-4">
-                      <button onClick={() => setLaunchStep(4)} className="px-4 py-2 border rounded text-sm">Back</button>
+                      <button onClick={() => setLaunchStep(5)} className="px-4 py-2 border rounded text-sm">Back</button>
                       <button
                         onClick={handleLaunch}
                         disabled={launching}

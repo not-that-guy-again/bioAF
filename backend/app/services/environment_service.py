@@ -11,15 +11,22 @@ logger = logging.getLogger("bioaf.environment")
 
 VALID_VISIBILITIES = ("team", "organization")
 VALID_DEFINITION_FORMATS = ("dockerfile", "conda")
+VALID_ENVIRONMENT_TYPES = ("notebook", "work_node")
 
 
 class EnvironmentService:
     @staticmethod
-    async def list_environments(session: AsyncSession, org_id: int) -> list[Environment]:
-        """List environments within an organization."""
-        result = await session.execute(
-            select(Environment).where(Environment.organization_id == org_id).order_by(Environment.created_at.desc())
-        )
+    async def list_environments(
+        session: AsyncSession,
+        org_id: int,
+        environment_type: str | None = None,
+    ) -> list[Environment]:
+        """List environments within an organization, optionally filtered by type."""
+        query = select(Environment).where(Environment.organization_id == org_id)
+        if environment_type:
+            query = query.where(Environment.environment_type == environment_type)
+        query = query.order_by(Environment.created_at.desc())
+        result = await session.execute(query)
         return list(result.scalars().all())
 
     @staticmethod
@@ -40,9 +47,12 @@ class EnvironmentService:
         name: str,
         description: str | None = None,
         visibility: str = "team",
+        environment_type: str = "notebook",
     ) -> Environment:
         if visibility not in VALID_VISIBILITIES:
             raise ValueError(f"Invalid visibility: {visibility}")
+        if environment_type not in VALID_ENVIRONMENT_TYPES:
+            raise ValueError(f"Invalid environment_type: {environment_type}")
 
         # Check for duplicate name within org
         existing = await session.execute(
@@ -60,6 +70,7 @@ class EnvironmentService:
             organization_id=org_id,
             created_by_user_id=user_id,
             visibility=visibility,
+            environment_type=environment_type,
         )
         session.add(env)
         await session.flush()
@@ -152,6 +163,10 @@ class EnvironmentService:
 
         if definition_format not in VALID_DEFINITION_FORMATS:
             raise ValueError(f"Invalid definition_format: {definition_format}")
+
+        # Work node environments only support conda (ADR-043)
+        if env.environment_type == "work_node" and definition_format != "conda":
+            raise ValueError("Work node environments only support conda definition format")
 
         # Auto-increment version number
         result = await session.execute(

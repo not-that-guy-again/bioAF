@@ -1156,6 +1156,7 @@ export interface EnvironmentResponse {
   name: string;
   description: string | null;
   visibility: "team" | "organization";
+  environment_type: "notebook" | "work_node";
   version_count: number;
   latest_version: EnvironmentVersionSummary | null;
   created_by: UserSummary | null;
@@ -1588,7 +1589,7 @@ export interface VocabularyResponse {
   values: VocabularyValue[];
 }
 
-// Work Nodes (ADR-034)
+// Work Nodes (ADR-034, ADR-043)
 
 export interface WorkNode {
   id: number;
@@ -1603,6 +1604,9 @@ export interface WorkNode {
   memory_gb: number;
   status: string;
   access_url: string | null;
+  gce_instance_name: string | null;
+  gce_zone: string | null;
+  github_repo_ids: number[] | null;
   heartbeat_at: string | null;
   started_at: string | null;
   stopped_at: string | null;
@@ -1619,6 +1623,19 @@ export interface WorkNodeLaunchRequest {
   environment_version_id: number;
   machine_type: string;
   data_mount_paths?: string[];
+  github_repo_ids?: number[];
+}
+
+export interface GitHubRepo {
+  id: number;
+  git_ssh_url: string;
+  display_name: string;
+  created_at: string;
+}
+
+export interface GitHubRepoListResponse {
+  repos: GitHubRepo[];
+  total: number;
 }
 
 export interface MachineType {

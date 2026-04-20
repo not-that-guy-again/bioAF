@@ -49,6 +49,9 @@ def _work_node_response(cs) -> WorkNodeResponse:
         memory_gb=cs.memory_gb,
         status=cs.status,
         access_url=cs.access_url,
+        gce_instance_name=cs.gce_instance_name,
+        gce_zone=cs.gce_zone,
+        github_repo_ids=cs.github_repo_ids,
         heartbeat_at=cs.heartbeat_at,
         started_at=cs.started_at,
         stopped_at=cs.stopped_at,
@@ -133,6 +136,7 @@ async def launch_work_node(
             environment_version_id=body.environment_version_id,
             machine_type=body.machine_type,
             data_mount_paths=body.data_mount_paths,
+            github_repo_ids=body.github_repo_ids,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
