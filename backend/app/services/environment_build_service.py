@@ -64,7 +64,7 @@ variable "conda_env_name" {
 source "googlecompute" "work_node" {
   project_id   = var.project_id
   zone         = var.zone
-  machine_type = "n2-standard-4"
+  machine_type = "e2-standard-4"
 
   source_image_family = "ubuntu-2204-lts"
   source_image_project_id = ["ubuntu-os-cloud"]
