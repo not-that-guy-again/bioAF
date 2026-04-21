@@ -31,37 +31,37 @@ logger = logging.getLogger("bioaf.environment_build")
 # Packer template for building GCE VM images with conda environments (ADR-043).
 # Stored as a string constant; written to the build context at build time.
 PACKER_VM_TEMPLATE = """\
-packer {{
-  required_plugins {{
-    googlecompute = {{
+packer {
+  required_plugins {
+    googlecompute = {
       version = ">= 1.1.0"
       source  = "github.com/hashicorp/googlecompute"
-    }}
-  }}
-}}
+    }
+  }
+}
 
-variable "project_id" {{
+variable "project_id" {
   type = string
-}}
+}
 
-variable "zone" {{
+variable "zone" {
   type = string
-}}
+}
 
-variable "image_name" {{
+variable "image_name" {
   type = string
-}}
+}
 
-variable "environment_yml_gcs" {{
+variable "environment_yml_gcs" {
   type = string
-}}
+}
 
-variable "conda_env_name" {{
+variable "conda_env_name" {
   type    = string
   default = "bioaf"
-}}
+}
 
-source "googlecompute" "work_node" {{
+source "googlecompute" "work_node" {
   project_id   = var.project_id
   zone         = var.zone
   machine_type = "n2-standard-4"
@@ -72,41 +72,41 @@ source "googlecompute" "work_node" {{
   image_name        = var.image_name
   image_description = "bioAF work node environment"
   image_family      = "bioaf-worknode"
-  image_labels = {{
+  image_labels = {
     bioaf-managed = "true"
-  }}
+  }
 
   disk_size = 50
   disk_type = "pd-ssd"
 
   ssh_username = "packer"
-}}
+}
 
-build {{
+build {
   sources = ["source.googlecompute.work_node"]
 
   # System packages
-  provisioner "shell" {{
+  provisioner "shell" {
     inline = [
       "sudo apt-get update",
       "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server git tmux htop curl fail2ban",
       "sudo systemctl enable ssh",
       "sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
     ]
-  }}
+  }
 
   # Install gcsfuse
-  provisioner "shell" {{
+  provisioner "shell" {
     inline = [
       "export GCSFUSE_REPO=gcsfuse-$(lsb_release -c -s)",
-      "echo \"deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main\" | sudo tee /etc/apt/sources.list.d/gcsfuse.list",
+      "echo \\"deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main\\" | sudo tee /etc/apt/sources.list.d/gcsfuse.list",
       "curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -",
       "sudo apt-get update && sudo apt-get install -y gcsfuse",
     ]
-  }}
+  }
 
   # Install miniconda
-  provisioner "shell" {{
+  provisioner "shell" {
     inline = [
       "wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh",
       "sudo bash /tmp/miniconda.sh -b -p /opt/conda",
@@ -114,35 +114,35 @@ build {{
       "rm /tmp/miniconda.sh",
       "echo 'export PATH=/opt/conda/bin:$PATH' | sudo tee /etc/profile.d/conda.sh",
     ]
-  }}
+  }
 
   # Download environment.yml from GCS and create conda env
-  provisioner "shell" {{
+  provisioner "shell" {
     inline = [
       "export PATH=/opt/conda/bin:$PATH",
-      "gsutil cp ${{var.environment_yml_gcs}} /tmp/environment.yml",
+      "gsutil cp ${var.environment_yml_gcs} /tmp/environment.yml",
       "conda env create -f /tmp/environment.yml",
       "conda clean -afy",
       "rm /tmp/environment.yml",
     ]
-  }}
+  }
 
   # Install bioaf heartbeat agent
-  provisioner "shell" {{
+  provisioner "shell" {
     inline = [
       "sudo mkdir -p /etc/bioaf",
       "sudo mkdir -p /outputs /scratch",
     ]
-  }}
+  }
 
   # Cleanup
-  provisioner "shell" {{
+  provisioner "shell" {
     inline = [
       "sudo apt-get clean",
       "sudo rm -rf /var/lib/apt/lists/*",
     ]
-  }}
-}}
+  }
+}
 """
 
 
@@ -281,13 +281,9 @@ class EnvironmentBuildService:
 
         # Route to the correct build pipeline based on environment type (ADR-043)
         if env.environment_type == "work_node":
-            return await EnvironmentBuildService._build_vm_image(
-                session, env, version, org_id, user_id, environment_id
-            )
+            return await EnvironmentBuildService._build_vm_image(session, env, version, org_id, user_id, environment_id)
 
-        return await EnvironmentBuildService._build_docker_image(
-            session, env, version, org_id, user_id, environment_id
-        )
+        return await EnvironmentBuildService._build_docker_image(session, env, version, org_id, user_id, environment_id)
 
     @staticmethod
     async def _build_docker_image(
