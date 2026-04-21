@@ -440,6 +440,10 @@ class EnvironmentBuildService:
                 },
                 {
                     "name": "hashicorp/packer",
+                    "args": ["init", "/workspace/work_node.pkr.hcl"],
+                },
+                {
+                    "name": "hashicorp/packer",
                     "args": [
                         "build",
                         f"-var=project_id={project_id}",
