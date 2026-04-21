@@ -259,7 +259,7 @@ export default function EnvironmentsPage() {
           {loadError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
               {loadError}
-              <button onClick={loadEnvironments} className="ml-2 underline">Retry</button>
+              <button onClick={() => loadEnvironments()} className="ml-2 underline">Retry</button>
             </div>
           )}
           <div className="flex items-center justify-between mb-6">
