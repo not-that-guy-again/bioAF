@@ -106,13 +106,13 @@ build {
     ]
   }
 
-  # Install miniconda
+  # Install miniforge (conda-forge only, no Anaconda TOS)
   provisioner "shell" {
     inline = [
-      "wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh",
-      "sudo bash /tmp/miniconda.sh -b -p /opt/conda",
+      "wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh",
+      "sudo bash /tmp/miniforge.sh -b -p /opt/conda",
       "sudo chmod -R a+rx /opt/conda",
-      "rm /tmp/miniconda.sh",
+      "rm /tmp/miniforge.sh",
       "echo 'export PATH=/opt/conda/bin:$PATH' | sudo tee /etc/profile.d/conda.sh",
     ]
   }
@@ -121,8 +121,6 @@ build {
   provisioner "shell" {
     inline = [
       "export PATH=/opt/conda/bin:$PATH",
-      "conda config --remove channels defaults 2>/dev/null || true",
-      "conda config --add channels conda-forge",
       "gsutil cp ${var.environment_yml_gcs} /tmp/environment.yml",
       "conda env create -f /tmp/environment.yml",
       "conda clean -afy",
