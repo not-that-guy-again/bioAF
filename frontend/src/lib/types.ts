@@ -1174,6 +1174,7 @@ export interface EnvironmentDetailResponse {
   name: string;
   description: string | null;
   visibility: "team" | "organization";
+  environment_type: "notebook" | "work_node";
   versions: EnvironmentVersionSummary[];
   created_by: UserSummary | null;
   created_at: string;
