@@ -44,7 +44,7 @@ variable "project_id" {
   type = string
 }
 
-variable "zone" {
+variable "region" {
   type = string
 }
 
@@ -63,7 +63,7 @@ variable "conda_env_name" {
 
 source "googlecompute" "work_node" {
   project_id   = var.project_id
-  zone         = var.zone
+  region       = var.region
   machine_type = "n2-standard-4"
 
   source_image_family = "ubuntu-2204-lts"
@@ -390,13 +390,13 @@ class EnvironmentBuildService:
             raise ValueError("Work node environments only support conda definition format")
 
         project_id = await _read_config(session, "gcp_project_id")
-        zone = await _read_config(session, "gcp_zone")
+        region = await _read_config(session, "gcp_region")
         working_bucket = await _read_config(session, "working_bucket_name")
 
         if not project_id or project_id == "null":
             raise ValueError("GCP project not configured")
-        if not zone or zone == "null":
-            raise ValueError("GCP zone not configured")
+        if not region or region == "null":
+            raise ValueError("GCP region not configured")
         if not working_bucket or working_bucket == "null":
             raise ValueError("Working bucket not configured")
 
@@ -447,7 +447,7 @@ class EnvironmentBuildService:
                     "args": [
                         "build",
                         f"-var=project_id={project_id}",
-                        f"-var=zone={zone}",
+                        f"-var=region={region}",
                         f"-var=image_name={image_name}",
                         f"-var=environment_yml_gcs={env_yml_gcs}",
                         f"-var=conda_env_name={conda_env_name}",
