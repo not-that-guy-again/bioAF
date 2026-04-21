@@ -16,7 +16,6 @@ name: bioaf
 channels:
   - conda-forge
   - bioconda
-  - defaults
 dependencies:
   - python=3.11
   - numpy

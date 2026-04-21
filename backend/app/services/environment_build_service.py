@@ -121,6 +121,8 @@ build {
   provisioner "shell" {
     inline = [
       "export PATH=/opt/conda/bin:$PATH",
+      "conda config --remove channels defaults 2>/dev/null || true",
+      "conda config --add channels conda-forge",
       "gsutil cp ${var.environment_yml_gcs} /tmp/environment.yml",
       "conda env create -f /tmp/environment.yml",
       "conda clean -afy",
