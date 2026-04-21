@@ -44,7 +44,7 @@ variable "project_id" {
   type = string
 }
 
-variable "region" {
+variable "zone" {
   type = string
 }
 
@@ -63,7 +63,7 @@ variable "conda_env_name" {
 
 source "googlecompute" "work_node" {
   project_id   = var.project_id
-  region       = var.region
+  zone         = var.zone
   machine_type = "n2-standard-4"
 
   source_image_family = "ubuntu-2204-lts"
@@ -400,6 +400,13 @@ class EnvironmentBuildService:
         if not working_bucket or working_bucket == "null":
             raise ValueError("Working bucket not configured")
 
+        # Pick a zone for the Packer build VM, avoiding -a which is
+        # often capacity-constrained.  The image itself is regional.
+        import random
+
+        zone_suffix = random.choice(["b", "c", "f"])
+        build_zone = f"{region}-{zone_suffix}"
+
         # Extract conda env name from the YAML
         data = yaml.safe_load(version.definition_content)
         conda_env_name = data.get("name", "bioaf") if data else "bioaf"
@@ -447,7 +454,7 @@ class EnvironmentBuildService:
                     "args": [
                         "build",
                         f"-var=project_id={project_id}",
-                        f"-var=region={region}",
+                        f"-var=zone={build_zone}",
                         f"-var=image_name={image_name}",
                         f"-var=environment_yml_gcs={env_yml_gcs}",
                         f"-var=conda_env_name={conda_env_name}",
