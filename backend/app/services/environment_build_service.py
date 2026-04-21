@@ -88,6 +88,7 @@ build {
   # System packages
   provisioner "shell" {
     inline = [
+      "sudo add-apt-repository -y universe",
       "sudo apt-get update",
       "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server git tmux htop curl fail2ban",
       "sudo systemctl enable ssh",
