@@ -130,6 +130,7 @@ async def seed_env_version(session, admin_user):
         description="Environment for GCS bucket tests",
         organization_id=admin_user.organization_id,
         created_by_user_id=admin_user.id,
+        environment_type="work_node",
     )
     session.add(env)
     await session.flush()
@@ -138,9 +139,9 @@ async def seed_env_version(session, admin_user):
         environment_id=env.id,
         version_number=1,
         status="ready",
-        definition_format="dockerfile",
-        definition_content="FROM ubuntu:22.04",
-        image_uri="us-central1-docker.pkg.dev/test/repo/test-env:v1",
+        definition_format="conda",
+        definition_content="name: test\nchannels:\n  - conda-forge\ndependencies:\n  - python=3.11\n",
+        image_uri="projects/test-project/global/images/bioaf-worknode-test-v1-1",
         created_by_user_id=admin_user.id,
     )
     session.add(version)

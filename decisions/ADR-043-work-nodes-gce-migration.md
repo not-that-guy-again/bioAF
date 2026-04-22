@@ -154,6 +154,7 @@ Users manage their repos from a section on the Work Nodes page. When launching a
 **Running:** Heartbeat agent reports activity every 5 minutes. VM is accessible via `ssh <username>@<external_ip>`. Conda environment is activated by default.
 
 **Stop:** On user-initiated stop:
+
 1. Run `gsutil -m rsync -r /outputs/ gs://{working_bucket}/sessions/{session_id}/outputs/` on the VM
 2. Capture scripts (`.py`, `.R`, `.Rmd`, `.ipynb`) from home directory
 3. Register output files (ADR-039 provenance)
@@ -165,9 +166,11 @@ Users manage their repos from a section on the Work Nodes page. When launching a
 ### Data Model Changes
 
 **`environments` table:**
+
 - Add `environment_type` column (String, default `"notebook"`)
 
 **`compute_sessions` table:**
+
 - Add `gce_instance_name` (String, nullable)
 - Add `gce_zone` (String, nullable)
 - Add `gce_project_id` (String, nullable)
