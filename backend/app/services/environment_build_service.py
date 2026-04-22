@@ -93,6 +93,8 @@ build {
       "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server git tmux htop curl fail2ban",
       "sudo systemctl enable ssh",
       "sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config",
+      "sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true",
+      "echo 'PasswordAuthentication yes' | sudo tee /etc/ssh/sshd_config.d/99-bioaf-password-auth.conf",
     ]
   }
 

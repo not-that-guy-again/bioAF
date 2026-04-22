@@ -355,7 +355,9 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         logger.info("Creating GCE instance %s in %s/%s", instance_name, project, zone)
 
         # Launch background poller
-        asyncio.create_task(self._poll_vm_ready(session_id, instance_name, project, zone))
+        creds = vm_spec.get("session_credentials", {})
+        ssh_username = creds.get("username", "")
+        asyncio.create_task(self._poll_vm_ready(session_id, instance_name, project, zone, ssh_username))
 
         return {
             "instance_name": instance_name,
@@ -371,6 +373,7 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         instance_name: str,
         project: str,
         zone: str,
+        ssh_username: str = "",
     ) -> None:
         """Background: poll for VM running status + external IP, then update DB."""
         try:
@@ -406,7 +409,8 @@ class GCEWorkNodeProvider(WorkNodeProvider):
                 await self._update_session_in_db(session_id, status="failed", access_url=None)
                 return
 
-            access_url = f"ssh://{external_ip}:22"
+            user_prefix = f"{ssh_username}@" if ssh_username else ""
+            access_url = f"ssh://{user_prefix}{external_ip}:22"
             logger.info("VM %s ready at %s", instance_name, external_ip)
             await self._update_session_in_db(session_id, status="running", access_url=access_url)
 
