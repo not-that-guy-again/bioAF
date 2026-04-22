@@ -41,7 +41,8 @@ def _build_startup_script(vm_spec: dict) -> str:
 
     lines = [
         "#!/bin/bash",
-        "set -e",
+        "# Log all output for debugging",
+        "exec > >(tee -a /var/log/bioaf-startup.log) 2>&1",
         "",
         "# 1. Create PAM user with session credentials",
         f"useradd -m -d {home_dir} -s /bin/bash {username} || true",
@@ -81,9 +82,9 @@ def _build_startup_script(vm_spec: dict) -> str:
             safe_name = name.replace("'", "'\\''")
             safe_url = url.replace("'", "'\\''")
             lines.append(
-                f'su - {username} -c "cd {home_dir}/repos && '
-                f"GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no' "
-                f"git clone '{safe_url}' '{safe_name}'\" || "
+                f"cd {home_dir}/repos && "
+                f"GIT_SSH_COMMAND='ssh -o StrictHostKeyChecking=no -i {home_dir}/.ssh/id_rsa' "
+                f"git clone '{safe_url}' '{safe_name}' || "
                 f"echo 'Warning: failed to clone {safe_name}'"
             )
         lines.append(f"chown -R {username}:{username} {home_dir}/repos")
@@ -98,8 +99,8 @@ def _build_startup_script(vm_spec: dict) -> str:
             clean_path = mount_path.strip("/")
             lines += [
                 f"mkdir -p /data/{clean_path}",
-                f"gcsfuse --implicit-dirs --only-dir '{clean_path}' "
-                f"-o ro '{working_bucket}' /data/{clean_path} || "
+                f"gcsfuse --implicit-dirs --read-only --only-dir '{clean_path}' "
+                f"'{working_bucket}' /data/{clean_path} || "
                 f"echo 'Warning: failed to mount /data/{clean_path}'",
             ]
 
