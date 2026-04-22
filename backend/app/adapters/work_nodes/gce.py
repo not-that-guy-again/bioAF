@@ -115,7 +115,23 @@ def _build_startup_script(vm_spec: dict) -> str:
         f"chown {username}:{username} /outputs /scratch",
     ]
 
-    # 6. Install shutdown sync service (syncs /outputs/ to GCS on stop)
+    # 6. Create bioaf-sync user for backend SSH access (output sync at stop)
+    sync_public_key = vm_spec.get("sync_public_key", "")
+    if sync_public_key:
+        lines += [
+            "",
+            "# 6. Create bioaf-sync user for output sync",
+            "useradd -r -m -s /bin/bash bioaf-sync || true",
+            "mkdir -p /home/bioaf-sync/.ssh",
+            f"echo '{sync_public_key}' > /home/bioaf-sync/.ssh/authorized_keys",
+            "chmod 700 /home/bioaf-sync/.ssh",
+            "chmod 600 /home/bioaf-sync/.ssh/authorized_keys",
+            "chown -R bioaf-sync:bioaf-sync /home/bioaf-sync/.ssh",
+            "# Allow bioaf-sync to read /outputs/ and run gsutil",
+            "usermod -aG root bioaf-sync 2>/dev/null || true",
+        ]
+
+    # 7. Install shutdown sync service (fallback for unclean stops)
     if working_bucket and session_id:
         gcs_output_prefix = f"gs://{working_bucket}/sessions/{session_id}/outputs/"
         gcs_scripts_prefix = f"gs://{working_bucket}/sessions/{session_id}/scripts/"
@@ -216,6 +232,9 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         self._mode = os.environ.get("BIOAF_COMPUTE_MODE", "local")
         self._session_factory = session_factory
         self._gcp_config: dict | None = None
+        # In-memory store for sync SSH private keys, keyed by session_id.
+        # Generated at launch, used at terminate to SSH in for output sync.
+        self._sync_keys: dict[int, str] = {}
 
     @property
     def is_local(self) -> bool:
@@ -316,6 +335,16 @@ class GCEWorkNodeProvider(WorkNodeProvider):
 
         # Resolve GCE machine type for GPU types
         gce_machine_type = vm_spec.get("gce_machine_type", machine_type)
+
+        # Generate an SSH key pair for the bioaf-sync user so the backend
+        # can SSH into the VM at terminate time to sync outputs.
+        import asyncssh
+
+        sync_key = asyncssh.generate_private_key("ssh-ed25519")
+        sync_private_pem = sync_key.export_private_key().decode()
+        sync_public_key = sync_key.export_public_key().decode().strip()
+        self._sync_keys[session_id] = sync_private_pem
+        vm_spec["sync_public_key"] = sync_public_key
 
         # Build startup script
         startup_script = _build_startup_script(vm_spec)
@@ -513,18 +542,72 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         output_files: list[dict] = []
         gcs_output_prefix = ""
 
-        # Stop the VM gracefully -- the systemd bioaf-shutdown-sync service
-        # (installed by the startup script) handles syncing /outputs/ to GCS.
+        # Sync outputs from the running VM before stopping it.
+        # SSH into the VM as the bioaf-sync user (key-based) and run gsutil,
+        # mirroring the K8s approach of exec'ing into the pod before deletion.
         if working_bucket and session_id:
             gcs_output_prefix = f"gs://{working_bucket}/sessions/{session_id}/outputs/"
+            gcs_scripts_prefix = f"gs://{working_bucket}/sessions/{session_id}/scripts/"
 
+            # Get the VM's external IP
+            external_ip = None
+            try:
+                credentials = self._get_gcp_credentials()
+                instances_client = compute_v1.InstancesClient(credentials=credentials)
+                instance = instances_client.get(project=project, zone=zone, instance=instance_name)
+                for iface in instance.network_interfaces:
+                    for ac in iface.access_configs:
+                        if ac.nat_i_p:
+                            external_ip = ac.nat_i_p
+                            break
+            except Exception as e:
+                logger.warning("Could not get external IP for VM %s: %s", instance_name, e)
+
+            if external_ip:
+                sync_cmd = (
+                    f'if [ -d /outputs ] && [ "$(ls -A /outputs)" ]; then '
+                    f"gsutil -m rsync -r /outputs {gcs_output_prefix}; fi; "
+                    f"find /home -maxdepth 4 "
+                    r"\( -name '*.ipynb' -o -name '*.Rmd' -o -name '*.R' -o -name '*.py' \) "
+                    f"-type f "
+                    f'| while read f; do gsutil cp "$f" '
+                    f'{gcs_scripts_prefix}"$(basename "$f")"; done'
+                )
+                try:
+                    import asyncssh
+
+                    # Read the sync private key that was embedded at launch
+                    sync_key = self._sync_keys.get(session_id)
+                    if sync_key:
+                        key = asyncssh.import_private_key(sync_key)
+                        async with asyncssh.connect(
+                            external_ip,
+                            port=22,
+                            username="bioaf-sync",
+                            client_keys=[key],
+                            known_hosts=None,
+                        ) as conn:
+                            result = await asyncio.wait_for(conn.run(sync_cmd), timeout=300)
+                            if result.exit_status == 0:
+                                logger.info("Output sync complete for VM %s", instance_name)
+                            else:
+                                logger.warning(
+                                    "Output sync returned %d for VM %s: %s",
+                                    result.exit_status,
+                                    instance_name,
+                                    result.stderr,
+                                )
+                    else:
+                        logger.warning("No sync key for session %d, skipping output sync", session_id)
+                except Exception as e:
+                    logger.warning("SSH output sync failed for VM %s: %s", instance_name, e)
+
+        # Stop and delete the VM
         try:
             credentials = self._get_gcp_credentials()
             instances_client = compute_v1.InstancesClient(credentials=credentials)
-
             instances_client.stop(project=project, zone=zone, instance=instance_name)
 
-            # Wait for the instance to stop (up to 5 minutes)
             for _ in range(60):
                 try:
                     instance = instances_client.get(project=project, zone=zone, instance=instance_name)
@@ -534,7 +617,7 @@ class GCEWorkNodeProvider(WorkNodeProvider):
                     break
                 await asyncio.sleep(5)
 
-            logger.info("VM %s stopped, outputs synced via shutdown service", instance_name)
+            logger.info("VM %s stopped", instance_name)
         except Exception as e:
             logger.warning("Failed to stop VM %s: %s", instance_name, e)
 
@@ -546,6 +629,9 @@ class GCEWorkNodeProvider(WorkNodeProvider):
             logger.info("Deleted VM %s", instance_name)
         except Exception as e:
             logger.warning("Failed to delete VM %s: %s", instance_name, e)
+
+        # Clean up sync key
+        self._sync_keys.pop(session_id, None)
 
         # List output files from GCS
         if gcs_output_prefix:
