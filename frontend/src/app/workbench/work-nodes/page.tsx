@@ -168,7 +168,7 @@ export default function WorkNodesPage() {
     setSelectedFileIds([]);
     setShowFileSelector(false);
     try {
-      const data = await api.get<FileListResponse>(`/api/v1/files?project_id=${projectId}&page_size=500`);
+      const data = await api.get<FileListResponse>(`/api/files?project_id=${projectId}&page_size=500`);
       setProjectFiles(data.files);
       setSampleNames({});
     } catch {
