@@ -34,6 +34,7 @@ def _build_startup_script(vm_spec: dict) -> str:
     heartbeat_token = vm_spec.get("heartbeat_token", "")
     github_repos = vm_spec.get("github_repos", [])
     input_files = vm_spec.get("input_files", [])
+    working_bucket = vm_spec.get("working_bucket", "")
     session_id = vm_spec.get("session_id", 0)
     env_name = vm_spec.get("conda_env_name", "base")
     env_label = vm_spec.get("environment_label", "")
@@ -114,7 +115,45 @@ def _build_startup_script(vm_spec: dict) -> str:
         f"chown {username}:{username} /outputs /scratch",
     ]
 
-    # 6. Activate conda env in user's shell
+    # 6. Install shutdown sync service (syncs /outputs/ to GCS on stop)
+    if working_bucket and session_id:
+        gcs_output_prefix = f"gs://{working_bucket}/sessions/{session_id}/outputs/"
+        gcs_scripts_prefix = f"gs://{working_bucket}/sessions/{session_id}/scripts/"
+        lines += [
+            "",
+            "# 6. Install shutdown sync service",
+            "cat > /usr/local/bin/bioaf-shutdown-sync.sh << 'SYNCEOF'",
+            "#!/bin/bash",
+            'if [ -d /outputs ] && [ "$(ls -A /outputs)" ]; then',
+            f"  gsutil -m rsync -r /outputs {gcs_output_prefix}",
+            "fi",
+            f"find /home -maxdepth 4 "
+            r"\( -name '*.ipynb' -o -name '*.Rmd' -o -name '*.R' -o -name '*.py' \) "
+            f"-type f "
+            f'| while read f; do gsutil cp "$f" '
+            f'{gcs_scripts_prefix}"$(basename "$f")"; done',
+            "SYNCEOF",
+            "chmod +x /usr/local/bin/bioaf-shutdown-sync.sh",
+            "",
+            "cat > /etc/systemd/system/bioaf-shutdown-sync.service << 'SVCEOF'",
+            "[Unit]",
+            "Description=bioAF output sync on shutdown",
+            "DefaultDependencies=no",
+            "Before=shutdown.target reboot.target halt.target",
+            "",
+            "[Service]",
+            "Type=oneshot",
+            "ExecStart=/usr/local/bin/bioaf-shutdown-sync.sh",
+            "TimeoutStartSec=300",
+            "",
+            "[Install]",
+            "WantedBy=halt.target reboot.target shutdown.target",
+            "SVCEOF",
+            "systemctl daemon-reload",
+            "systemctl enable bioaf-shutdown-sync.service",
+        ]
+
+    # 7. Activate conda env in user's shell
     if env_name and env_name != "base":
         lines += [
             "",
@@ -460,57 +499,30 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         output_files: list[dict] = []
         gcs_output_prefix = ""
 
-        # Sync outputs via shutdown script metadata update
-        # The VM runs gsutil on its own -- we set a shutdown-script and then stop gracefully
+        # Stop the VM gracefully -- the systemd bioaf-shutdown-sync service
+        # (installed by the startup script) handles syncing /outputs/ to GCS.
         if working_bucket and session_id:
             gcs_output_prefix = f"gs://{working_bucket}/sessions/{session_id}/outputs/"
-            try:
-                credentials = self._get_gcp_credentials()
-                instances_client = compute_v1.InstancesClient(credentials=credentials)
 
-                # Add shutdown script to sync outputs before deletion
-                shutdown_script = (
-                    "#!/bin/bash\n"
-                    f'if [ -d /outputs ] && [ "$(ls -A /outputs)" ]; then\n'
-                    f"  gsutil -m rsync -r /outputs {gcs_output_prefix}\n"
-                    f"fi\n"
-                    f"# Capture scripts\n"
-                    f"find /home -maxdepth 4 "
-                    r"\( -name '*.ipynb' -o -name '*.Rmd' -o -name '*.R' -o -name '*.py' \) "
-                    f"-type f "
-                    f'| while read f; do gsutil cp "$f" '
-                    f'gs://{working_bucket}/sessions/{session_id}/scripts/"$(basename "$f")"; done\n'
-                )
+        try:
+            credentials = self._get_gcp_credentials()
+            instances_client = compute_v1.InstancesClient(credentials=credentials)
 
-                # Set shutdown script and stop the instance to trigger it
-                metadata = compute_v1.Metadata()
-                metadata.items = [
-                    compute_v1.Items(key="shutdown-script", value=shutdown_script),
-                ]
+            instances_client.stop(project=project, zone=zone, instance=instance_name)
 
-                instances_client.set_metadata(
-                    project=project,
-                    zone=zone,
-                    instance=instance_name,
-                    metadata_resource=metadata,
-                )
-
-                # Stop the instance (triggers shutdown script)
-                instances_client.stop(project=project, zone=zone, instance=instance_name)
-
-                # Wait for the instance to stop (up to 5 minutes)
-                for _ in range(60):
-                    try:
-                        instance = instances_client.get(project=project, zone=zone, instance=instance_name)
-                        if instance.status in ("TERMINATED", "STOPPED"):
-                            break
-                    except Exception:
+            # Wait for the instance to stop (up to 5 minutes)
+            for _ in range(60):
+                try:
+                    instance = instances_client.get(project=project, zone=zone, instance=instance_name)
+                    if instance.status in ("TERMINATED", "STOPPED"):
                         break
-                    await asyncio.sleep(5)
+                except Exception:
+                    break
+                await asyncio.sleep(5)
 
-                logger.info("VM %s stopped, outputs synced", instance_name)
-            except Exception as e:
-                logger.warning("Output sync failed for VM %s: %s", instance_name, e)
+            logger.info("VM %s stopped, outputs synced via shutdown service", instance_name)
+        except Exception as e:
+            logger.warning("Failed to stop VM %s: %s", instance_name, e)
 
         # Delete the VM
         try:
