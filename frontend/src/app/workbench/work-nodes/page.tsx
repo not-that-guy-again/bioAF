@@ -60,7 +60,9 @@ export default function WorkNodesPage() {
   const [launchStep, setLaunchStep] = useState(1);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [projectFiles, setProjectFiles] = useState<FileResponse[]>([]);
+  const [projectExperiments, setProjectExperiments] = useState<{ id: number; name: string; code: string | null }[]>([]);
+  const [selectedExperimentId, setSelectedExperimentId] = useState<number | null>(null);
+  const [experimentFiles, setExperimentFiles] = useState<FileResponse[]>([]);
   const [sampleNames, setSampleNames] = useState<Record<number, string>>({});
   const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);
@@ -140,7 +142,9 @@ export default function WorkNodesPage() {
     setShowLaunch(true);
     setLaunchStep(1);
     setSelectedProjectId(null);
-    setProjectFiles([]);
+    setProjectExperiments([]);
+    setSelectedExperimentId(null);
+    setExperimentFiles([]);
     setSampleNames({});
     setSelectedFileIds([]);
     setShowFileSelector(false);
@@ -165,16 +169,57 @@ export default function WorkNodesPage() {
 
   async function handleProjectSelect(projectId: number) {
     setSelectedProjectId(projectId);
+    setSelectedExperimentId(null);
+    setExperimentFiles([]);
     setSelectedFileIds([]);
     setShowFileSelector(false);
     try {
-      const data = await api.get<FileListResponse>(`/api/files?project_id=${projectId}&page_size=500`);
-      setProjectFiles(data.files);
-      setSampleNames({});
+      const data = await api.get<{ experiments: { id: number; name: string; code: string | null }[]; total: number }>(
+        `/api/experiments?project_id=${projectId}&page_size=100`
+      );
+      setProjectExperiments(data.experiments);
     } catch {
-      setProjectFiles([]);
+      setProjectExperiments([]);
     }
     setLaunchStep(2);
+  }
+
+  async function handleExperimentSelect(experimentId: number) {
+    setSelectedExperimentId(experimentId);
+    setSelectedFileIds([]);
+    setShowFileSelector(false);
+    try {
+      const data = await api.get<FileListResponse>(
+        `/api/experiments/${experimentId}/files?page_size=500`
+      );
+      setExperimentFiles(data.files);
+
+      // Resolve sample names
+      const sampleIds = new Set<number>();
+      for (const file of data.files) {
+        for (const sid of file.sample_ids || []) {
+          sampleIds.add(sid);
+        }
+      }
+      if (sampleIds.size > 0) {
+        try {
+          const samplesData = await api.get<{ samples: { id: number; sample_id_unique: string }[] }>(
+            `/api/experiments/${experimentId}/samples?page_size=500`
+          );
+          const names: Record<number, string> = {};
+          for (const s of samplesData.samples) {
+            names[s.id] = s.sample_id_unique || `Sample ${s.id}`;
+          }
+          setSampleNames(names);
+        } catch {
+          setSampleNames({});
+        }
+      } else {
+        setSampleNames({});
+      }
+    } catch {
+      setExperimentFiles([]);
+    }
   }
 
   async function handleEnvSelect(envId: number) {
@@ -595,20 +640,47 @@ export default function WorkNodesPage() {
                 {launchStep === 2 && (
                   <div>
                     <h3 className="font-medium mb-3">Select Input Files</h3>
-                    <p className="text-xs text-gray-500 mb-3">Selected files will be copied to /data/ when the node boots (optional)</p>
-                    {projectFiles.length === 0 ? (
-                      <p className="text-sm text-gray-400">No files found for this project.</p>
+                    <p className="text-xs text-gray-500 mb-3">Choose an experiment, then select files to copy to /data/ at boot (optional)</p>
+
+                    {/* Experiment selector */}
+                    {projectExperiments.length === 0 ? (
+                      <p className="text-sm text-gray-400">No experiments in this project.</p>
                     ) : (
+                      <div className="mb-3">
+                        <label className="text-xs font-medium text-gray-600 block mb-1">Experiment</label>
+                        <select
+                          className="w-full border rounded px-3 py-2 text-sm"
+                          value={selectedExperimentId || ""}
+                          onChange={(e) => {
+                            const val = e.target.value ? Number(e.target.value) : null;
+                            if (val) handleExperimentSelect(val);
+                          }}
+                        >
+                          <option value="">Select an experiment...</option>
+                          {projectExperiments.map((exp) => (
+                            <option key={exp.id} value={exp.id}>
+                              {exp.name}{exp.code ? ` (${exp.code})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* File picker (shown after experiment is selected) */}
+                    {selectedExperimentId && experimentFiles.length === 0 && (
+                      <p className="text-sm text-gray-400">No files found for this experiment.</p>
+                    )}
+                    {selectedExperimentId && experimentFiles.length > 0 && (
                       <>
                         <button
                           onClick={() => setShowFileSelector(!showFileSelector)}
                           className="text-xs text-indigo-600 hover:underline mb-2"
                         >
-                          {showFileSelector ? "Hide file picker" : `Select files (${projectFiles.length} available)`}
+                          {showFileSelector ? "Hide file picker" : `Select files (${experimentFiles.length} available)`}
                         </button>
                         {showFileSelector && (
                           <FileTreeSelector
-                            files={projectFiles}
+                            files={experimentFiles}
                             sampleNames={sampleNames}
                             onSelectionChange={setSelectedFileIds}
                           />
@@ -618,6 +690,7 @@ export default function WorkNodesPage() {
                         )}
                       </>
                     )}
+
                     <div className="flex gap-2 mt-4">
                       <button onClick={() => setLaunchStep(1)} className="px-4 py-2 border rounded text-sm">Back</button>
                       <button onClick={() => setLaunchStep(3)} className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700">
