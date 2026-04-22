@@ -43,7 +43,7 @@ def _work_node_response(cs) -> WorkNodeResponse:
         project_id=cs.project_id,
         environment_version_id=cs.environment_version_id,
         machine_type=cs.machine_type,
-        data_mount_paths=cs.data_mount_paths,
+        input_file_ids=cs.data_mount_paths,
         resource_profile=cs.resource_profile,
         cpu_cores=cs.cpu_cores,
         memory_gb=cs.memory_gb,

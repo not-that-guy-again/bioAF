@@ -560,10 +560,10 @@ export default function WorkNodesPage() {
                       </ul>
                     </div>
                   )}
-                  {viewingNode.data_mount_paths && viewingNode.data_mount_paths.length > 0 && (
+                  {viewingNode.input_file_ids && viewingNode.input_file_ids.length > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-500">Input Files</span>
-                      <span>{viewingNode.data_mount_paths.length} file(s) in /data/</span>
+                      <span>{viewingNode.input_file_ids.length} file(s) in /data/</span>
                     </div>
                   )}
                   <div className="flex justify-between">

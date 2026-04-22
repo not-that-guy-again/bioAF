@@ -28,7 +28,7 @@ class WorkNodeResponse(BaseModel):
     project_id: int | None = None
     environment_version_id: int | None = None
     machine_type: str | None = None
-    data_mount_paths: list[str] | None = None
+    input_file_ids: list[int] | None = None
     resource_profile: str
     cpu_cores: int
     memory_gb: int

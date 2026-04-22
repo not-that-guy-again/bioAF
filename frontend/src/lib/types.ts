@@ -1599,7 +1599,7 @@ export interface WorkNode {
   project_id: number | null;
   environment_version_id: number | null;
   machine_type: string | null;
-  data_mount_paths: string[] | null;
+  input_file_ids: number[] | null;
   resource_profile: string;
   cpu_cores: number;
   memory_gb: number;
