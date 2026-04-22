@@ -332,6 +332,7 @@ class WorkNodeService:
                     experiment_id=compute_session.experiment_id,
                     user_id=compute_session.user_id,
                     gcs_files=output_files,
+                    source_type="work_node_output",
                 )
             except Exception as e:
                 logger.warning("Output registration failed for work node %d: %s", session_id, e)

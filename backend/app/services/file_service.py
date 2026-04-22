@@ -73,6 +73,7 @@ class FileService:
         project_id: int | None = None,
         source_type: str | None = None,
         sample_id: int | None = None,
+        search: str | None = None,
         page: int = 1,
         page_size: int = 25,
     ) -> tuple[list[File], int]:
@@ -80,6 +81,11 @@ class FileService:
 
         query = select(File).options(selectinload(File.uploader)).where(File.organization_id == org_id)
         count_query = select(func.count(File.id)).where(File.organization_id == org_id)
+
+        if search:
+            pattern = f"%{search}%"
+            query = query.where(File.filename.ilike(pattern))
+            count_query = count_query.where(File.filename.ilike(pattern))
 
         if file_type:
             query = query.where(File.file_type == file_type)
