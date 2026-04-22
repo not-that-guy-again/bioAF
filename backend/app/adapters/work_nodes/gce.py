@@ -403,6 +403,12 @@ class GCEWorkNodeProvider(WorkNodeProvider):
                     logger.warning("Zone %s exhausted for %s, trying next zone", try_zone, machine_type)
                     continue
                 raise
+        else:
+            # All zones exhausted -- for loop completed without break
+            raise ValueError(
+                f"GCP resources unavailable: no {machine_type} capacity in any {region} zone. "
+                "Try again later or choose a different machine type."
+            )
 
         # Launch background poller
         creds = vm_spec.get("session_credentials", {})

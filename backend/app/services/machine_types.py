@@ -6,6 +6,22 @@ GPU entries include accelerator metadata for the GCE API.
 
 MACHINE_TYPES: list[dict] = [
     {
+        "name": "e2-standard-4",
+        "category": "standard",
+        "cpu": 4,
+        "memory_gb": 16,
+        "gpu": None,
+        "description": "Light analysis, data wrangling (high availability)",
+    },
+    {
+        "name": "e2-standard-8",
+        "category": "standard",
+        "cpu": 8,
+        "memory_gb": 32,
+        "gpu": None,
+        "description": "General-purpose analysis (high availability)",
+    },
+    {
         "name": "n2-standard-4",
         "category": "standard",
         "cpu": 4,
@@ -20,6 +36,14 @@ MACHINE_TYPES: list[dict] = [
         "memory_gb": 32,
         "gpu": None,
         "description": "General-purpose analysis",
+    },
+    {
+        "name": "e2-highmem-8",
+        "category": "high-memory",
+        "cpu": 8,
+        "memory_gb": 64,
+        "gpu": None,
+        "description": "Large datasets, Seurat integration (high availability)",
     },
     {
         "name": "n2-highmem-8",

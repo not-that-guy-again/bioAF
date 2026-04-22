@@ -33,6 +33,11 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "bg-red-100 text-red-800",
 };
 
+function statusLabel(node: WorkNode): string {
+  if (node.status === "failed" && !node.access_url) return "Resource Failure";
+  return node.status;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   standard: "Standard",
   "high-memory": "High Memory",
@@ -461,7 +466,7 @@ export default function WorkNodesPage() {
                           </span>
                         ) : (
                           <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[node.status] || "bg-gray-100"}`}>
-                            {node.status}
+                            {statusLabel(node)}
                           </span>
                         )}
                       </td>
@@ -508,9 +513,14 @@ export default function WorkNodesPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-500">Status</span>
                     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[viewingNode.status] || "bg-gray-100"}`}>
-                      {viewingNode.status}
+                      {statusLabel(viewingNode)}
                     </span>
                   </div>
+                  {viewingNode.status === "failed" && !viewingNode.access_url && (
+                    <div className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700">
+                      GCP Resources Unavailable -- the VM could not be created. Try again later or choose a different machine type.
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Machine Type</span>
                     <span>{viewingNode.machine_type || "-"}</span>
