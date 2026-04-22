@@ -516,7 +516,7 @@ export default function WorkNodesPage() {
                       <span className="text-gray-500 block mb-1">Data Mounts</span>
                       <ul className="text-xs text-gray-700 space-y-1">
                         {viewingNode.data_mount_paths.map((p) => (
-                          <li key={p} className="font-mono bg-gray-50 px-2 py-1 rounded">/data/{p}</li>
+                          <li key={p} className="font-mono bg-gray-50 px-2 py-1 rounded">/data/{p.replace(/^\//, "")}</li>
                         ))}
                       </ul>
                     </div>
