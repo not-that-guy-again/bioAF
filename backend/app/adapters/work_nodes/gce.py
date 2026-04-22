@@ -33,8 +33,7 @@ def _build_startup_script(vm_spec: dict) -> str:
     ssh_public_key = vm_spec.get("ssh_public_key", "")
     heartbeat_token = vm_spec.get("heartbeat_token", "")
     github_repos = vm_spec.get("github_repos", [])
-    data_mount_paths = vm_spec.get("data_mount_paths", [])
-    working_bucket = vm_spec.get("working_bucket", "")
+    input_files = vm_spec.get("input_files", [])
     session_id = vm_spec.get("session_id", 0)
     env_name = vm_spec.get("conda_env_name", "base")
     env_label = vm_spec.get("environment_label", "")
@@ -89,20 +88,23 @@ def _build_startup_script(vm_spec: dict) -> str:
             )
         lines.append(f"chown -R {username}:{username} {home_dir}/repos")
 
-    # 4. Mount GCS data (read-only via gcsfuse)
-    if data_mount_paths and working_bucket:
+    # 4. Copy input files from GCS
+    if input_files:
         lines += [
             "",
-            "# 4. Mount GCS data (read-only)",
+            "# 4. Copy input files from GCS",
+            "mkdir -p /data",
         ]
-        for mount_path in data_mount_paths:
-            clean_path = mount_path.strip("/")
-            lines += [
-                f"mkdir -p /data/{clean_path}",
-                f"gcsfuse --implicit-dirs --read-only --only-dir '{clean_path}' "
-                f"'{working_bucket}' /data/{clean_path} || "
-                f"echo 'Warning: failed to mount /data/{clean_path}'",
-            ]
+        for input_file in input_files:
+            rel_path = input_file["relative_path"]
+            gcs_uri = input_file["gcs_uri"]
+            dest_path = f"/data/{rel_path}"
+            dest_dir = "/".join(dest_path.split("/")[:-1])
+            lines.append(
+                f"mkdir -p '{dest_dir}' && "
+                f"gsutil cp '{gcs_uri}' '{dest_path}' || "
+                f"echo 'Warning: failed to copy {rel_path}'"
+            )
 
     # 5. Create output and scratch directories
     lines += [
@@ -121,8 +123,8 @@ def _build_startup_script(vm_spec: dict) -> str:
         ]
 
     # 7. Generate MOTD
-    repo_names = ", ".join(r["display_name"] for r in github_repos) if github_repos else "(none selected)"
-    mount_list = ", ".join(f"/data/{p.strip('/')}" for p in data_mount_paths) if data_mount_paths else "(none selected)"
+    repo_names = ", ".join(r["display_name"] for r in github_repos) if github_repos else "(none)"
+    file_count = len(input_files)
     lines += [
         "",
         "# 7. Generate MOTD",
@@ -130,14 +132,14 @@ def _build_startup_script(vm_spec: dict) -> str:
         "",
         "=== bioAF Work Node ===",
         "",
-        "  Input data:     /data/                    (read-only GCS mounts)",
+        "  Input data:     /data/                    (copied from GCS at boot)",
         f"  Your repos:     {home_dir}/repos/          (cloned from GitHub)",
         "  Output files:   /outputs/                  (synced to GCS on stop)",
         "  Scratch space:  /scratch/                  (LOST on stop)",
         "",
         f"  Environment:    {env_label}",
         f"  Repos:          {repo_names}",
-        f"  Data mounts:    {mount_list}",
+        f"  Input files:    {file_count} file(s)",
         "",
         "MOTD_EOF",
     ]

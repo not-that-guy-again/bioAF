@@ -39,7 +39,7 @@ class WorkNodeService:
         project_id: int,
         environment_version_id: int,
         machine_type: str,
-        data_mount_paths: list[str] | None = None,
+        input_file_ids: list[int] | None = None,
         github_repo_ids: list[int] | None = None,
     ) -> ComputeSession:
         # Validate machine type
@@ -116,6 +116,30 @@ class WorkNodeService:
         # Generate heartbeat token
         heartbeat_token = secrets.token_urlsafe(32)
 
+        # Validate and resolve input files
+        input_files_spec: list[dict] = []
+        if input_file_ids:
+            from app.models.file import File
+            from app.services.notebook_service import _resolve_input_file_context, _build_relative_path
+
+            file_results = await session.execute(select(File).where(File.id.in_(input_file_ids)))
+            found_files = {f.id: f for f in file_results.scalars().all()}
+
+            name_cache = await _resolve_input_file_context(session, found_files)
+
+            for fid in input_file_ids:
+                f = found_files.get(fid)
+                if not f or f.organization_id != org_id:
+                    raise ValueError(f"File {fid} not found or not accessible")
+                rel_path = _build_relative_path(f, name_cache)
+                input_files_spec.append(
+                    {
+                        "file_id": f.id,
+                        "gcs_uri": f.gcs_uri,
+                        "relative_path": rel_path,
+                    }
+                )
+
         # Create session record
         compute_session = ComputeSession(
             user_id=user_id,
@@ -124,7 +148,7 @@ class WorkNodeService:
             project_id=project_id,
             environment_version_id=environment_version_id,
             machine_type=machine_type,
-            data_mount_paths=data_mount_paths or [],
+            data_mount_paths=input_file_ids or [],
             github_repo_ids=github_repo_ids or [],
             resource_profile="custom",
             cpu_cores=mt["cpu"],
@@ -170,7 +194,7 @@ class WorkNodeService:
                 "machine_type": machine_type,
                 "gce_machine_type": mt.get("gce_machine_type", machine_type),
                 "image_uri": env_version.image_uri,
-                "data_mount_paths": data_mount_paths or [],
+                "input_files": input_files_spec,
                 "heartbeat_token": heartbeat_token,
                 "session_credentials": {
                     "username": cred.username,

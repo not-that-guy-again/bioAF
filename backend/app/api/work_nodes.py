@@ -135,7 +135,7 @@ async def launch_work_node(
             project_id=body.project_id,
             environment_version_id=body.environment_version_id,
             machine_type=body.machine_type,
-            data_mount_paths=body.data_mount_paths,
+            input_file_ids=body.input_file_ids,
             github_repo_ids=body.github_repo_ids,
         )
     except ValueError as e:

@@ -1623,7 +1623,7 @@ export interface WorkNodeLaunchRequest {
   project_id: number;
   environment_version_id: number;
   machine_type: string;
-  data_mount_paths?: string[];
+  input_file_ids?: number[];
   github_repo_ids?: number[];
 }
 

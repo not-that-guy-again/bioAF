@@ -8,18 +8,20 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { isAuthenticated } from "@/lib/auth";
 import { api, ApiError } from "@/lib/api";
 import { usePermissions } from "@/hooks/usePermissions";
+import { FileTreeSelector } from "@/components/notebooks/FileTreeSelector";
 import type {
   WorkNode,
   WorkNodeListResponse,
   WorkNodeLaunchRequest,
   MachineType,
-  DataMount,
   Project,
   EnvironmentResponse,
   EnvironmentListResponse,
   EnvironmentDetailResponse,
   GitHubRepo,
   GitHubRepoListResponse,
+  FileResponse,
+  FileListResponse,
 } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -58,8 +60,10 @@ export default function WorkNodesPage() {
   const [launchStep, setLaunchStep] = useState(1);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [dataMounts, setDataMounts] = useState<DataMount[]>([]);
-  const [selectedMounts, setSelectedMounts] = useState<string[]>([]);
+  const [projectFiles, setProjectFiles] = useState<FileResponse[]>([]);
+  const [sampleNames, setSampleNames] = useState<Record<number, string>>({});
+  const [selectedFileIds, setSelectedFileIds] = useState<number[]>([]);
+  const [showFileSelector, setShowFileSelector] = useState(false);
   const [environments, setEnvironments] = useState<EnvironmentResponse[]>([]);
   const [selectedEnvId, setSelectedEnvId] = useState<number | null>(null);
   const [envDetail, setEnvDetail] = useState<EnvironmentDetailResponse | null>(null);
@@ -136,7 +140,10 @@ export default function WorkNodesPage() {
     setShowLaunch(true);
     setLaunchStep(1);
     setSelectedProjectId(null);
-    setSelectedMounts([]);
+    setProjectFiles([]);
+    setSampleNames({});
+    setSelectedFileIds([]);
+    setShowFileSelector(false);
     setSelectedEnvId(null);
     setEnvDetail(null);
     setSelectedVersionId(null);
@@ -158,11 +165,14 @@ export default function WorkNodesPage() {
 
   async function handleProjectSelect(projectId: number) {
     setSelectedProjectId(projectId);
+    setSelectedFileIds([]);
+    setShowFileSelector(false);
     try {
-      const mounts = await api.get<DataMount[]>(`/api/v1/work-nodes/data-mounts/${projectId}`);
-      setDataMounts(mounts);
+      const data = await api.get<FileListResponse>(`/api/v1/files?project_id=${projectId}&page_size=500`);
+      setProjectFiles(data.files);
+      setSampleNames({});
     } catch {
-      setDataMounts([]);
+      setProjectFiles([]);
     }
     setLaunchStep(2);
   }
@@ -175,12 +185,6 @@ export default function WorkNodesPage() {
       const readyVersion = detail.versions.find((v) => v.status === "ready" && v.image_uri);
       if (readyVersion) setSelectedVersionId(readyVersion.id);
     } catch {}
-  }
-
-  function toggleMount(path: string) {
-    setSelectedMounts((prev) =>
-      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
-    );
   }
 
   function toggleRepo(repoId: number) {
@@ -198,7 +202,7 @@ export default function WorkNodesPage() {
         project_id: selectedProjectId,
         environment_version_id: selectedVersionId,
         machine_type: selectedMachineType,
-        data_mount_paths: selectedMounts.length > 0 ? selectedMounts : undefined,
+        input_file_ids: selectedFileIds.length > 0 ? selectedFileIds : undefined,
         github_repo_ids: selectedRepoIds.length > 0 ? selectedRepoIds : undefined,
       };
       await api.post("/api/v1/work-nodes/sessions", req);
@@ -512,13 +516,9 @@ export default function WorkNodesPage() {
                     </div>
                   )}
                   {viewingNode.data_mount_paths && viewingNode.data_mount_paths.length > 0 && (
-                    <div>
-                      <span className="text-gray-500 block mb-1">Data Mounts</span>
-                      <ul className="text-xs text-gray-700 space-y-1">
-                        {viewingNode.data_mount_paths.map((p) => (
-                          <li key={p} className="font-mono bg-gray-50 px-2 py-1 rounded">/data/{p.replace(/^\//, "")}</li>
-                        ))}
-                      </ul>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Input Files</span>
+                      <span>{viewingNode.data_mount_paths.length} file(s) in /data/</span>
                     </div>
                   )}
                   <div className="flex justify-between">
@@ -591,28 +591,33 @@ export default function WorkNodesPage() {
                   </div>
                 )}
 
-                {/* Step 2: Select data mounts */}
+                {/* Step 2: Select input files */}
                 {launchStep === 2 && (
                   <div>
-                    <h3 className="font-medium mb-3">Select Data Directories</h3>
-                    <p className="text-xs text-gray-500 mb-3">These will be mounted read-only at /data/</p>
-                    <div className="space-y-2">
-                      {dataMounts.map((mount) => (
-                        <label key={mount.path} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedMounts.includes(mount.path)}
-                            onChange={() => toggleMount(mount.path)}
-                            className="mt-0.5"
+                    <h3 className="font-medium mb-3">Select Input Files</h3>
+                    <p className="text-xs text-gray-500 mb-3">Selected files will be copied to /data/ when the node boots (optional)</p>
+                    {projectFiles.length === 0 ? (
+                      <p className="text-sm text-gray-400">No files found for this project.</p>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setShowFileSelector(!showFileSelector)}
+                          className="text-xs text-indigo-600 hover:underline mb-2"
+                        >
+                          {showFileSelector ? "Hide file picker" : `Select files (${projectFiles.length} available)`}
+                        </button>
+                        {showFileSelector && (
+                          <FileTreeSelector
+                            files={projectFiles}
+                            sampleNames={sampleNames}
+                            onSelectionChange={setSelectedFileIds}
                           />
-                          <div>
-                            <div className="text-sm font-medium">{mount.label}</div>
-                            <div className="text-xs text-gray-500">{mount.description}</div>
-                            <div className="text-xs text-gray-400 font-mono mt-0.5">{mount.path}</div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
+                        )}
+                        {!showFileSelector && selectedFileIds.length > 0 && (
+                          <p className="text-xs text-gray-500">{selectedFileIds.length} file(s) selected</p>
+                        )}
+                      </>
+                    )}
                     <div className="flex gap-2 mt-4">
                       <button onClick={() => setLaunchStep(1)} className="px-4 py-2 border rounded text-sm">Back</button>
                       <button onClick={() => setLaunchStep(3)} className="px-4 py-2 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700">
@@ -769,8 +774,8 @@ export default function WorkNodesPage() {
                         <span>{projects.find((p) => p.id === selectedProjectId)?.name}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Data Mounts</span>
-                        <span>{selectedMounts.length > 0 ? selectedMounts.length + " directories" : "None"}</span>
+                        <span className="text-gray-500">Input Files</span>
+                        <span>{selectedFileIds.length > 0 ? selectedFileIds.length + " files" : "None"}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Environment</span>

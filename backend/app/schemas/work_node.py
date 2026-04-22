@@ -17,7 +17,7 @@ class WorkNodeLaunchRequest(BaseModel):
     project_id: int
     environment_version_id: int
     machine_type: str
-    data_mount_paths: list[str] | None = None
+    input_file_ids: list[int] | None = None
     github_repo_ids: list[int] | None = None
 
 
