@@ -202,7 +202,7 @@ export default function EnvironmentsPage() {
       const newVersion = await api.post<EnvironmentVersionResponse>(
         `/api/v1/environments/${selectedEnv.id}/versions`,
         {
-          definition_format: "dockerfile",
+          definition_format: selectedEnv.environment_type === "work_node" ? "conda" : "dockerfile",
           definition_content: rebuildTemplateContent,
         }
       );
