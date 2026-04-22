@@ -294,9 +294,15 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         cfg = self._gcp_config or {}
 
         project = vm_spec.get("gcp_project_id") or cfg.get("gcp_project_id", "")
-        zone = vm_spec.get("gcp_zone") or cfg.get("gcp_zone", "")
-        if not project or not zone:
+        configured_zone = vm_spec.get("gcp_zone") or cfg.get("gcp_zone", "")
+        if not project or not configured_zone:
             raise RuntimeError("GCP project or zone not configured")
+
+        # Derive region and build a list of zones to try, avoiding repeated
+        # capacity failures in a single zone.
+        region = configured_zone.rsplit("-", 1)[0]
+        zone_suffixes = ["b", "c", "f", "a"]
+        zones_to_try = [f"{region}-{s}" for s in zone_suffixes]
 
         session_id = vm_spec.get("session_id", 0)
         user_id = vm_spec.get("user_id", 0)
@@ -324,77 +330,79 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         credentials = self._get_gcp_credentials()
         instances_client = compute_v1.InstancesClient(credentials=credentials)
 
-        # Build instance resource
-        instance = compute_v1.Instance()
-        instance.name = instance_name
-        instance.machine_type = f"zones/{zone}/machineTypes/{gce_machine_type}"
-
-        # Boot disk from Packer-built image
-        disk = compute_v1.AttachedDisk()
-        disk.auto_delete = True
-        disk.boot = True
-        init_params = compute_v1.AttachedDiskInitializeParams()
-        init_params.source_image = image_uri
-        init_params.disk_size_gb = 200
-        init_params.disk_type = f"zones/{zone}/diskTypes/pd-ssd"
-        disk.initialize_params = init_params
-        instance.disks = [disk]
-
-        # Network with ephemeral external IP
-        network_interface = compute_v1.NetworkInterface()
-        network_interface.name = "global/networks/default"
-        access_config = compute_v1.AccessConfig()
-        access_config.name = "External NAT"
-        access_config.type_ = "ONE_TO_ONE_NAT"
-        network_interface.access_configs = [access_config]
-        instance.network_interfaces = [network_interface]
-
-        # Service account
-        if sa_email:
-            sa = compute_v1.ServiceAccount()
-            sa.email = sa_email
-            sa.scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-            instance.service_accounts = [sa]
-
-        # Tags for firewall
-        tags = compute_v1.Tags()
-        tags.items = ["bioaf-work-node"]
-        instance.tags = tags
-
-        # Labels
-        instance.labels = {
-            "bioaf-session": str(session_id),
-            "bioaf-user": str(user_id),
-            "bioaf-managed": "true",
-        }
-
-        # Metadata (startup script)
-        metadata = compute_v1.Metadata()
-        metadata.items = [
-            compute_v1.Items(key="startup-script", value=startup_script),
-        ]
-        instance.metadata = metadata
-
-        # GPU accelerator
+        # Try creating the VM across zones until one succeeds
         accelerator_type = vm_spec.get("accelerator_type")
         accelerator_count = vm_spec.get("accelerator_count", 1)
-        if accelerator_type:
-            accel = compute_v1.AcceleratorConfig()
-            accel.accelerator_type = f"zones/{zone}/acceleratorTypes/{accelerator_type}"
-            accel.accelerator_count = accelerator_count
-            instance.guest_accelerators = [accel]
-            # GPU VMs require specific scheduling
-            scheduling = compute_v1.Scheduling()
-            scheduling.on_host_maintenance = "TERMINATE"
-            instance.scheduling = scheduling
+        zone = zones_to_try[0]  # default for error reporting
 
-        # Create the VM
-        instances_client.insert(
-            project=project,
-            zone=zone,
-            instance_resource=instance,
-        )
-        logger.info("Creating GCE instance %s in %s/%s", instance_name, project, zone)
+        for try_zone in zones_to_try:
+            try:
+                instance = compute_v1.Instance()
+                instance.name = instance_name
+                instance.machine_type = f"zones/{try_zone}/machineTypes/{gce_machine_type}"
+
+                disk = compute_v1.AttachedDisk()
+                disk.auto_delete = True
+                disk.boot = True
+                init_params = compute_v1.AttachedDiskInitializeParams()
+                init_params.source_image = image_uri
+                init_params.disk_size_gb = 200
+                init_params.disk_type = f"zones/{try_zone}/diskTypes/pd-ssd"
+                disk.initialize_params = init_params
+                instance.disks = [disk]
+
+                network_interface = compute_v1.NetworkInterface()
+                network_interface.name = "global/networks/default"
+                access_config = compute_v1.AccessConfig()
+                access_config.name = "External NAT"
+                access_config.type_ = "ONE_TO_ONE_NAT"
+                network_interface.access_configs = [access_config]
+                instance.network_interfaces = [network_interface]
+
+                if sa_email:
+                    sa = compute_v1.ServiceAccount()
+                    sa.email = sa_email
+                    sa.scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                    instance.service_accounts = [sa]
+
+                tags = compute_v1.Tags()
+                tags.items = ["bioaf-work-node"]
+                instance.tags = tags
+
+                instance.labels = {
+                    "bioaf-session": str(session_id),
+                    "bioaf-user": str(user_id),
+                    "bioaf-managed": "true",
+                }
+
+                metadata = compute_v1.Metadata()
+                metadata.items = [
+                    compute_v1.Items(key="startup-script", value=startup_script),
+                ]
+                instance.metadata = metadata
+
+                if accelerator_type:
+                    accel = compute_v1.AcceleratorConfig()
+                    accel.accelerator_type = f"zones/{try_zone}/acceleratorTypes/{accelerator_type}"
+                    accel.accelerator_count = accelerator_count
+                    instance.guest_accelerators = [accel]
+                    scheduling = compute_v1.Scheduling()
+                    scheduling.on_host_maintenance = "TERMINATE"
+                    instance.scheduling = scheduling
+
+                instances_client.insert(
+                    project=project,
+                    zone=try_zone,
+                    instance_resource=instance,
+                )
+                zone = try_zone
+                logger.info("Creating GCE instance %s in %s/%s", instance_name, project, zone)
+                break
+            except Exception as e:
+                if "ZONE_RESOURCE_POOL_EXHAUSTED" in str(e) or "does not have enough resources" in str(e):
+                    logger.warning("Zone %s exhausted for %s, trying next zone", try_zone, machine_type)
+                    continue
+                raise
 
         # Launch background poller
         creds = vm_spec.get("session_credentials", {})
