@@ -96,8 +96,17 @@ class FileService:
             count_query = count_query.where(File.experiment_id == experiment_id)
 
         if project_id is not None:
-            query = query.where(File.project_id == project_id)
-            count_query = count_query.where(File.project_id == project_id)
+            # Include files directly on the project OR files whose experiment
+            # belongs to the project (files inherit project via experiment).
+            from app.models.experiment import Experiment
+            from sqlalchemy import or_
+
+            project_filter = or_(
+                File.project_id == project_id,
+                File.experiment_id.in_(select(Experiment.id).where(Experiment.project_id == project_id)),
+            )
+            query = query.where(project_filter)
+            count_query = count_query.where(project_filter)
 
         if source_type:
             query = query.where(File.source_type == source_type)
