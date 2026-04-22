@@ -35,6 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 function statusLabel(node: WorkNode): string {
   if (node.status === "failed" && !node.access_url) return "Resource Failure";
+  if (node.status === "stopping") return "Syncing outputs...";
   return node.status;
 }
 
@@ -93,8 +94,8 @@ export default function WorkNodesPage() {
 
   // Auto-refresh while starting
   useEffect(() => {
-    const hasStarting = nodes.some((n) => n.status === "starting");
-    if (!hasStarting) return;
+    const hasInProgress = nodes.some((n) => n.status === "starting" || n.status === "stopping");
+    if (!hasInProgress) return;
     const interval = setInterval(() => loadNodes(), 10000);
     return () => clearInterval(interval);
   }, [nodes]);

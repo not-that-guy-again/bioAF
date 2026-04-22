@@ -293,6 +293,12 @@ class WorkNodeService:
 
         old_status = compute_session.status
 
+        # Set status to "stopping" and commit immediately so the UI
+        # reflects the in-progress state even if the request times out.
+        compute_session.status = "stopping"
+        await session.flush()
+        await session.commit()
+
         # Look up working bucket for output sync
         working_bucket_row = await session.execute(
             text("SELECT value FROM platform_config WHERE key = 'working_bucket_name'")
