@@ -454,7 +454,7 @@ async def test_get_work_node_detail(
             "project_id": seed_project.id,
             "environment_version_id": seed_environment["ready_version"].id,
             "machine_type": "n2-standard-4",
-            "data_mount_paths": ["/uploads/data1"],
+            "input_file_ids": [1],
         },
         headers={"Authorization": f"Bearer {comp_bio_token}"},
     )
@@ -470,7 +470,7 @@ async def test_get_work_node_detail(
     assert data["id"] == node_id
     assert data["session_type"] == "ssh"
     assert data["machine_type"] == "n2-standard-4"
-    assert data["data_mount_paths"] == ["/uploads/data1"]
+    assert data["input_file_ids"] == [1]
 
 
 # -- Stop work node --
