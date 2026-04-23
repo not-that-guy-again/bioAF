@@ -329,7 +329,7 @@ export default function WorkNodesPage() {
             {canAccess("work_nodes", "launch") && (
               <button
                 onClick={openLaunchDialog}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium"
+                className="bg-bioaf-600 text-white px-4 py-2 rounded-md text-sm hover:bg-bioaf-700"
               >
                 Launch Work Node
               </button>
@@ -448,17 +448,21 @@ export default function WorkNodesPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Machine Type</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Resources</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uptime</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Heartbeat</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Start Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Access</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {nodes.map((node) => (
-                    <tr key={node.id} className="hover:bg-gray-50">
+                    <tr key={node.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingNode(node)}>
+                      <td className="px-4 py-3 text-sm">{node.user?.name || node.user?.email || "\u2014"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900">{node.machine_type || "\u2014"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{node.cpu_cores} CPU / {node.memory_gb} GB</td>
                       <td className="px-4 py-3">
                         {stoppingNodes.has(node.id) ? (
                           <span className="flex items-center gap-1 text-xs text-orange-700">
@@ -471,29 +475,37 @@ export default function WorkNodesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{node.machine_type || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{node.cpu_cores} CPU / {node.memory_gb} GB</td>
                       <td className="px-4 py-3 text-sm text-gray-600">
-                        {node.status === "running" ? formatUptime(node.started_at) : "-"}
+                        {node.started_at ? new Date(node.started_at).toLocaleString() : "\u2014"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {node.heartbeat_at ? formatTimestamp(node.heartbeat_at) : "-"}
-                      </td>
-                      <td className="px-4 py-3 text-sm space-x-2">
-                        <button
-                          onClick={() => setViewingNode(node)}
-                          className="text-indigo-600 hover:text-indigo-800"
-                        >
-                          Details
-                        </button>
-                        {canAccess("work_nodes", "stop") && node.status === "running" && (
+                      <td className="px-4 py-3 text-sm font-mono" onClick={(e) => e.stopPropagation()}>
+                        {node.access_url && node.status === "running" ? (
                           <button
-                            onClick={() => handleStop(node.id)}
-                            className="text-red-600 hover:text-red-800"
+                            onClick={() => navigator.clipboard.writeText(extractSshCommand(node.access_url))}
+                            className="text-indigo-600 hover:underline"
+                            title={extractSshCommand(node.access_url)}
                           >
-                            Stop
+                            {extractSshCommand(node.access_url)}
                           </button>
-                        )}
+                        ) : "\u2014"}
+                      </td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex gap-2">
+                          {canAccess("work_nodes", "stop") && node.status === "running" && (
+                            <button
+                              onClick={() => handleStop(node.id)}
+                              className="text-xs px-2 py-1 border border-red-600 text-red-600 rounded hover:bg-red-50"
+                            >
+                              Stop
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setViewingNode(node)}
+                            className="text-xs px-2 py-1 border border-indigo-600 text-indigo-600 rounded hover:bg-indigo-50"
+                          >
+                            Details
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -522,6 +534,10 @@ export default function WorkNodesPage() {
                       GCP Resources Unavailable -- the VM could not be created. Try again later or choose a different machine type.
                     </div>
                   )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">User</span>
+                    <span>{viewingNode.user?.name || viewingNode.user?.email || "\u2014"}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Machine Type</span>
                     <span>{viewingNode.machine_type || "-"}</span>
@@ -581,6 +597,12 @@ export default function WorkNodesPage() {
                     <span className="text-gray-500">Started</span>
                     <span>{formatTimestamp(viewingNode.started_at)}</span>
                   </div>
+                  {viewingNode.status === "running" && viewingNode.started_at && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Uptime</span>
+                      <span>{formatUptime(viewingNode.started_at)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-gray-500">Last Heartbeat</span>
                     <span>{viewingNode.heartbeat_at ? formatTimestamp(viewingNode.heartbeat_at) : "-"}</span>
