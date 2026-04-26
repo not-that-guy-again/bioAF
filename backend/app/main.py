@@ -156,6 +156,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Default work node environment seed failed: %s", e)
 
+    # Seed default pipeline environment if none exists (ADR-045)
+    from app.services.environment_service import ensure_default_pipeline_environment
+
+    try:
+        async with notif_session_factory() as pipe_seed_session:
+            await ensure_default_pipeline_environment(pipe_seed_session)
+            await pipe_seed_session.commit()
+    except Exception as e:
+        logger.warning("Default pipeline environment seed failed: %s", e)
+
     # Resolve any pending upgrades from before the restart
     from app.services.upgrade_service import UpgradeService
 

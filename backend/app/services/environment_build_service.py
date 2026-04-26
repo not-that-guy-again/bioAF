@@ -282,7 +282,9 @@ class EnvironmentBuildService:
         if version.status not in ("draft", "failed"):
             raise ValueError(f"Cannot build version in '{version.status}' status")
 
-        # Route to the correct build pipeline based on environment type (ADR-043)
+        # Route to the correct build pipeline based on environment type (ADR-043, ADR-045)
+        # Notebooks and pipelines build Docker images via Cloud Build.
+        # Work nodes build GCE VM images via Packer.
         if env.environment_type == "work_node":
             return await EnvironmentBuildService._build_vm_image(session, env, version, org_id, user_id, environment_id)
 
