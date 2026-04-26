@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.environment import Environment
 from app.models.environment_version import EnvironmentVersion
 from app.services.audit_service import log_action
+from app.services.event_bus import event_bus
+from app.services.event_types import ENVIRONMENT_BUILD_COMPLETED
 from app.services.notebook_image_service import (
     AR_REPO_ID,
     _authorized_request,
@@ -524,6 +526,7 @@ class EnvironmentBuildService:
             return 0
 
         changed = 0
+        completed_versions: list[EnvironmentVersion] = []
         for version in building_versions:
             if not version.build_id:
                 continue
@@ -533,6 +536,7 @@ class EnvironmentBuildService:
             if status == "SUCCESS":
                 version.status = "ready"
                 changed += 1
+                completed_versions.append(version)
                 logger.info(
                     "Build %s succeeded for environment version %d",
                     version.build_id,
@@ -573,6 +577,21 @@ class EnvironmentBuildService:
 
         if changed:
             await session.flush()
+
+        for version in completed_versions:
+            env_result = await session.execute(select(Environment).where(Environment.id == version.environment_id))
+            env = env_result.scalar_one_or_none()
+            if env is None:
+                continue
+            await event_bus.emit(
+                ENVIRONMENT_BUILD_COMPLETED,
+                {
+                    "environment_id": env.id,
+                    "environment_version_id": version.id,
+                    "environment_type": env.environment_type,
+                    "organization_id": env.organization_id,
+                },
+            )
 
         return changed
 

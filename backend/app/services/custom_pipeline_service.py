@@ -1,7 +1,8 @@
 import logging
 import re
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -342,6 +343,142 @@ class CustomPipelineService:
             .order_by(CustomPipelineVersion.version_number.desc())
         )
         return list(result.scalars().all())
+
+    @staticmethod
+    async def handle_environment_build_completed(payload: dict[str, Any]) -> None:
+        """Event subscriber: cascade new pipeline versions when a pipeline environment is rebuilt."""
+        if payload.get("environment_type") != "pipeline":
+            return
+
+        environment_id = payload.get("environment_id")
+        environment_version_id = payload.get("environment_version_id")
+        if environment_id is None or environment_version_id is None:
+            logger.warning("ENVIRONMENT_BUILD_COMPLETED missing required fields: %s", payload)
+            return
+
+        from app.database import async_session_factory
+
+        async with async_session_factory() as session:
+            await CustomPipelineService.cascade_pipeline_versions(
+                session,
+                environment_id=int(environment_id),
+                environment_version_id=int(environment_version_id),
+            )
+            await session.commit()
+
+    @staticmethod
+    async def cascade_pipeline_versions(
+        session: AsyncSession,
+        environment_id: int,
+        environment_version_id: int,
+    ) -> list[CustomPipelineVersion]:
+        """Create cascade versions of all pipelines whose latest active version uses this environment.
+
+        Returns the list of newly created cascade versions.
+        """
+        max_active_subq = (
+            select(
+                CustomPipelineVersion.custom_pipeline_id.label("pipeline_id"),
+                func.max(CustomPipelineVersion.version_number).label("max_v"),
+            )
+            .where(CustomPipelineVersion.status == "active")
+            .group_by(CustomPipelineVersion.custom_pipeline_id)
+            .subquery()
+        )
+
+        affected_result = await session.execute(
+            select(CustomPipelineVersion)
+            .join(EnvironmentVersion, CustomPipelineVersion.environment_version_id == EnvironmentVersion.id)
+            .join(
+                max_active_subq,
+                and_(
+                    CustomPipelineVersion.custom_pipeline_id == max_active_subq.c.pipeline_id,
+                    CustomPipelineVersion.version_number == max_active_subq.c.max_v,
+                ),
+            )
+            .where(
+                EnvironmentVersion.environment_id == environment_id,
+                CustomPipelineVersion.status == "active",
+            )
+            .options(selectinload(CustomPipelineVersion.variables))
+        )
+        affected_versions = list(affected_result.scalars().unique().all())
+
+        if not affected_versions:
+            return []
+
+        new_env_version_result = await session.execute(
+            select(EnvironmentVersion).where(EnvironmentVersion.id == environment_version_id)
+        )
+        new_env_version = new_env_version_result.scalar_one_or_none()
+        if new_env_version is None:
+            logger.warning(
+                "Cascade skipped: environment_version_id=%d not found",
+                environment_version_id,
+            )
+            return []
+
+        cascade_user_id = new_env_version.created_by_user_id
+
+        created: list[CustomPipelineVersion] = []
+        for source in affected_versions:
+            if source.environment_version_id == environment_version_id:
+                continue
+
+            max_v_result = await session.execute(
+                select(func.coalesce(func.max(CustomPipelineVersion.version_number), 0)).where(
+                    CustomPipelineVersion.custom_pipeline_id == source.custom_pipeline_id
+                )
+            )
+            next_version_number = (max_v_result.scalar() or 0) + 1
+
+            cascade_version = CustomPipelineVersion(
+                custom_pipeline_id=source.custom_pipeline_id,
+                version_number=next_version_number,
+                code_source_type=source.code_source_type,
+                github_repo_id=source.github_repo_id,
+                code_content=source.code_content,
+                entrypoint_command=source.entrypoint_command,
+                environment_version_id=environment_version_id,
+                cpu_request=source.cpu_request,
+                memory_request=source.memory_request,
+                log_file_path=source.log_file_path,
+                version_trigger="environment_cascade",
+                status="active",
+                created_by_user_id=cascade_user_id,
+            )
+            session.add(cascade_version)
+            await session.flush()
+
+            for var in source.variables:
+                session.add(
+                    CustomPipelineVariable(
+                        custom_pipeline_version_id=cascade_version.id,
+                        variable_name=var.variable_name,
+                        default_value=var.default_value,
+                        variable_type=var.variable_type,
+                        is_required=var.is_required,
+                    )
+                )
+            await session.flush()
+
+            await log_action(
+                session,
+                user_id=cascade_user_id,
+                entity_type="custom_pipeline_version",
+                entity_id=cascade_version.id,
+                action="cascade_create",
+                details={
+                    "custom_pipeline_id": source.custom_pipeline_id,
+                    "source_version_id": source.id,
+                    "source_version_number": source.version_number,
+                    "new_version_number": next_version_number,
+                    "environment_version_id": environment_version_id,
+                },
+            )
+            created.append(cascade_version)
+
+        return created
 
     @staticmethod
     async def deprecate_version(

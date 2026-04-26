@@ -106,6 +106,17 @@ async def lifespan(app: FastAPI):
     notification_router.register()
     logger.info("Notification system initialized")
 
+    # Subscribe custom pipeline cascade handler to environment build completions (ADR-046)
+    from app.services.custom_pipeline_service import CustomPipelineService
+    from app.services.event_bus import event_bus
+    from app.services.event_types import ENVIRONMENT_BUILD_COMPLETED
+
+    event_bus.subscribe(
+        ENVIRONMENT_BUILD_COMPLETED,
+        CustomPipelineService.handle_environment_build_completed,
+    )
+    logger.info("Custom pipeline cascade handler subscribed")
+
     # Initialize BioAF Adapter Layer (BAL)
     from app.adapters.registry import initialize_adapters
 
