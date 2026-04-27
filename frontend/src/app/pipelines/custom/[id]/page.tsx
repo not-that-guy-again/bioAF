@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ContentLoading } from "@/components/shared/ContentLoading";
@@ -70,7 +70,10 @@ const TONE_CLASSES: Record<"blue" | "amber" | "purple" | "gray", string> = {
 export default function CustomPipelineDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const pipelineId = Number(params.id);
+  const autoLaunch = searchParams.get("launch") === "1";
+  const autoNewVersion = searchParams.get("newVersion") === "1";
   const { canAccess, loading: permsLoading } = usePermissions();
 
   const [pipeline, setPipeline] = useState<CustomPipelineDetail | null>(null);
@@ -169,6 +172,13 @@ export default function CustomPipelineDetailPage() {
       }
       setEnvOptions(options);
       seedVersionFormFromLatest(detail, options);
+
+      if (autoLaunch && detail.versions.some((v) => v.status === "active")) {
+        setShowLaunchDialog(true);
+      }
+      if (autoNewVersion) {
+        setShowNewVersionForm(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load pipeline");
     } finally {
@@ -688,9 +698,15 @@ export default function CustomPipelineDetailPage() {
                     );
                   })}
                   {pipeline.versions.length === 0 && (
-                    <div className="p-12 text-center text-gray-400 text-sm">
-                      No versions yet.
-                      {canEdit && " Click \"New Version\" to create the first one."}
+                    <div className="p-12 text-center text-gray-500 text-sm">
+                      <p className="font-medium text-gray-700">No versions yet.</p>
+                      {canEdit && (
+                        <p className="mt-1 text-gray-500">
+                          A version holds the code, entrypoint command, environment, and
+                          variables. Click <span className="font-semibold">New Version</span>{" "}
+                          to define the first one and make this pipeline launchable.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -793,6 +809,7 @@ function NewVersionForm({
 }) {
   return (
     <div className="space-y-4">
+      <RuntimeContractPanel />
       <div>
         <label className="text-sm text-gray-500 block mb-1">Code source</label>
         <div className="flex gap-4 text-sm">
@@ -1009,6 +1026,66 @@ function NewVersionForm({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RuntimeContractPanel() {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="border border-blue-200 bg-blue-50 rounded">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-blue-900"
+      >
+        <span>Runtime contract — what your code can expect</span>
+        <span className="text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 text-xs text-blue-900 space-y-2">
+          <div>
+            <span className="font-semibold">Inputs:</span> selected files are staged
+            under <code className="bg-white/60 px-1 rounded">/data/</code> using paths
+            like <code className="bg-white/60 px-1 rounded">/data/&lt;project&gt;/&lt;experiment&gt;/&lt;sample&gt;/&lt;filename&gt;</code>.
+            Full mapping (file ids, project, experiment, sample) is in{" "}
+            <code className="bg-white/60 px-1 rounded">/data/manifest.json</code>.
+          </div>
+          <div>
+            <span className="font-semibold">Variables:</span> launch-time values are
+            written to <code className="bg-white/60 px-1 rounded">/data/params.json</code>{" "}
+            and exposed as environment variables{" "}
+            <code className="bg-white/60 px-1 rounded">PARAM_&lt;NAME&gt;</code> on the
+            container.
+          </div>
+          <div>
+            <span className="font-semibold">Code source:</span> a GitHub repo is cloned
+            to <code className="bg-white/60 px-1 rounded">/code/&lt;repo-display-name&gt;/</code>{" "}
+            (the working directory). A code blob is written to{" "}
+            <code className="bg-white/60 px-1 rounded">/code/script</code>. Inline
+            commands run with <code className="bg-white/60 px-1 rounded">/data</code> as
+            the working directory.
+          </div>
+          <div>
+            <span className="font-semibold">Outputs:</span> anything your script writes
+            to <code className="bg-white/60 px-1 rounded">/outputs/</code> is synced to
+            GCS and registered as File records on the run after completion.
+          </div>
+          <div>
+            <span className="font-semibold">Logs:</span> by default the run page tails
+            pod stdout/stderr. If you set a log file path below (e.g.{" "}
+            <code className="bg-white/60 px-1 rounded">/outputs/my-script.log</code>),
+            that file replaces the default view post-completion. The OOM detector
+            (SIGKILL/exit 137) is automatic.
+          </div>
+          <div>
+            <span className="font-semibold">Entrypoint:</span> the entrypoint command
+            below runs from the working directory above. Use the same form you would in
+            a shell — for example, <code className="bg-white/60 px-1 rounded">bash run.sh</code>{" "}
+            or <code className="bg-white/60 px-1 rounded">python main.py</code>.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

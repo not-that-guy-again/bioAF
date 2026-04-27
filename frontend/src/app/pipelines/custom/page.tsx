@@ -127,7 +127,7 @@ export default function CustomPipelineListPage() {
       });
       setShowCreateModal(false);
       setCreateForm({ name: "", description: "" });
-      router.push(`/pipelines/custom/${created.id}`);
+      router.push(`/pipelines/custom/${created.id}?newVersion=1`);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to create pipeline");
     } finally {
@@ -241,7 +241,11 @@ export default function CustomPipelineListPage() {
               {showCreateModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                   <div className="bg-white rounded-lg shadow-xl p-6 w-[480px]">
-                    <h3 className="font-semibold text-lg mb-4">Create Custom Pipeline</h3>
+                    <h3 className="font-semibold text-lg mb-1">Create Custom Pipeline</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                      Step 1 of 2: name your pipeline. Next, you&apos;ll define a version
+                      with the code, entrypoint command, environment, and variables.
+                    </p>
                     <div className="space-y-3">
                       <div>
                         <label className="text-sm text-gray-500 block mb-1">Name</label>
@@ -271,8 +275,9 @@ export default function CustomPipelineListPage() {
                         <p className="text-sm text-red-600">{createError}</p>
                       )}
                       <p className="text-xs text-gray-400">
-                        After creating the pipeline, add a version with code, environment, and
-                        variables.
+                        After clicking Create, you&apos;ll be taken to the version form to
+                        provide the code source, entrypoint command (e.g.{" "}
+                        <code>bash run.sh</code>), pipeline environment, and any variables.
                       </p>
                     </div>
                     <div className="flex gap-2 mt-6">
