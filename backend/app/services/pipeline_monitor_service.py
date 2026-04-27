@@ -547,14 +547,19 @@ class PipelineMonitorService:
         return mapping.get(nf_status.upper(), nf_status.lower())
 
     @staticmethod
-    async def get_run_logs(session: AsyncSession, run_id: int, process_name: str) -> dict:
+    async def get_run_logs(
+        session: AsyncSession,
+        run_id: int,
+        process_name: str,
+        force_pod_logs: bool = False,
+    ) -> dict:
         """Get stdout/stderr for a specific process or K8s job."""
         run_result = await session.execute(select(PipelineRun).where(PipelineRun.id == run_id))
         run = run_result.scalar_one_or_none()
 
         if run is not None and run.k8s_job_name:
             if run.custom_pipeline_version_id is not None:
-                return await PipelineMonitorService._get_custom_run_logs(run)
+                return await PipelineMonitorService._get_custom_run_logs(run, force_pod_logs=force_pod_logs)
 
             stdout = ""
             try:
@@ -587,18 +592,27 @@ class PipelineMonitorService:
         return {"stdout": stdout, "stderr": stderr}
 
     @staticmethod
-    async def _get_custom_run_logs(run: PipelineRun) -> dict:
+    async def _get_custom_run_logs(run: PipelineRun, force_pod_logs: bool = False) -> dict:
         """Log retrieval for custom pipeline runs.
 
         Returns pod logs when no log_file_path is configured. Otherwise returns
         pod logs with a `custom_log_pending` flag while running, and the custom
         log file (with `pod_logs_available` flag) once the run has completed.
+        `force_pod_logs=True` overrides the custom file selection so callers can
+        explicitly request the system pod logs.
         """
         version = run.custom_pipeline_version
         log_file_path = version.log_file_path if version else None
 
         if not log_file_path:
             return {"stdout": await _safe_pod_logs(run.k8s_job_name, run.id), "stderr": ""}
+
+        if force_pod_logs:
+            return {
+                "stdout": await _safe_pod_logs(run.k8s_job_name, run.id),
+                "stderr": "",
+                "log_source": "pod",
+            }
 
         if run.status in ("running", "pending"):
             return {
@@ -628,16 +642,28 @@ class PipelineMonitorService:
 
     @staticmethod
     async def get_run_report(session: AsyncSession, run_id: int) -> str:
-        """Read the Nextflow HTML report from GCS."""
-        k8s_result = await session.execute(select(PipelineRun.k8s_job_name).where(PipelineRun.id == run_id))
-        k8s_job_name = k8s_result.scalar_one_or_none()
+        """Read the report from GCS.
 
-        if not k8s_job_name:
+        For Nextflow runs this returns the HTML report from the compute
+        adapter. For custom pipeline runs this returns the report artifact
+        (HTML or markdown) registered during output collection.
+        """
+        run_result = await session.execute(select(PipelineRun).where(PipelineRun.id == run_id))
+        run = run_result.scalar_one_or_none()
+
+        if run is None or not run.k8s_job_name:
             return ""
+
+        if run.custom_pipeline_version_id is not None:
+            report_uri = (run.output_files_json or {}).get("report_path")
+            if not report_uri:
+                return ""
+            content = await _read_gcs_text(report_uri)
+            return content or ""
 
         try:
             compute_adapter = get_compute_adapter()
-            return await compute_adapter.get_job_report(k8s_job_name)
+            return await compute_adapter.get_job_report(run.k8s_job_name)
         except Exception as e:
             logger.warning("Failed to read report for run %d: %s", run_id, e)
             return ""

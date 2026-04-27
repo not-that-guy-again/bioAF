@@ -766,6 +766,7 @@ export interface PipelineRun {
   alignment_algorithm: string | null;
   resume_from_run_id: number | null;
   review_verdict: ReviewVerdict | null;
+  custom_pipeline_version_id: number | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string | null;
@@ -871,6 +872,31 @@ export interface CustomPipelineCreateRequest {
 export interface CustomPipelineUpdateRequest {
   name?: string | null;
   description?: string | null;
+}
+
+export interface CustomPipelineEnvironmentSummary {
+  environment_id: number;
+  environment_name: string;
+  version_id: number;
+  version_number: number;
+  build_number: number;
+  image_uri: string | null;
+}
+
+export interface CustomPipelineRunOverview {
+  pipeline_id: number;
+  pipeline_name: string;
+  pipeline_key: string;
+  version_id: number;
+  version_number: number;
+  code_source_type: CustomPipelineCodeSource;
+  github_repo_id: number | null;
+  entrypoint_command: string;
+  cpu_request: string;
+  memory_request: string;
+  log_file_path: string | null;
+  environment: CustomPipelineEnvironmentSummary | null;
+  variables: CustomPipelineVariable[];
 }
 
 export interface CustomPipelineVersionCreateRequest {

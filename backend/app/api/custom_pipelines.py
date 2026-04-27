@@ -8,12 +8,16 @@ from app.api.pipeline_runs import _run_response
 from app.database import get_session
 from app.models.custom_pipeline import CustomPipeline
 from app.models.custom_pipeline_version import CustomPipelineVersion
+from app.models.environment import Environment
+from app.models.environment_version import EnvironmentVersion
 from app.models.pipeline_run import PipelineRun
 from app.schemas.custom_pipeline import (
     CustomPipelineCreateRequest,
     CustomPipelineDetailResponse,
+    CustomPipelineEnvironmentSummary,
     CustomPipelineLaunchRequest,
     CustomPipelineResponse,
+    CustomPipelineRunOverview,
     CustomPipelineUpdateRequest,
     CustomPipelineVariableResponse,
     CustomPipelineVersionCreateRequest,
@@ -219,6 +223,74 @@ async def deprecate_custom_pipeline_version(
         raise HTTPException(400, message)
 
     return {"status": "deprecated"}
+
+
+@router.get(
+    "/versions/{version_id}/overview",
+    response_model=CustomPipelineRunOverview,
+)
+async def get_custom_pipeline_version_overview(
+    version_id: int,
+    current_user: dict = require_permission("custom_pipelines", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return version + parent pipeline + environment summary in one call.
+
+    Used by the pipeline run detail page so it can render custom pipeline
+    metadata without chaining multiple lookups.
+    """
+    org_id = int(current_user["org_id"])
+
+    result = await session.execute(
+        select(CustomPipelineVersion)
+        .join(CustomPipeline, CustomPipelineVersion.custom_pipeline_id == CustomPipeline.id)
+        .where(
+            CustomPipelineVersion.id == version_id,
+            CustomPipeline.organization_id == org_id,
+        )
+        .options(
+            selectinload(CustomPipelineVersion.variables),
+            selectinload(CustomPipelineVersion.custom_pipeline),
+        )
+    )
+    version = result.scalar_one_or_none()
+    if version is None:
+        raise HTTPException(404, "Custom pipeline version not found")
+
+    env_result = await session.execute(
+        select(EnvironmentVersion, Environment)
+        .join(Environment, EnvironmentVersion.environment_id == Environment.id)
+        .where(EnvironmentVersion.id == version.environment_version_id)
+    )
+    env_row = env_result.first()
+    env_summary: CustomPipelineEnvironmentSummary | None = None
+    if env_row is not None:
+        env_version, env = env_row
+        env_summary = CustomPipelineEnvironmentSummary(
+            environment_id=env.id,
+            environment_name=env.name,
+            version_id=env_version.id,
+            version_number=env_version.version_number,
+            build_number=env_version.build_number,
+            image_uri=env_version.image_uri,
+        )
+
+    pipeline = version.custom_pipeline
+    return CustomPipelineRunOverview(
+        pipeline_id=pipeline.id,
+        pipeline_name=pipeline.name,
+        pipeline_key=pipeline.pipeline_key,
+        version_id=version.id,
+        version_number=version.version_number,
+        code_source_type=version.code_source_type,
+        github_repo_id=version.github_repo_id,
+        entrypoint_command=version.entrypoint_command,
+        cpu_request=version.cpu_request,
+        memory_request=version.memory_request,
+        log_file_path=version.log_file_path,
+        environment=env_summary,
+        variables=[CustomPipelineVariableResponse.model_validate(v) for v in (version.variables or [])],
+    )
 
 
 @router.post("/{pipeline_id}/launch")

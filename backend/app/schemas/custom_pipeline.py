@@ -104,3 +104,30 @@ class CustomPipelineDetailResponse(BaseModel):
     versions: list[CustomPipelineVersionResponse] = []
 
     model_config = {"from_attributes": True}
+
+
+class CustomPipelineEnvironmentSummary(BaseModel):
+    environment_id: int
+    environment_name: str
+    version_id: int
+    version_number: int
+    build_number: int
+    image_uri: str | None = None
+
+
+class CustomPipelineRunOverview(BaseModel):
+    """Summary used by the run detail page for custom pipeline runs."""
+
+    pipeline_id: int
+    pipeline_name: str
+    pipeline_key: str
+    version_id: int
+    version_number: int
+    code_source_type: str
+    github_repo_id: int | None = None
+    entrypoint_command: str
+    cpu_request: str
+    memory_request: str
+    log_file_path: str | None = None
+    environment: CustomPipelineEnvironmentSummary | None = None
+    variables: list[CustomPipelineVariableResponse] = []

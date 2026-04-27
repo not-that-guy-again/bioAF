@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ContentLoading } from "@/components/shared/ContentLoading";
+import { CustomPipelineLaunchDialog } from "@/components/pipelines/CustomPipelineLaunchDialog";
 import { isAuthenticated } from "@/lib/auth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { api } from "@/lib/api";
@@ -87,6 +88,8 @@ export default function CustomPipelineDetailPage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const [showLaunchDialog, setShowLaunchDialog] = useState(false);
 
   const [expandedVersionIds, setExpandedVersionIds] = useState<Set<number>>(new Set());
 
@@ -367,7 +370,7 @@ export default function CustomPipelineDetailPage() {
 
   function handleLaunch() {
     if (!pipeline) return;
-    router.push(`/pipelines/launch/${encodeURIComponent(pipeline.pipeline_key)}`);
+    setShowLaunchDialog(true);
   }
 
   return (
@@ -692,6 +695,19 @@ export default function CustomPipelineDetailPage() {
                   )}
                 </div>
               </div>
+
+              {showLaunchDialog && (
+                <CustomPipelineLaunchDialog
+                  pipeline={pipeline}
+                  envOptionsById={envOptionsById}
+                  repoById={repoById}
+                  onClose={() => setShowLaunchDialog(false)}
+                  onLaunched={(runId) => {
+                    setShowLaunchDialog(false);
+                    router.push(`/pipelines/runs/${runId}`);
+                  }}
+                />
+              )}
 
               {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
