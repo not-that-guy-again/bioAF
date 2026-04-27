@@ -254,9 +254,7 @@ async def test_register_outputs_project_scoped(session, project_scoped_run, proj
 
 
 @pytest.mark.asyncio
-async def test_register_outputs_experiment_scoped_does_not_set_project_id(
-    session, pipeline_run, experiment
-):
+async def test_register_outputs_experiment_scoped_does_not_set_project_id(session, pipeline_run, experiment):
     """Experiment-scoped runs should not set File.project_id (project is derived via experiment)."""
     collected = _make_collected(pipeline_run.id, experiment.id)
 
@@ -281,9 +279,7 @@ async def test_register_nextflow_metadata_project_scoped(session, project_scoped
     with patch("app.services.pipeline_output_service.gcs_storage") as mock_gcs:
         mock_gcs.Client.return_value = mock_client
 
-        files = await PipelineOutputService.register_nextflow_metadata(
-            session, project_scoped_run, "bioaf-raw-testorg"
-        )
+        files = await PipelineOutputService.register_nextflow_metadata(session, project_scoped_run, "bioaf-raw-testorg")
         await session.commit()
 
     assert len(files) == 2

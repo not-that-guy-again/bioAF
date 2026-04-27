@@ -665,9 +665,7 @@ async def test_experiment_status_unchanged_when_only_project(
 
 
 @pytest.mark.asyncio
-async def test_experiment_scoped_output_path(
-    session, admin_user, ready_env_version, experiment, input_files
-):
+async def test_experiment_scoped_output_path(session, admin_user, ready_env_version, experiment, input_files):
     """Experiment-scoped runs use the experiments/{id}/pipeline-runs/ GCS prefix."""
     pipeline, version = await _create_pipeline_with_version(session, admin_user, ready_env_version.id)
     adapter, captured = _mock_compute_adapter()
