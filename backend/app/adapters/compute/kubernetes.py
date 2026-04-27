@@ -652,8 +652,34 @@ class KubernetesComputeProvider(ComputeProvider):
 
         return "\n".join(lines)
 
-    def _ensure_gcs_secret(self, namespace: str) -> bool:
+    async def _read_gcp_credentials(self) -> tuple[str, str]:
+        """Read gcp_credential_source and gcp_service_account_key fresh from platform_config.
+
+        Cluster endpoint/CA can be cached in _cluster_config because they rarely
+        change, but credentials need a per-launch read so that keys saved or
+        rotated through the Settings UI take effect without a backend restart.
+        """
+        from sqlalchemy import text as sa_text
+
+        if not self._session_factory:
+            return "vm_default", ""
+
+        async with self._session_factory() as session:
+            result = await session.execute(
+                sa_text(
+                    "SELECT key, value FROM platform_config "
+                    "WHERE key IN ('gcp_credential_source', 'gcp_service_account_key')"
+                )
+            )
+            rows = {r[0]: (r[1] or "") for r in result.fetchall()}
+
+        return rows.get("gcp_credential_source", "vm_default") or "vm_default", rows.get("gcp_service_account_key", "")
+
+    def _ensure_gcs_secret(self, namespace: str, credential_source: str, sa_key: str) -> bool:
         """Create a K8s Secret with the GCP SA key for GCS access.
+
+        Only mounts a key file when ``credential_source == "service_account_key"``
+        -- in ``vm_default`` mode, gsutil falls back to ADC on the node.
 
         Returns True if the secret exists (created or already present).
         """
@@ -661,9 +687,7 @@ class KubernetesComputeProvider(ComputeProvider):
 
         from kubernetes.client.rest import ApiException
 
-        cfg = self._cluster_config or {}
-        sa_key = cfg.get("gcp_service_account_key", "")
-        if not sa_key:
+        if credential_source != "service_account_key" or not sa_key:
             return False
 
         core_client = self._get_k8s_core_client()
@@ -738,8 +762,11 @@ class KubernetesComputeProvider(ComputeProvider):
         if not self._namespace_ready:
             await self.ensure_pipeline_namespace(namespace)
 
-        # Ensure GCS credentials secret exists for bucket access
-        has_gcs_secret = self._ensure_gcs_secret(namespace)
+        # Ensure GCS credentials secret exists for bucket access. Read the
+        # SA key fresh from platform_config so a key saved or rotated through
+        # the Settings UI takes effect without a backend restart.
+        credential_source, sa_key = await self._read_gcp_credentials()
+        has_gcs_secret = self._ensure_gcs_secret(namespace, credential_source, sa_key)
 
         job_name = f"bioaf-pipeline-{run_id}"
 
