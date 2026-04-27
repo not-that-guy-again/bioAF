@@ -1156,7 +1156,7 @@ export interface EnvironmentResponse {
   name: string;
   description: string | null;
   visibility: "team" | "organization";
-  environment_type: "notebook" | "work_node";
+  environment_type: "notebook" | "work_node" | "pipeline";
   version_count: number;
   latest_version: EnvironmentVersionSummary | null;
   created_by: UserSummary | null;
@@ -1174,7 +1174,7 @@ export interface EnvironmentDetailResponse {
   name: string;
   description: string | null;
   visibility: "team" | "organization";
-  environment_type: "notebook" | "work_node";
+  environment_type: "notebook" | "work_node" | "pipeline";
   versions: EnvironmentVersionSummary[];
   created_by: UserSummary | null;
   created_at: string;
@@ -1204,6 +1204,7 @@ export interface EnvironmentCreateRequest {
   name: string;
   description?: string;
   visibility?: "team" | "organization";
+  environment_type?: "notebook" | "work_node" | "pipeline";
 }
 
 export interface VersionCreateRequest {

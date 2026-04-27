@@ -45,6 +45,7 @@ export const navConfig: NavSection[] = [
     children: [
       { label: "Pipeline Catalog", path: "/pipelines/catalog", permission: { resource: "pipelines", action: "view" } },
       { label: "Pipeline Runs", path: "/pipelines/runs", permission: { resource: "pipelines", action: "view" } },
+      { label: "Environments", path: "/pipelines/environments", permission: { resource: "environments", action: "view" } },
     ],
   },
   {
