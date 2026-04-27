@@ -660,7 +660,37 @@ async def test_experiment_status_unchanged_when_only_project(
     spec = captured["job_spec"]
     # Output prefix should target projects, not experiments
     wrapped = spec["command"][2]
-    assert f"projects/{project.id}/pipeline-runs/" in wrapped
+    assert f"gs://bioaf-results-test/projects/{project.id}/pipeline-runs/" in wrapped
+    assert "experiments/" not in wrapped
+
+
+@pytest.mark.asyncio
+async def test_experiment_scoped_output_path(
+    session, admin_user, ready_env_version, experiment, input_files
+):
+    """Experiment-scoped runs use the experiments/{id}/pipeline-runs/ GCS prefix."""
+    pipeline, version = await _create_pipeline_with_version(session, admin_user, ready_env_version.id)
+    adapter, captured = _mock_compute_adapter()
+
+    with (
+        patch("app.services.custom_pipeline_service.get_compute_adapter", return_value=adapter),
+        patch("app.services.experiment_service.ExperimentService.update_status", AsyncMock()),
+    ):
+        await CustomPipelineService.launch_run(
+            session,
+            admin_user.organization_id,
+            admin_user.id,
+            CustomPipelineLaunchRequest(
+                version_id=version.id,
+                experiment_id=experiment.id,
+                input_file_ids=[f.id for f in input_files],
+            ),
+        )
+
+    spec = captured["job_spec"]
+    wrapped = spec["command"][2]
+    assert f"gs://bioaf-results-test/experiments/{experiment.id}/pipeline-runs/" in wrapped
+    assert "projects/" not in wrapped
 
 
 # --- Validation guards ---
