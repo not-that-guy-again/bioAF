@@ -973,7 +973,18 @@ class CustomPipelineService:
     ) -> str:
         if results_bucket:
             sync_target = f"gs://{results_bucket}/{output_prefix}/pipeline-runs/{run_id}/"
-            trap = f"trap 'gsutil -m cp -r /outputs/* {sync_target} 2>/dev/null || true' EXIT"
+            # Activate the mounted SA explicitly (same reason as stage-inputs:
+            # gsutil's ~/.boto precedence picks up the wrong identity even with
+            # GOOGLE_APPLICATION_CREDENTIALS set). `|| true` keeps the trap
+            # non-fatal so a sync failure doesn't mask the pipeline's real
+            # exit status, but stderr is left visible so failures show up in
+            # pod logs instead of silently dropping outputs.
+            sync_cmd = (
+                "gcloud auth activate-service-account "
+                "--key-file=/secrets/gcp/key.json --quiet && "
+                f"gcloud storage cp -r /outputs/* {sync_target}"
+            )
+            trap = f"trap '{sync_cmd} || true' EXIT"
         else:
             trap = "trap 'true' EXIT"
         return "#!/bin/sh\nset -e\n" + trap + "\n" + entrypoint_command

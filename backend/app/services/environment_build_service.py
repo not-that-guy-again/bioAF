@@ -163,9 +163,25 @@ def _get_vm_image_uri(project_id: str, env_name: str, version_number: int, build
     return f"projects/{project_id}/global/images/{name}"
 
 
-# Template for wrapping a conda environment.yml in a Dockerfile
+# Template for wrapping a conda environment.yml in a Dockerfile.
+#
+# Google Cloud SDK is installed at the OS layer (parallel to how GCE work-node
+# base images already carry it) so the pipeline entrypoint trap can sync
+# /outputs/ to GCS without depending on whatever the user puts in their conda
+# env. Without this, `gsutil`/`gcloud storage` are missing from the container
+# and the output-sync trap silently no-ops.
 CONDA_DOCKERFILE_TEMPLATE = """\
 FROM continuumio/miniconda3:latest
+
+RUN apt-get update && \\
+    apt-get install -y --no-install-recommends curl gnupg ca-certificates apt-transport-https && \\
+    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg \\
+      | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \\
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \\
+      > /etc/apt/sources.list.d/google-cloud-sdk.list && \\
+    apt-get update && \\
+    apt-get install -y --no-install-recommends google-cloud-cli && \\
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY environment.yml /tmp/environment.yml
 RUN conda env create -f /tmp/environment.yml && \\
