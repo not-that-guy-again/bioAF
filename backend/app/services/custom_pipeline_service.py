@@ -889,15 +889,22 @@ class CustomPipelineService:
 
     @staticmethod
     def _build_stage_commands(file_specs: list[dict]) -> list[str]:
+        # gsutil consults ~/.boto before GOOGLE_APPLICATION_CREDENTIALS, which
+        # in cloud-sdk:slim picks up the wrong identity even with the SA key
+        # mounted. Activate the SA explicitly and use `gcloud storage`, which
+        # honors the activated account directly.
         commands: list[str] = []
+        if not file_specs:
+            return commands
+        commands.append("gcloud auth activate-service-account --key-file=/secrets/gcp/key.json --quiet")
         for fs in file_specs:
             rel = fs["relative_path"]
             gcs = fs["gcs_uri"]
             dirname = "/".join(rel.split("/")[:-1])
             if dirname:
-                commands.append(f"mkdir -p /data/{dirname} && gsutil cp {gcs} /data/{rel}")
+                commands.append(f"mkdir -p /data/{dirname} && gcloud storage cp {gcs} /data/{rel}")
             else:
-                commands.append(f"gsutil cp {gcs} /data/{rel}")
+                commands.append(f"gcloud storage cp {gcs} /data/{rel}")
         return commands
 
     @staticmethod

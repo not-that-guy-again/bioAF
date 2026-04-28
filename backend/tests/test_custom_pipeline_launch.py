@@ -415,10 +415,12 @@ async def test_stage_commands_use_relative_paths(session, admin_user, ready_env_
         )
 
     spec = captured["job_spec"]
-    assert len(spec["stage_commands"]) == 2
-    for cmd in spec["stage_commands"]:
+    assert spec["stage_commands"][0].startswith("gcloud auth activate-service-account")
+    cp_commands = spec["stage_commands"][1:]
+    assert len(cp_commands) == 2
+    for cmd in cp_commands:
         assert cmd.startswith("mkdir -p /data/")
-        assert "gsutil cp" in cmd
+        assert "gcloud storage cp" in cmd
 
 
 # --- Variable resolution ---
