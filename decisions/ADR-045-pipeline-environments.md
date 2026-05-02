@@ -27,6 +27,7 @@ The `Environment.environment_type` field accepts a new value: `"pipeline"`. This
 ### Build Routing
 
 In `environment_build_service.py`:
+
 - `"notebook"` and `"pipeline"` both use the Docker/Cloud Build path: wrap Conda YAML in a Dockerfile with `FROM continuumio/miniconda3:latest`, upload build context to GCS, submit Cloud Build, store image in Artifact Registry.
 - `"work_node"` continues to use the Packer/GCE image path.
 

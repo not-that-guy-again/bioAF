@@ -31,9 +31,11 @@ A custom pipeline is a named, org-scoped, reusable definition that appears in th
 Two new tables:
 
 **`custom_pipelines`** -- the parent entity:
+
 - `id`, `organization_id`, `name`, `description`, `pipeline_key` (unique per org), `created_by_user_id`, timestamps.
 
 **`custom_pipeline_versions`** -- versioned definitions:
+
 - `custom_pipeline_id`, `version_number` (auto-incremented per pipeline).
 - Code source: `code_source_type` ("github_repo", "code_blob", "inline"), `github_repo_id` (FK to existing `github_repos`), `code_content` (for blob/inline).
 - Execution: `entrypoint_command`, `environment_version_id` (FK to `environment_versions`).
@@ -44,12 +46,14 @@ Two new tables:
 **`custom_pipeline_variables`** -- variable definitions per version (see ADR-046).
 
 Modified tables:
+
 - `pipeline_catalog`: Add `custom_pipeline_id` FK (nullable). One-directional -- catalog points to pipeline.
 - `pipeline_runs`: Add `custom_pipeline_version_id` FK (nullable). Provenance link to exact version that produced the outputs.
 
 ### Execution Model
 
 Custom pipelines run as K8s Jobs on the existing pipeline node pool, reusing:
+
 - **Input staging:** GCS-to-`/data/` via init containers (same as NF-Core).
 - **Output sync:** `trap EXIT` wrapper uploads `/outputs/` to GCS results bucket.
 - **Monitoring:** 30-second polling loop picks up any `PipelineRun` with `k8s_job_name`.
@@ -57,6 +61,7 @@ Custom pipelines run as K8s Jobs on the existing pipeline node pool, reusing:
 - **Log persistence:** `persist_job_logs()` saves pod stdout/stderr to GCS on completion.
 
 New behaviors for custom pipelines:
+
 - **Working directory** set via K8s `workingDir` based on code source type: `/code/{repo_name}` for github_repo, `/code` for code_blob, `/data` for inline.
 - **Report detection:** Checks for `/outputs/report/report.html` (self-contained) or `report.md` (server-rendered) in collected outputs.
 - **Custom log file:** If `log_file_path` is set, that file from `/outputs/` becomes the primary log view post-completion.

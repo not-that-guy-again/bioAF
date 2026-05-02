@@ -47,6 +47,7 @@ Custom pipeline variables follow the `ExperimentCustomField` / `SampleCustomFiel
 ### Version Trigger Field
 
 `CustomPipelineVersion.version_trigger` distinguishes why a version was created:
+
 - `"user"` -- a person created or edited the version.
 - `"environment_cascade"` -- the system created it in response to an environment rebuild.
 
