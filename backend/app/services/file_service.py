@@ -77,7 +77,10 @@ class FileService:
         page: int = 1,
         page_size: int = 25,
     ) -> tuple[list[File], int]:
-        from app.models.sample import sample_files
+        from sqlalchemy import or_
+
+        from app.models.experiment import Experiment
+        from app.models.sample import Sample, sample_files
 
         query = select(File).options(selectinload(File.uploader)).where(File.organization_id == org_id)
         count_query = select(func.count(File.id)).where(File.organization_id == org_id)
@@ -92,18 +95,32 @@ class FileService:
             count_query = count_query.where(File.file_type == file_type)
 
         if experiment_id is not None:
-            query = query.where(File.experiment_id == experiment_id)
-            count_query = count_query.where(File.experiment_id == experiment_id)
+            # File belongs to the experiment if it is directly attached OR
+            # if it is linked to a sample that belongs to the experiment.
+            sample_ids_for_exp = select(Sample.id).where(Sample.experiment_id == experiment_id)
+            files_via_samples = select(sample_files.c.file_id).where(
+                sample_files.c.sample_id.in_(sample_ids_for_exp)
+            )
+            experiment_filter = or_(
+                File.experiment_id == experiment_id,
+                File.id.in_(files_via_samples),
+            )
+            query = query.where(experiment_filter)
+            count_query = count_query.where(experiment_filter)
 
         if project_id is not None:
-            # Include files directly on the project OR files whose experiment
-            # belongs to the project (files inherit project via experiment).
-            from app.models.experiment import Experiment
-            from sqlalchemy import or_
-
+            # File belongs to the project if it is directly attached OR if it
+            # belongs to an experiment under the project OR if it is linked to
+            # a sample whose experiment belongs to the project.
+            experiments_in_project = select(Experiment.id).where(Experiment.project_id == project_id)
+            sample_ids_in_project = select(Sample.id).where(Sample.experiment_id.in_(experiments_in_project))
+            files_via_samples_in_project = select(sample_files.c.file_id).where(
+                sample_files.c.sample_id.in_(sample_ids_in_project)
+            )
             project_filter = or_(
                 File.project_id == project_id,
-                File.experiment_id.in_(select(Experiment.id).where(Experiment.project_id == project_id)),
+                File.experiment_id.in_(experiments_in_project),
+                File.id.in_(files_via_samples_in_project),
             )
             query = query.where(project_filter)
             count_query = count_query.where(project_filter)
