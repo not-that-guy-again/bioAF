@@ -8,6 +8,7 @@ from app.schemas.experiment import UserSummary
 from app.schemas.file import (
     FileListResponse,
     FileLinkRequest,
+    FileProvenance,
     FileResponse,
     FileUploadComplete,
     FileUploadInitiate,
@@ -19,7 +20,7 @@ from app.services.upload_service import UploadService
 router = APIRouter(prefix="/api/files", tags=["files"])
 
 
-def _file_response(f, sample_ids: list[int] | None = None) -> FileResponse:
+def _file_response(f, sample_ids: list[int] | None = None, provenance: dict | None = None) -> FileResponse:
     return FileResponse(
         id=f.id,
         filename=f.filename,
@@ -38,6 +39,7 @@ def _file_response(f, sample_ids: list[int] | None = None) -> FileResponse:
         storage_deleted=f.storage_deleted,
         upload_timestamp=f.upload_timestamp,
         created_at=f.created_at,
+        provenance=FileProvenance.model_validate(provenance) if provenance else None,
     )
 
 
@@ -267,8 +269,9 @@ async def list_files(
     )
     file_ids = [f.id for f in files]
     sample_ids_map = await FileService.get_sample_ids_for_files(session, file_ids)
+    provenance_map = await FileService.get_provenance_for_files(session, files)
     return FileListResponse(
-        files=[_file_response(f, sample_ids_map.get(f.id, [])) for f in files],
+        files=[_file_response(f, sample_ids_map.get(f.id, []), provenance_map.get(f.id)) for f in files],
         total=total,
         page=page,
         page_size=page_size,
@@ -288,7 +291,8 @@ async def get_file(
     if not file:
         raise HTTPException(404, "File not found")
     sample_ids_map = await FileService.get_sample_ids_for_files(session, [file_id])
-    return _file_response(file, sample_ids_map.get(file_id, []))
+    provenance_map = await FileService.get_provenance_for_files(session, [file])
+    return _file_response(file, sample_ids_map.get(file_id, []), provenance_map.get(file_id))
 
 
 @router.get("/{file_id}/download")

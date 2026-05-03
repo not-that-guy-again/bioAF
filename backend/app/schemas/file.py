@@ -19,6 +19,32 @@ class FileUploadComplete(BaseModel):
     actual_md5: str = ""
 
 
+class PipelineRunRef(BaseModel):
+    id: int
+    pipeline_name: str
+    launcher: UserSummary | None = None
+
+
+class ComputeSessionRef(BaseModel):
+    id: int
+    # "work_node" for SSH/GCE sessions; "notebook" for in-browser RStudio/Jupyter
+    kind: str
+    # For notebooks only: "rstudio" or "jupyter"; null for work nodes
+    notebook_type: str | None = None
+    launcher: UserSummary | None = None
+
+
+class FileProvenance(BaseModel):
+    project_id: int | None = None
+    project_name: str | None = None
+    experiment_id: int | None = None
+    experiment_name: str | None = None
+    sample_labels: list[str] = []
+    pipeline_run: PipelineRunRef | None = None
+    compute_session: ComputeSessionRef | None = None
+    creator: UserSummary | None = None
+
+
 class FileResponse(BaseModel):
     id: int
     filename: str
@@ -39,6 +65,7 @@ class FileResponse(BaseModel):
     storage_deleted: bool = False
     upload_timestamp: datetime
     created_at: datetime
+    provenance: FileProvenance | None = None
 
     model_config = {"from_attributes": True}
 

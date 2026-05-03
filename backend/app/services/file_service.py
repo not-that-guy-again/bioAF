@@ -162,6 +162,177 @@ class FileService:
         return result
 
     @staticmethod
+    async def get_provenance_for_files(session: AsyncSession, files: list[File]) -> dict[int, dict]:
+        """Return a mapping of file_id -> provenance dict for breadcrumb display.
+
+        Each value is a dict shaped like FileProvenance with project, experiment,
+        sample labels, pipeline run, compute session, and resolved creator.
+        Issued in batched queries so it scales with the page size, not the
+        per-file fanout.
+        """
+        if not files:
+            return {}
+
+        from app.models.experiment import Experiment
+        from app.models.notebook_session import ComputeSession
+        from app.models.pipeline_run import PipelineRun
+        from app.models.project import Project
+        from app.models.sample import Sample
+        from app.models.user import User
+
+        file_ids = [f.id for f in files]
+
+        # Sample IDs per file (via sample_files junction)
+        sample_link_rows = (
+            await session.execute(
+                text(
+                    "SELECT file_id, sample_id FROM sample_files WHERE file_id = ANY(:ids)"
+                ).bindparams(ids=file_ids)
+            )
+        ).all()
+        file_sample_ids: dict[int, list[int]] = {fid: [] for fid in file_ids}
+        all_sample_ids: set[int] = set()
+        for fid, sid in sample_link_rows:
+            file_sample_ids[fid].append(sid)
+            all_sample_ids.add(sid)
+
+        sample_rows: dict[int, Sample] = {}
+        if all_sample_ids:
+            rows = await session.execute(select(Sample).where(Sample.id.in_(all_sample_ids)))
+            sample_rows = {s.id: s for s in rows.scalars().all()}
+
+        # Walk samples upward to fill missing experiment_id on files where we can
+        explicit_experiment_ids: set[int] = {f.experiment_id for f in files if f.experiment_id is not None}
+        sample_experiment_ids: set[int] = {s.experiment_id for s in sample_rows.values() if s.experiment_id is not None}
+        all_experiment_ids = explicit_experiment_ids | sample_experiment_ids
+
+        experiment_rows: dict[int, Experiment] = {}
+        if all_experiment_ids:
+            rows = await session.execute(select(Experiment).where(Experiment.id.in_(all_experiment_ids)))
+            experiment_rows = {e.id: e for e in rows.scalars().all()}
+
+        # Project IDs come from files directly OR from experiments
+        explicit_project_ids: set[int] = {f.project_id for f in files if f.project_id is not None}
+        experiment_project_ids: set[int] = {e.project_id for e in experiment_rows.values() if e.project_id is not None}
+        all_project_ids = explicit_project_ids | experiment_project_ids
+
+        project_rows: dict[int, Project] = {}
+        if all_project_ids:
+            rows = await session.execute(select(Project).where(Project.id.in_(all_project_ids)))
+            project_rows = {p.id: p for p in rows.scalars().all()}
+
+        # Pipeline runs
+        run_ids: set[int] = {f.source_pipeline_run_id for f in files if f.source_pipeline_run_id is not None}
+        run_rows: dict[int, PipelineRun] = {}
+        if run_ids:
+            rows = await session.execute(select(PipelineRun).where(PipelineRun.id.in_(run_ids)))
+            run_rows = {r.id: r for r in rows.scalars().all()}
+
+        # Compute sessions
+        session_ids: set[int] = {
+            f.source_notebook_session_id for f in files if f.source_notebook_session_id is not None
+        }
+        session_rows: dict[int, ComputeSession] = {}
+        if session_ids:
+            rows = await session.execute(select(ComputeSession).where(ComputeSession.id.in_(session_ids)))
+            session_rows = {cs.id: cs for cs in rows.scalars().all()}
+
+        # All users we need (uploaders + run launchers + session launchers)
+        user_ids: set[int] = set()
+        for f in files:
+            if f.uploader_user_id is not None:
+                user_ids.add(f.uploader_user_id)
+        for r in run_rows.values():
+            if r.submitted_by_user_id is not None:
+                user_ids.add(r.submitted_by_user_id)
+        for cs in session_rows.values():
+            if cs.user_id is not None:
+                user_ids.add(cs.user_id)
+
+        user_rows: dict[int, User] = {}
+        if user_ids:
+            rows = await session.execute(select(User).where(User.id.in_(user_ids)))
+            user_rows = {u.id: u for u in rows.scalars().all()}
+
+        def _user_summary(user_id: int | None) -> dict | None:
+            if user_id is None or user_id not in user_rows:
+                return None
+            u = user_rows[user_id]
+            return {"id": u.id, "name": u.name, "email": u.email}
+
+        def _sample_label(sample: Sample) -> str:
+            return sample.sample_id_unique or f"Sample {sample.id}"
+
+        def _session_kind_and_type(cs: ComputeSession) -> tuple[str, str | None]:
+            if cs.session_type == "ssh":
+                return "work_node", None
+            if cs.session_type in ("rstudio", "jupyter"):
+                return "notebook", cs.session_type
+            return "notebook", cs.session_type
+
+        result: dict[int, dict] = {}
+        for f in files:
+            # Resolve experiment: explicit on file, else inferred from any linked sample
+            exp_id = f.experiment_id
+            if exp_id is None:
+                for sid in file_sample_ids.get(f.id, []):
+                    s = sample_rows.get(sid)
+                    if s and s.experiment_id is not None:
+                        exp_id = s.experiment_id
+                        break
+            exp = experiment_rows.get(exp_id) if exp_id is not None else None
+
+            # Resolve project: explicit on file, else inferred from experiment
+            proj_id = f.project_id
+            if proj_id is None and exp is not None:
+                proj_id = exp.project_id
+            proj = project_rows.get(proj_id) if proj_id is not None else None
+
+            sample_labels = [_sample_label(sample_rows[sid]) for sid in file_sample_ids.get(f.id, []) if sid in sample_rows]
+
+            pipeline_run = None
+            if f.source_pipeline_run_id and f.source_pipeline_run_id in run_rows:
+                r = run_rows[f.source_pipeline_run_id]
+                pipeline_run = {
+                    "id": r.id,
+                    "pipeline_name": r.pipeline_name,
+                    "launcher": _user_summary(r.submitted_by_user_id),
+                }
+
+            compute_session = None
+            if f.source_notebook_session_id and f.source_notebook_session_id in session_rows:
+                cs = session_rows[f.source_notebook_session_id]
+                kind, notebook_type = _session_kind_and_type(cs)
+                compute_session = {
+                    "id": cs.id,
+                    "kind": kind,
+                    "notebook_type": notebook_type,
+                    "launcher": _user_summary(cs.user_id),
+                }
+
+            # Resolved creator: launcher if pipeline/session output, else uploader
+            creator = None
+            if pipeline_run and pipeline_run["launcher"]:
+                creator = pipeline_run["launcher"]
+            elif compute_session and compute_session["launcher"]:
+                creator = compute_session["launcher"]
+            else:
+                creator = _user_summary(f.uploader_user_id)
+
+            result[f.id] = {
+                "project_id": proj.id if proj else None,
+                "project_name": proj.name if proj else None,
+                "experiment_id": exp.id if exp else None,
+                "experiment_name": exp.name if exp else None,
+                "sample_labels": sample_labels,
+                "pipeline_run": pipeline_run,
+                "compute_session": compute_session,
+                "creator": creator,
+            }
+
+        return result
+
+    @staticmethod
     async def link_file_to_sample(session: AsyncSession, file_id: int, sample_id: int) -> None:
         await session.execute(
             text(
