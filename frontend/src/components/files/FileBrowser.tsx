@@ -10,6 +10,7 @@ import { getCurrentUser } from "@/lib/auth";
 import type {
   FileResponse,
   FileListResponse,
+  FileProvenance,
   ExperimentListResponse,
   ProjectListResponse,
   SampleBrief,
@@ -278,37 +279,46 @@ export function FileBrowser({ experimentId, projectId }: Props) {
   const sourceLabel = (file: FileResponse): string => {
     switch (file.source_type) {
       case "upload":
-        return file.uploader
-          ? `Uploaded by ${file.uploader.name ?? file.uploader.email}`
-          : "Uploaded";
+        return "Upload";
       case "pipeline_output":
-        return `Nextflow${file.source_pipeline_run_id ? ` (run #${file.source_pipeline_run_id})` : ""}`;
+        return "Pipeline output";
       case "notebook_output":
-        return `RStudio${file.source_notebook_session_id ? ` (session #${file.source_notebook_session_id})` : ""}`;
+        return "Notebook output";
       case "qc_dashboard":
-        return `QC Dashboard${file.source_pipeline_run_id ? ` (run #${file.source_pipeline_run_id})` : ""}`;
+        return "QC Dashboard";
       case "plot_archive":
-        return `Plot Archive${file.source_pipeline_run_id ? ` (run #${file.source_pipeline_run_id})` : ""}`;
+        return "Plot archive";
       default:
         return file.source_type;
     }
   };
 
-  const associationLabel = (file: FileResponse) => {
-    if (file.experiment_id != null) return experimentName(file.experiment_id);
-    if (file.project_id != null) return projectName(file.project_id);
-    return null;
+  const computeSessionLabel = (cs: NonNullable<FileProvenance["compute_session"]>): string => {
+    if (cs.kind === "work_node") return "Work Node";
+    if (cs.notebook_type === "rstudio") return "RStudio Notebook";
+    if (cs.notebook_type === "jupyter") return "Jupyter Notebook";
+    return "Notebook";
   };
 
-  const associationBadge = (file: FileResponse) => {
-    if (file.experiment_id != null) return null;
-    if (file.project_id != null) return "project";
-    return null;
+  const breadcrumbSegments = (file: FileResponse): string[] => {
+    const prov = file.provenance;
+    const segments: string[] = [];
+    if (!prov) return segments;
+    if (prov.project_name) segments.push(prov.project_name);
+    if (prov.experiment_name) segments.push(prov.experiment_name);
+    if (prov.sample_labels.length > 0) segments.push(prov.sample_labels.join(", "));
+    if (prov.pipeline_run) {
+      segments.push(`${prov.pipeline_run.pipeline_name} Run #${prov.pipeline_run.id}`);
+    } else if (prov.compute_session) {
+      segments.push(computeSessionLabel(prov.compute_session));
+    }
+    return segments;
   };
 
-  const sampleLabel = (file: FileResponse) => {
-    if (!file.sample_ids || file.sample_ids.length === 0) return null;
-    return file.sample_ids.length === 1 ? `1 sample` : `${file.sample_ids.length} samples`;
+  const creatorLabel = (file: FileResponse): string | null => {
+    const u = file.provenance?.creator ?? file.uploader;
+    if (!u) return null;
+    return u.name ?? u.email;
   };
 
   const fileTypes = Array.from(new Set(files.map((f) => f.file_type))).sort();
@@ -442,13 +452,10 @@ export function FileBrowser({ experimentId, projectId }: Props) {
                   Uploaded
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Uploader
+                  Creator
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Source
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Association
                 </th>
                 {canDownload && (
                   <th className="px-4 py-3 w-10">
@@ -471,21 +478,41 @@ export function FileBrowser({ experimentId, projectId }: Props) {
                       onChange={() => toggleSelect(file.id)}
                     />
                   </td>
-                  <td className="px-4 py-3 text-sm font-medium flex items-center gap-1.5">
-                    {file.storage_deleted && (
-                      <span title="Storage deleted" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-600 flex-shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
+                  <td className="px-4 py-3 text-sm font-medium align-top">
+                    <div className="flex items-center gap-1.5">
+                      {file.storage_deleted && (
+                        <span title="Storage deleted" className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-red-100 text-red-600 flex-shrink-0">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </span>
+                      )}
+                      <span className={file.storage_deleted ? "text-gray-400" : "text-blue-600"}>
+                        {file.filename}
                       </span>
+                    </div>
+                    {breadcrumbSegments(file).length > 0 ? (
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {breadcrumbSegments(file).join(" › ")}
+                      </div>
+                    ) : (
+                      <div
+                        className="text-xs mt-0.5 flex items-center gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-amber-600 font-medium">Unlinked</span>
+                        <button
+                          onClick={() => openLinkModal([file.id])}
+                          className="text-blue-600 hover:underline"
+                        >
+                          Associate
+                        </button>
+                      </div>
                     )}
-                    <span className={file.storage_deleted ? "text-gray-400" : "text-blue-600"}>
-                      {file.filename}
-                    </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{file.file_type}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{formatBytes(file.size_bytes)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
+                  <td className="px-4 py-3 text-sm text-gray-500 align-top">{file.file_type}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 align-top">{formatBytes(file.size_bytes)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500 align-top">
                     {new Date(file.upload_timestamp).toLocaleString(undefined, {
                       month: "short",
                       day: "numeric",
@@ -494,40 +521,11 @@ export function FileBrowser({ experimentId, projectId }: Props) {
                       minute: "2-digit",
                     })}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {file.uploader?.name ?? file.uploader?.email ?? "-"}
+                  <td className="px-4 py-3 text-sm text-gray-500 align-top">
+                    {creatorLabel(file) ?? "-"}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
+                  <td className="px-4 py-3 text-sm text-gray-500 align-top">
                     {sourceLabel(file)}
-                  </td>
-                  <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
-                    {associationLabel(file) ? (
-                      <span className="text-gray-700 flex flex-col gap-0.5">
-                        <span className="flex items-center gap-1.5">
-                          {associationBadge(file) === "project" && (
-                            <span className="text-xs text-purple-600 font-medium bg-purple-50 px-1.5 py-0.5 rounded">
-                              Project
-                            </span>
-                          )}
-                          {associationLabel(file)}
-                        </span>
-                        {sampleLabel(file) && (
-                          <span className="text-xs text-teal-700 font-medium bg-teal-50 px-1.5 py-0.5 rounded w-fit">
-                            {sampleLabel(file)}
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2">
-                        <span className="text-amber-600 text-xs font-medium">Unlinked</span>
-                        <button
-                          onClick={() => openLinkModal([file.id])}
-                          className="text-blue-600 text-xs hover:underline"
-                        >
-                          Associate
-                        </button>
-                      </span>
-                    )}
                   </td>
                   {canDownload && (
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

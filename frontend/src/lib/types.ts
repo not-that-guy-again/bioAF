@@ -913,6 +913,32 @@ export interface CustomPipelineVersionCreateRequest {
 
 // Phase 5 — Data Management + Visualization
 
+export interface PipelineRunRef {
+  id: number;
+  pipeline_name: string;
+  launcher: UserSummary | null;
+}
+
+export interface ComputeSessionRef {
+  id: number;
+  // "work_node" for SSH/GCE sessions; "notebook" for in-browser sessions
+  kind: "work_node" | "notebook" | string;
+  // For notebooks only: "rstudio" or "jupyter"; null for work nodes
+  notebook_type: "rstudio" | "jupyter" | string | null;
+  launcher: UserSummary | null;
+}
+
+export interface FileProvenance {
+  project_id: number | null;
+  project_name: string | null;
+  experiment_id: number | null;
+  experiment_name: string | null;
+  sample_labels: string[];
+  pipeline_run: PipelineRunRef | null;
+  compute_session: ComputeSessionRef | null;
+  creator: UserSummary | null;
+}
+
 export interface FileResponse {
   id: number;
   filename: string;
@@ -931,6 +957,7 @@ export interface FileResponse {
   storage_deleted: boolean;
   upload_timestamp: string;
   created_at: string;
+  provenance?: FileProvenance | null;
 }
 
 export interface FileListResponse {
