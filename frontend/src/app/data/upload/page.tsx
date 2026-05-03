@@ -145,16 +145,7 @@ export default function DataUploadPage() {
   }, [projectId, experimentId, sampleId, projects, experiments, samples]);
 
   const addFiles = (incoming: File[]) => {
-    const accepted = incoming.filter(
-      (f) =>
-        f.name.endsWith(".fastq") ||
-        f.name.endsWith(".fastq.gz") ||
-        f.name.endsWith(".fq") ||
-        f.name.endsWith(".fq.gz") ||
-        f.name.endsWith(".h5ad") ||
-        f.name.endsWith(".csv") ||
-        f.name.endsWith(".tsv"),
-    );
+    const accepted = incoming;
 
     const proj = projects.find((p) => String(p.id) === projectId);
     const exp = experiments.find((e) => String(e.id) === experimentId);
@@ -290,14 +281,13 @@ export default function DataUploadPage() {
               className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center cursor-pointer hover:border-blue-400 transition-colors"
             >
               <p className="text-gray-500 mb-2">
-                Drag & drop FASTQ, h5ad, CSV, or TSV files here
+                Drag & drop any files here
               </p>
               <p className="text-sm text-gray-400">or click to browse</p>
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept=".fastq,.fastq.gz,.fq,.fq.gz,.gz,.h5ad,.csv,.tsv"
                 onChange={handleFileSelect}
                 className="hidden"
               />
