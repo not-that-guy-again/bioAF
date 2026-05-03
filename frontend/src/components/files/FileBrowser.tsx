@@ -495,6 +495,12 @@ export function FileBrowser({ experimentId, projectId }: Props) {
                       <div className="text-xs text-gray-500 mt-0.5">
                         {breadcrumbSegments(file).join(" › ")}
                       </div>
+                    ) : file.is_global ? (
+                      <div className="text-xs mt-0.5">
+                        <span className="text-purple-700 font-medium bg-purple-50 px-1.5 py-0.5 rounded">
+                          Global
+                        </span>
+                      </div>
                     ) : (
                       <div
                         className="text-xs mt-0.5 flex items-center gap-2"

@@ -12,6 +12,7 @@ class FileUploadInitiate(BaseModel):
     project_id: int | None = None
     experiment_id: int | None = None
     sample_ids: list[int] = []
+    is_global: bool = False
 
 
 class FileUploadComplete(BaseModel):
@@ -63,6 +64,7 @@ class FileResponse(BaseModel):
     sha256_checksum: str | None = None
     artifact_type: str | None = None
     storage_deleted: bool = False
+    is_global: bool = False
     upload_timestamp: datetime
     created_at: datetime
     provenance: FileProvenance | None = None

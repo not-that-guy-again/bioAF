@@ -28,6 +28,7 @@ class FileService:
         source_type: str = "upload",
         source_pipeline_run_id: int | None = None,
         artifact_type: str | None = None,
+        is_global: bool = False,
     ) -> File:
         file = File(
             organization_id=org_id,
@@ -43,6 +44,7 @@ class FileService:
             source_type=source_type,
             source_pipeline_run_id=source_pipeline_run_id,
             artifact_type=artifact_type,
+            is_global=is_global,
         )
         session.add(file)
         await session.flush()
@@ -98,9 +100,7 @@ class FileService:
             # File belongs to the experiment if it is directly attached OR
             # if it is linked to a sample that belongs to the experiment.
             sample_ids_for_exp = select(Sample.id).where(Sample.experiment_id == experiment_id)
-            files_via_samples = select(sample_files.c.file_id).where(
-                sample_files.c.sample_id.in_(sample_ids_for_exp)
-            )
+            files_via_samples = select(sample_files.c.file_id).where(sample_files.c.sample_id.in_(sample_ids_for_exp))
             experiment_filter = or_(
                 File.experiment_id == experiment_id,
                 File.id.in_(files_via_samples),
@@ -185,9 +185,7 @@ class FileService:
         # Sample IDs per file (via sample_files junction)
         sample_link_rows = (
             await session.execute(
-                text(
-                    "SELECT file_id, sample_id FROM sample_files WHERE file_id = ANY(:ids)"
-                ).bindparams(ids=file_ids)
+                text("SELECT file_id, sample_id FROM sample_files WHERE file_id = ANY(:ids)").bindparams(ids=file_ids)
             )
         ).all()
         file_sample_ids: dict[int, list[int]] = {fid: [] for fid in file_ids}
@@ -198,8 +196,8 @@ class FileService:
 
         sample_rows: dict[int, Sample] = {}
         if all_sample_ids:
-            rows = await session.execute(select(Sample).where(Sample.id.in_(all_sample_ids)))
-            sample_rows = {s.id: s for s in rows.scalars().all()}
+            sample_result = await session.execute(select(Sample).where(Sample.id.in_(all_sample_ids)))
+            sample_rows = {s.id: s for s in sample_result.scalars().all()}
 
         # Walk samples upward to fill missing experiment_id on files where we can
         explicit_experiment_ids: set[int] = {f.experiment_id for f in files if f.experiment_id is not None}
@@ -208,8 +206,8 @@ class FileService:
 
         experiment_rows: dict[int, Experiment] = {}
         if all_experiment_ids:
-            rows = await session.execute(select(Experiment).where(Experiment.id.in_(all_experiment_ids)))
-            experiment_rows = {e.id: e for e in rows.scalars().all()}
+            exp_result = await session.execute(select(Experiment).where(Experiment.id.in_(all_experiment_ids)))
+            experiment_rows = {e.id: e for e in exp_result.scalars().all()}
 
         # Project IDs come from files directly OR from experiments
         explicit_project_ids: set[int] = {f.project_id for f in files if f.project_id is not None}
@@ -218,15 +216,15 @@ class FileService:
 
         project_rows: dict[int, Project] = {}
         if all_project_ids:
-            rows = await session.execute(select(Project).where(Project.id.in_(all_project_ids)))
-            project_rows = {p.id: p for p in rows.scalars().all()}
+            project_result = await session.execute(select(Project).where(Project.id.in_(all_project_ids)))
+            project_rows = {p.id: p for p in project_result.scalars().all()}
 
         # Pipeline runs
         run_ids: set[int] = {f.source_pipeline_run_id for f in files if f.source_pipeline_run_id is not None}
         run_rows: dict[int, PipelineRun] = {}
         if run_ids:
-            rows = await session.execute(select(PipelineRun).where(PipelineRun.id.in_(run_ids)))
-            run_rows = {r.id: r for r in rows.scalars().all()}
+            run_result = await session.execute(select(PipelineRun).where(PipelineRun.id.in_(run_ids)))
+            run_rows = {r.id: r for r in run_result.scalars().all()}
 
         # Compute sessions
         session_ids: set[int] = {
@@ -234,8 +232,8 @@ class FileService:
         }
         session_rows: dict[int, ComputeSession] = {}
         if session_ids:
-            rows = await session.execute(select(ComputeSession).where(ComputeSession.id.in_(session_ids)))
-            session_rows = {cs.id: cs for cs in rows.scalars().all()}
+            cs_result = await session.execute(select(ComputeSession).where(ComputeSession.id.in_(session_ids)))
+            session_rows = {cs.id: cs for cs in cs_result.scalars().all()}
 
         # All users we need (uploaders + run launchers + session launchers)
         user_ids: set[int] = set()
@@ -251,8 +249,8 @@ class FileService:
 
         user_rows: dict[int, User] = {}
         if user_ids:
-            rows = await session.execute(select(User).where(User.id.in_(user_ids)))
-            user_rows = {u.id: u for u in rows.scalars().all()}
+            user_result = await session.execute(select(User).where(User.id.in_(user_ids)))
+            user_rows = {u.id: u for u in user_result.scalars().all()}
 
         def _user_summary(user_id: int | None) -> dict | None:
             if user_id is None or user_id not in user_rows:
@@ -288,7 +286,9 @@ class FileService:
                 proj_id = exp.project_id
             proj = project_rows.get(proj_id) if proj_id is not None else None
 
-            sample_labels = [_sample_label(sample_rows[sid]) for sid in file_sample_ids.get(f.id, []) if sid in sample_rows]
+            sample_labels = [
+                _sample_label(sample_rows[sid]) for sid in file_sample_ids.get(f.id, []) if sid in sample_rows
+            ]
 
             pipeline_run = None
             if f.source_pipeline_run_id and f.source_pipeline_run_id in run_rows:

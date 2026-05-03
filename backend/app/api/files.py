@@ -37,6 +37,7 @@ def _file_response(f, sample_ids: list[int] | None = None, provenance: dict | No
         source_pipeline_run_id=f.source_pipeline_run_id,
         source_notebook_session_id=f.source_notebook_session_id,
         storage_deleted=f.storage_deleted,
+        is_global=f.is_global,
         upload_timestamp=f.upload_timestamp,
         created_at=f.created_at,
         provenance=FileProvenance.model_validate(provenance) if provenance else None,
@@ -63,6 +64,7 @@ async def initiate_upload(
             project_id=body.project_id,
             experiment_id=body.experiment_id,
             sample_ids=body.sample_ids,
+            is_global=body.is_global,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

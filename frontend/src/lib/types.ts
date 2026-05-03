@@ -955,6 +955,7 @@ export interface FileResponse {
   source_pipeline_run_id: number | null;
   source_notebook_session_id: number | null;
   storage_deleted: boolean;
+  is_global?: boolean;
   upload_timestamp: string;
   created_at: string;
   provenance?: FileProvenance | null;

@@ -13,7 +13,6 @@ files at lower levels:
 """
 
 import pytest
-from sqlalchemy import text
 
 from app.services.file_service import FileService
 
