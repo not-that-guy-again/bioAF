@@ -1503,6 +1503,35 @@ export interface ImpactSummary {
   pipeline_runs: ImpactPipelineRun[];
 }
 
+export interface ReferenceUploadFileSpec {
+  filename: string;
+  size_bytes: number;
+  content_type?: string;
+  md5_checksum?: string;
+}
+
+export interface ReferenceUploadInitRequest {
+  name: string;
+  category: string;
+  scope: string;
+  version: string;
+  source_url?: string;
+  description?: string;
+  files: ReferenceUploadFileSpec[];
+}
+
+export interface ReferenceUploadSlot {
+  filename: string;
+  session_url: string;
+  expires_at: string;
+}
+
+export interface ReferenceUploadInitResponse {
+  reference_id: number;
+  gcs_prefix: string;
+  uploads: ReferenceUploadSlot[];
+}
+
 export interface GeoValidationField {
   geo_column: string;
   status: "complete" | "populated_unvalidated" | "missing_required" | "missing_recommended";

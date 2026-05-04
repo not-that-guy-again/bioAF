@@ -21,10 +21,7 @@ function formatBytes(bytes: number | null): string {
 export default function DataReferencesPage() {
   const router = useRouter();
   const user = getCurrentUser();
-  // Add Reference upload UI is in flight (spec-reference-data-ingest §9 step 3).
-  // Until the /data/references/new route exists, keep the affordance hidden so
-  // we don't dead-end users on a 404.
-  const canAdd = false && (user?.role_name === "admin" || user?.role_name === "comp_bio");
+  const canAdd = user?.role_name === "admin" || user?.role_name === "comp_bio";
 
   const [references, setReferences] = useState<ReferenceDataset[]>([]);
   const [total, setTotal] = useState(0);
@@ -76,7 +73,7 @@ export default function DataReferencesPage() {
             <h1 className="text-2xl font-bold">Reference Data</h1>
             {canAdd && (
               <button
-                onClick={() => router.push("/references/new")}
+                onClick={() => router.push("/data/references/new")}
                 className="bg-bioaf-600 text-white px-4 py-2 rounded-md hover:bg-bioaf-700 transition-colors"
               >
                 Add Reference
@@ -146,7 +143,7 @@ export default function DataReferencesPage() {
               </p>
               {canAdd && (
                 <button
-                  onClick={() => router.push("/references/new")}
+                  onClick={() => router.push("/data/references/new")}
                   className="bg-bioaf-600 text-white px-4 py-2 rounded-md hover:bg-bioaf-700"
                 >
                   Add Reference
