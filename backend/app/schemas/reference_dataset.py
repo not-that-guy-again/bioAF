@@ -47,6 +47,52 @@ class ReferenceDeprecateRequest(BaseModel):
     superseded_by_id: int | None = None
 
 
+# --- Upload (resumable session) schemas ---
+
+
+class ReferenceUploadFileSpec(BaseModel):
+    filename: str
+    size_bytes: int
+    content_type: str | None = None
+    md5_checksum: str | None = None  # advanced path: client-supplied md5 for verify
+
+
+class ReferenceUploadInitRequest(BaseModel):
+    name: str
+    category: str
+    scope: str
+    version: str
+    source_url: str | None = None
+    description: str | None = None
+    files: list[ReferenceUploadFileSpec]
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in REFERENCE_CATEGORIES:
+            raise ValueError(f"category must be one of: {', '.join(REFERENCE_CATEGORIES)}")
+        return v
+
+    @field_validator("scope")
+    @classmethod
+    def validate_scope(cls, v: str) -> str:
+        if v not in REFERENCE_SCOPES:
+            raise ValueError(f"scope must be one of: {', '.join(REFERENCE_SCOPES)}")
+        return v
+
+
+class ReferenceUploadSlot(BaseModel):
+    filename: str
+    session_url: str
+    expires_at: datetime
+
+
+class ReferenceUploadInitResponse(BaseModel):
+    reference_id: int
+    gcs_prefix: str
+    uploads: list[ReferenceUploadSlot]
+
+
 # --- Response schemas ---
 
 

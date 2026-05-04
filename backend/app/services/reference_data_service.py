@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+import re
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,12 +22,23 @@ from app.schemas.reference_dataset import (
     ImpactSummary,
     ReferenceDatasetCreate,
     ReferenceDeprecateRequest,
+    ReferenceUploadInitRequest,
 )
 from app.services.audit_service import log_action
 from app.services.event_bus import event_bus
 from app.services.event_types import REFERENCE_DEPRECATED
 
 logger = logging.getLogger("bioaf.reference_data")
+
+# GCS resumable upload sessions are valid for ~7 days; report a conservative
+# 6-day expiry so the UI prompts to re-init before the actual server cutoff.
+RESUMABLE_SESSION_TTL = timedelta(days=6)
+
+
+def _slugify(value: str) -> str:
+    """Lowercase, replace runs of non-alphanumeric with `-`, strip ends."""
+    out = re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
+    return out or "ref"
 
 
 class ReferenceDataService:
@@ -391,3 +404,130 @@ class ReferenceDataService:
                     reference_dataset_id=ref_id,
                 )
             )
+
+    # --- Upload (resumable session) flow — spec §2 -----------------------------
+
+    @staticmethod
+    async def _get_references_bucket(session: AsyncSession) -> str:
+        result = await session.execute(text("SELECT value FROM platform_config WHERE key = 'references_bucket_name'"))
+        name = result.scalar_one_or_none()
+        if not name or name == "null":
+            raise ValueError("References bucket not configured. Deploy storage infrastructure first.")
+        return name
+
+    @staticmethod
+    def _create_resumable_session(
+        bucket_name: str,
+        blob_path: str,
+        content_type: str,
+        size_bytes: int,
+        origin: str | None = None,
+        credentials=None,
+    ) -> str:
+        """Create a GCS resumable upload session and return its session URL.
+
+        Tests monkey-patch this to avoid real GCS calls; production calls
+        Google Cloud Storage via the SDK.
+        """
+        from google.cloud import storage as gcs_storage
+
+        client = gcs_storage.Client(credentials=credentials)
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        return blob.create_resumable_upload_session(
+            content_type=content_type,
+            size=size_bytes,
+            origin=origin,
+        )
+
+    @staticmethod
+    async def init_upload(
+        session: AsyncSession,
+        org_id: int,
+        user_id: int,
+        request: ReferenceUploadInitRequest,
+        *,
+        request_origin: str | None = None,
+    ) -> tuple[ReferenceDataset, list[dict]]:
+        """Initiate a multi-file resumable upload to the references bucket.
+
+        Creates the ReferenceDataset row in status='uploading' and returns
+        per-file resumable session URLs the browser can PUT chunks against.
+        See spec §2 for the state machine.
+        """
+        if not request.files:
+            raise ValueError("init_upload requires at least one file in `files`")
+
+        # Up-front uniqueness check so we don't create a GCS session before failing
+        existing = await session.execute(
+            select(ReferenceDataset.id).where(
+                ReferenceDataset.organization_id == org_id,
+                ReferenceDataset.name == request.name,
+                ReferenceDataset.version == request.version,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise ValueError(f"Reference '{request.name}' version '{request.version}' already exists")
+
+        bucket_name = await ReferenceDataService._get_references_bucket(session)
+
+        # GCS prefix: {category}/{slug-name}/{slug-version}/
+        gcs_prefix = f"{request.category}/{_slugify(request.name)}/{_slugify(request.version)}/"
+
+        dataset = ReferenceDataset(
+            organization_id=org_id,
+            name=request.name,
+            category=request.category,
+            scope=request.scope,
+            version=request.version,
+            source_url=request.source_url,
+            gcs_prefix=gcs_prefix,
+            file_count=len(request.files),
+            uploaded_by_user_id=user_id,
+            status="uploading",
+        )
+        session.add(dataset)
+        await session.flush()
+
+        from app.services.upload_service import UploadService
+
+        credentials = await UploadService._get_gcs_credentials(session)
+
+        uploads: list[dict] = []
+        expires_at = datetime.now(timezone.utc) + RESUMABLE_SESSION_TTL
+        for spec in request.files:
+            blob_path = f"{gcs_prefix}{spec.filename}"
+            session_url = ReferenceDataService._create_resumable_session(
+                bucket_name=bucket_name,
+                blob_path=blob_path,
+                content_type=spec.content_type or "application/octet-stream",
+                size_bytes=spec.size_bytes,
+                origin=request_origin,
+                credentials=credentials,
+            )
+            uploads.append(
+                {
+                    "filename": spec.filename,
+                    "session_url": session_url,
+                    "expires_at": expires_at,
+                }
+            )
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="reference_dataset",
+            entity_id=dataset.id,
+            action="upload_initiated",
+            details={
+                "name": request.name,
+                "version": request.version,
+                "category": request.category,
+                "scope": request.scope,
+                "file_count": len(request.files),
+                "bucket": bucket_name,
+                "gcs_prefix": gcs_prefix,
+            },
+        )
+
+        return dataset, uploads
