@@ -11,6 +11,8 @@ from app.models.qc_dashboard import QCDashboard
 from app.services.audit_service import log_action
 from app.services.file_service import FileService
 from app.services.gcs_storage import GcsStorageService
+from app.services.qc.resolver import resolve_template_for_run
+from app.services.qc.templates import get_template
 
 logger = logging.getLogger("bioaf.qc_dashboard_service")
 
@@ -43,11 +45,15 @@ class QCDashboardService:
         await session.flush()
 
         try:
+            # Resolve which QC template applies + render config snapshot
+            template_name, render_config = await resolve_template_for_run(session, run)
+            template = get_template(template_name)
+
             # Extract metrics from pipeline outputs (reads from GCS)
             metrics = await QCDashboardService._extract_metrics(session, run, skip_cache=skip_cache)
 
-            # Compute quality rating
-            quality = QCDashboardService._compute_quality_rating(metrics)
+            # Compute quality rating via the template
+            quality = template.compute_quality(metrics)
             metrics["quality_rating"] = quality
 
             # Generate summary text
@@ -59,6 +65,7 @@ class QCDashboardService:
             dashboard.metrics_json = metrics
             dashboard.summary_text = summary
             dashboard.plots_json = plots_meta
+            dashboard.qc_config_json = render_config
             dashboard.status = "ready"
             dashboard.generated_at = datetime.now(timezone.utc)
 
