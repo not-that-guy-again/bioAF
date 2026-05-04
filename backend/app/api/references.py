@@ -1,6 +1,6 @@
 """Reference data management API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission
@@ -12,6 +12,9 @@ from app.schemas.reference_dataset import (
     ReferenceDatasetListResponse,
     ReferenceDatasetResponse,
     ReferenceDeprecateRequest,
+    ReferenceUploadInitRequest,
+    ReferenceUploadInitResponse,
+    ReferenceUploadSlot,
 )
 from app.services.reference_data_service import ReferenceDataService
 
@@ -69,6 +72,43 @@ async def get_reference(
     if not dataset:
         raise HTTPException(404, "Reference dataset not found")
     return _detail_response(dataset)
+
+
+@router.post("/upload-init", response_model=ReferenceUploadInitResponse)
+async def init_upload(
+    payload: ReferenceUploadInitRequest,
+    request: Request,
+    current_user: dict = require_permission("references", "upload"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Initiate a resumable upload session for a new reference dataset.
+
+    Returns one GCS resumable session URL per declared file. The browser then
+    PUTs chunks against those URLs directly.
+    """
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+    origin = request.headers.get("origin")
+
+    try:
+        dataset, uploads = await ReferenceDataService.init_upload(
+            session, org_id, user_id, payload, request_origin=origin
+        )
+        await session.commit()
+    except ValueError as e:
+        await session.rollback()
+        msg = str(e)
+        if "already exists" in msg:
+            raise HTTPException(409, msg)
+        if "not configured" in msg:
+            raise HTTPException(503, msg)
+        raise HTTPException(400, msg)
+
+    return ReferenceUploadInitResponse(
+        reference_id=dataset.id,
+        gcs_prefix=dataset.gcs_prefix,
+        uploads=[ReferenceUploadSlot(**u) for u in uploads],
+    )
 
 
 @router.post("", response_model=ReferenceDatasetDetailResponse, status_code=201)
