@@ -1532,6 +1532,36 @@ export interface ReferenceUploadInitResponse {
   uploads: ReferenceUploadSlot[];
 }
 
+export interface ReferenceImportRequest {
+  name: string;
+  category: string;
+  scope: string;
+  version: string;
+  source_url: string;
+  source_md5_url?: string;
+  auth_header?: string;
+  extract: "none" | "gzip" | "tar" | "tar.gz";
+  expected_files?: string[];
+  description?: string;
+}
+
+export interface ReferenceImportStartResponse {
+  reference_id: number;
+  import_job_id: string;
+  status: string;
+}
+
+export interface ReferenceImportStatusResponse {
+  reference_id: number;
+  status: string;
+  progress_pct: number | null;
+  bytes_downloaded: number | null;
+  total_bytes: number | null;
+  error_message: string | null;
+  import_job_id: string | null;
+  updated_at: string | null;
+}
+
 export interface GeoValidationField {
   geo_column: string;
   status: "complete" | "populated_unvalidated" | "missing_required" | "missing_recommended";

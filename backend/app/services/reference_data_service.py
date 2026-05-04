@@ -85,6 +85,32 @@ class ReferenceDataService:
         return list(result.scalars().all()), total
 
     @staticmethod
+    async def list_versions_by_name(
+        session: AsyncSession,
+        org_id: int,
+        *,
+        name: str,
+        category: str,
+    ) -> tuple[list[ReferenceDataset], int]:
+        """Return every version of a (name, category) within an org, newest first.
+
+        Spec §4 versioning UX — drives the version-history view on the
+        reference detail page in a single round-trip.
+        """
+        query = (
+            select(ReferenceDataset)
+            .where(
+                ReferenceDataset.organization_id == org_id,
+                ReferenceDataset.name == name,
+                ReferenceDataset.category == category,
+            )
+            .order_by(ReferenceDataset.created_at.desc())
+        )
+        result = await session.execute(query)
+        rows = list(result.scalars().all())
+        return rows, len(rows)
+
+    @staticmethod
     async def get_reference(
         session: AsyncSession,
         reference_id: int,

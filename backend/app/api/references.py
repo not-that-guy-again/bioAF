@@ -63,6 +63,24 @@ async def list_references(
     )
 
 
+@router.get("/by-name", response_model=ReferenceDatasetListResponse)
+async def list_versions_by_name(
+    name: str,
+    category: str,
+    current_user: dict = require_permission("pipelines", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Return every version for a (name, category) tuple, newest first."""
+    org_id = int(current_user["org_id"])
+    refs, total = await ReferenceDataService.list_versions_by_name(
+        session, org_id, name=name, category=category
+    )
+    return ReferenceDatasetListResponse(
+        references=[_response(r) for r in refs],
+        total=total,
+    )
+
+
 @router.get("/{reference_id}", response_model=ReferenceDatasetDetailResponse)
 async def get_reference(
     reference_id: int,
