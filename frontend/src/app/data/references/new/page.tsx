@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
@@ -30,6 +30,16 @@ function formatBytes(bytes: number): string {
 }
 
 export default function NewReferencePage() {
+  // useSearchParams forces client-side rendering and must be wrapped in a
+  // Suspense boundary for Next.js's prerender pass to skip this page cleanly.
+  return (
+    <Suspense fallback={null}>
+      <NewReferenceForm />
+    </Suspense>
+  );
+}
+
+function NewReferenceForm() {
   const router = useRouter();
   const search = useSearchParams();
   // When invoked as 'Upload new version' from a reference detail page, the
