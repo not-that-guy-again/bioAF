@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { api } from "@/lib/api";
@@ -31,10 +31,17 @@ function formatBytes(bytes: number): string {
 
 export default function NewReferencePage() {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const search = useSearchParams();
+  // When invoked as 'Upload new version' from a reference detail page, the
+  // caller passes name/category/scope so we lock those fields and the user
+  // only fills in version + files.
+  const lockedName = search?.get("name") ?? "";
+  const lockedCategory = search?.get("category") ?? "";
+  const lockedScope = search?.get("scope") ?? "";
+  const [name, setName] = useState(lockedName);
   const [version, setVersion] = useState("");
-  const [category, setCategory] = useState("genome");
-  const [scope, setScope] = useState("internal");
+  const [category, setCategory] = useState(lockedCategory || "genome");
+  const [scope, setScope] = useState(lockedScope || "internal");
   const [sourceUrl, setSourceUrl] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -143,7 +150,8 @@ export default function NewReferencePage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  readOnly={Boolean(lockedName)}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm read-only:bg-gray-50 read-only:text-gray-600"
                   required
                 />
               </label>
@@ -162,7 +170,8 @@ export default function NewReferencePage() {
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  disabled={Boolean(lockedCategory)}
+                  className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-600"
                   required
                 >
                   {CATEGORIES.map((c) => (

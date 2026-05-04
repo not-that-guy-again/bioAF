@@ -3,6 +3,7 @@ import NewReferencePage from "./page";
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock("@/components/layout/Sidebar", () => ({
