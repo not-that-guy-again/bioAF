@@ -21,7 +21,10 @@ function formatBytes(bytes: number | null): string {
 export default function DataReferencesPage() {
   const router = useRouter();
   const user = getCurrentUser();
-  const canAdd = user?.role_name === "admin" || user?.role_name === "comp_bio";
+  // Add Reference upload UI is in flight (spec-reference-data-ingest §9 step 3).
+  // Until the /data/references/new route exists, keep the affordance hidden so
+  // we don't dead-end users on a 404.
+  const canAdd = false && (user?.role_name === "admin" || user?.role_name === "comp_bio");
 
   const [references, setReferences] = useState<ReferenceDataset[]>([]);
   const [total, setTotal] = useState(0);
