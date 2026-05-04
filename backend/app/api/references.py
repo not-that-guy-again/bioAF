@@ -1,6 +1,6 @@
 """Reference data management API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_permission
@@ -109,6 +109,55 @@ async def init_upload(
         gcs_prefix=dataset.gcs_prefix,
         uploads=[ReferenceUploadSlot(**u) for u in uploads],
     )
+
+
+@router.post("/{reference_id}/upload-complete", response_model=ReferenceDatasetDetailResponse)
+async def upload_complete(
+    reference_id: int,
+    current_user: dict = require_permission("references", "upload"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Finalize a resumable upload — list GCS, verify files, persist md5+size."""
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+
+    try:
+        await ReferenceDataService.upload_complete(session, reference_id, org_id, user_id)
+        await session.commit()
+    except ValueError as e:
+        await session.rollback()
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg)
+        if "not configured" in msg.lower():
+            raise HTTPException(503, msg)
+        raise HTTPException(400, msg)
+
+    dataset = await ReferenceDataService.get_reference(session, reference_id, org_id)
+    return _detail_response(dataset)
+
+
+@router.post("/{reference_id}/abort", status_code=204)
+async def abort_upload(
+    reference_id: int,
+    current_user: dict = require_permission("references", "upload"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Abort an in-flight upload: purge GCS objects and delete the row. Idempotent."""
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+
+    try:
+        await ReferenceDataService.abort_upload(session, reference_id, org_id, user_id)
+        await session.commit()
+    except ValueError as e:
+        await session.rollback()
+        msg = str(e)
+        if "not configured" in msg.lower():
+            raise HTTPException(503, msg)
+        raise HTTPException(400, msg)
+
+    return Response(status_code=204)
 
 
 @router.post("", response_model=ReferenceDatasetDetailResponse, status_code=201)
