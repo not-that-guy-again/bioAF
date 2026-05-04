@@ -72,9 +72,7 @@ async def list_versions_by_name(
 ):
     """Return every version for a (name, category) tuple, newest first."""
     org_id = int(current_user["org_id"])
-    refs, total = await ReferenceDataService.list_versions_by_name(
-        session, org_id, name=name, category=category
-    )
+    refs, total = await ReferenceDataService.list_versions_by_name(session, org_id, name=name, category=category)
     return ReferenceDatasetListResponse(
         references=[_response(r) for r in refs],
         total=total,
