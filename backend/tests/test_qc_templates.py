@@ -5,6 +5,7 @@ extractor, quality-rating logic, and render config. The dashboard service
 dispatches by `qc_template` string -> Template instance.
 """
 
+
 def test_templates_registry_has_scrnaseq_bulk_rnaseq_custom():
     from app.services.qc.templates import TEMPLATES
 
