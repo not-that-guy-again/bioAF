@@ -31,9 +31,20 @@ function isImageFile(ft: string) {
 interface Props {
   experimentId?: number;
   projectId?: number;
+  showSearch?: boolean;
+  showProjectFilter?: boolean;
+  showExperimentFilter?: boolean;
+  showReconcile?: boolean;
 }
 
-export function FileBrowser({ experimentId, projectId }: Props) {
+export function FileBrowser({
+  experimentId,
+  projectId,
+  showSearch = false,
+  showProjectFilter = false,
+  showExperimentFilter = false,
+  showReconcile = false,
+}: Props) {
   const [files, setFiles] = useState<FileResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<{ id: number; name: string }[]>([]);
@@ -41,6 +52,12 @@ export function FileBrowser({ experimentId, projectId }: Props) {
   const [filterType, setFilterType] = useState("");
   const [filterSource, setFilterSource] = useState("");
   const [filterSampleId, setFilterSampleId] = useState("");
+  const [filterProjectId, setFilterProjectId] = useState("");
+  const [filterExperimentId, setFilterExperimentId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<{ reconciled: number; failed: number } | null>(null);
   const [samples, setSamples] = useState<{ id: number; label: string }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [viewingFile, setViewingFile] = useState<FileResponse | null>(null);
@@ -73,8 +90,11 @@ export function FileBrowser({ experimentId, projectId }: Props) {
       if (filterType) params.set("file_type", filterType);
       if (filterSource) params.set("source_type", filterSource);
       if (filterSampleId) params.set("sample_id", filterSampleId);
-      if (experimentId != null) params.set("experiment_id", String(experimentId));
-      if (projectId != null) params.set("project_id", String(projectId));
+      const effectiveExperimentId = experimentId != null ? String(experimentId) : filterExperimentId;
+      const effectiveProjectId = projectId != null ? String(projectId) : filterProjectId;
+      if (effectiveExperimentId) params.set("experiment_id", effectiveExperimentId);
+      if (effectiveProjectId) params.set("project_id", effectiveProjectId);
+      if (searchQuery) params.set("search", searchQuery);
       params.set("page", String(page));
       params.set("page_size", String(pageSize));
       const data = await api.get<FileListResponse>(`/api/files?${params.toString()}`);
@@ -86,7 +106,17 @@ export function FileBrowser({ experimentId, projectId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [experimentId, projectId, filterType, filterSource, filterSampleId, page]);
+  }, [
+    experimentId,
+    projectId,
+    filterType,
+    filterSource,
+    filterSampleId,
+    filterProjectId,
+    filterExperimentId,
+    searchQuery,
+    page,
+  ]);
 
   const fetchMeta = useCallback(async () => {
     try {
@@ -238,6 +268,22 @@ export function FileBrowser({ experimentId, projectId }: Props) {
     }
   };
 
+  const stuckCount = files.filter((f) => f.experiment_id != null && f.gcs_uri.includes("/uploads/")).length;
+
+  const handleReconcile = async () => {
+    setReconciling(true);
+    setReconcileResult(null);
+    try {
+      const result = await api.post<{ reconciled: number; failed: number; skipped: number }>("/api/files/reconcile");
+      setReconcileResult({ reconciled: result.reconciled, failed: result.failed });
+      fetchFiles();
+    } catch {
+      setReconcileResult({ reconciled: 0, failed: -1 });
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   const handleDownloadSelected = async () => {
     if (selectedIds.size === 0) return;
     setDownloading(true);
@@ -333,7 +379,82 @@ export function FileBrowser({ experimentId, projectId }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-4 items-center flex-wrap">
+      <div className="flex gap-3 items-center flex-wrap">
+        {showSearch && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setSearchQuery(searchInput);
+              setPage(1);
+            }}
+            className="flex gap-1"
+          >
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search by filename..."
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm w-56"
+            />
+            <button
+              type="submit"
+              className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-sm hover:bg-gray-200"
+            >
+              Search
+            </button>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearchQuery("");
+                  setPage(1);
+                }}
+                className="px-2 py-2 text-gray-400 hover:text-gray-600 text-sm"
+              >
+                Clear
+              </button>
+            )}
+          </form>
+        )}
+
+        {showProjectFilter && (
+          <select
+            value={filterProjectId}
+            onChange={(e) => {
+              setFilterProjectId(e.target.value);
+              setFilterExperimentId("");
+              setPage(1);
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          >
+            <option value="">All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {showExperimentFilter && (
+          <select
+            value={filterExperimentId}
+            onChange={(e) => {
+              setFilterExperimentId(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+          >
+            <option value="">All experiments</option>
+            {experiments.map((e) => (
+              <option key={e.id} value={String(e.id)}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        )}
+
         {samples.length > 0 && (
           <select
             value={filterSampleId}
@@ -413,6 +534,44 @@ export function FileBrowser({ experimentId, projectId }: Props) {
           </div>
         )}
       </div>
+
+      {showReconcile && isAdmin && stuckCount > 0 && !reconcileResult && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-amber-800">
+              {stuckCount} {stuckCount === 1 ? "file needs" : "files need"} to be synced to storage
+            </p>
+            <p className="text-xs text-amber-600 mt-1">
+              These files are linked to an experiment but haven&apos;t been moved to long-term storage yet.
+            </p>
+          </div>
+          <button
+            onClick={handleReconcile}
+            disabled={reconciling}
+            className="px-4 py-2 bg-amber-600 text-white rounded-md text-sm font-medium hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap ml-4"
+          >
+            {reconciling ? "Syncing..." : "Fix Now"}
+          </button>
+        </div>
+      )}
+
+      {showReconcile && reconcileResult && (
+        <div
+          className={`rounded-lg p-4 text-sm ${
+            reconcileResult.failed === -1
+              ? "bg-red-50 border border-red-200 text-red-800"
+              : reconcileResult.failed > 0
+                ? "bg-amber-50 border border-amber-200 text-amber-800"
+                : "bg-green-50 border border-green-200 text-green-800"
+          }`}
+        >
+          {reconcileResult.failed === -1
+            ? "Something went wrong. Please try again or contact support."
+            : reconcileResult.failed > 0
+              ? `Synced ${reconcileResult.reconciled} files, but ${reconcileResult.failed} failed. Try again or contact support.`
+              : `Done! ${reconcileResult.reconciled} ${reconcileResult.reconciled === 1 ? "file" : "files"} synced to storage.`}
+        </div>
+      )}
 
       {downloadError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800 flex items-center justify-between">
