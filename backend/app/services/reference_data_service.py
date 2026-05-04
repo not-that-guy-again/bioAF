@@ -17,11 +17,14 @@ from app.models.reference_dataset import (
     ReferenceDatasetFile,
     pipeline_run_references,
 )
+from app.models.reference_import_progress import ReferenceImportProgress
 from app.schemas.reference_dataset import (
     ImpactPipelineRun,
     ImpactSummary,
     ReferenceDatasetCreate,
     ReferenceDeprecateRequest,
+    ReferenceImportRequest,
+    ReferenceImportStatusResponse,
     ReferenceUploadInitRequest,
 )
 from app.services.audit_service import log_action
@@ -692,3 +695,261 @@ class ReferenceDataService:
 
         await session.delete(dataset)
         await session.flush()
+
+    # --- Import-from-URL (GKE Job) flow — spec §3 ------------------------------
+
+    @staticmethod
+    def _create_import_job(
+        *,
+        reference_id: int,
+        source_url: str,
+        source_md5_url: str | None,
+        gcs_prefix: str,
+        bucket_name: str,
+        extract: str,
+        auth_header: str | None,
+    ) -> str:
+        """Launch the importer GKE Job and return its name. Tests monkey-patch.
+
+        Production: builds a kubernetes BatchV1 Job from the spec in
+        documentation/spec-reference-data-ingest.md §3 and returns the Job's
+        metadata.name.
+        """
+        from kubernetes import client as k8s_client, config as k8s_config
+
+        try:
+            k8s_config.load_incluster_config()
+        except k8s_config.ConfigException:
+            k8s_config.load_kube_config()
+
+        nonce = re.sub(r"[^a-z0-9]", "", str(reference_id))[:6] or "0"
+        job_name = f"refimport-{reference_id}-{nonce}"
+        env = [
+            k8s_client.V1EnvVar(name="REFERENCE_ID", value=str(reference_id)),
+            k8s_client.V1EnvVar(name="SOURCE_URL", value=source_url),
+            k8s_client.V1EnvVar(name="GCS_PREFIX", value=gcs_prefix),
+            k8s_client.V1EnvVar(name="GCS_BUCKET", value=bucket_name),
+            k8s_client.V1EnvVar(name="EXTRACT_MODE", value=extract),
+        ]
+        if source_md5_url:
+            env.append(k8s_client.V1EnvVar(name="SOURCE_MD5_URL", value=source_md5_url))
+        if auth_header:
+            env.append(k8s_client.V1EnvVar(name="SOURCE_AUTH_HEADER", value=auth_header))
+
+        container = k8s_client.V1Container(
+            name="importer",
+            image="us-central1-docker.pkg.dev/bioaf/bioaf-reference-importer:latest",
+            env=env,
+            resources=k8s_client.V1ResourceRequirements(
+                requests={"cpu": "1", "memory": "2Gi"},
+                limits={"cpu": "2", "memory": "4Gi"},
+            ),
+        )
+        pod_spec = k8s_client.V1PodSpec(
+            restart_policy="Never",
+            service_account_name="bioaf-reference-importer",
+            containers=[container],
+        )
+        job = k8s_client.V1Job(
+            api_version="batch/v1",
+            kind="Job",
+            metadata=k8s_client.V1ObjectMeta(
+                name=job_name,
+                labels={
+                    "bioaf.app/job-type": "reference-import",
+                    "bioaf.app/reference-id": str(reference_id),
+                },
+            ),
+            spec=k8s_client.V1JobSpec(
+                backoff_limit=1,
+                ttl_seconds_after_finished=3600,
+                template=k8s_client.V1PodTemplateSpec(spec=pod_spec),
+            ),
+        )
+        k8s_client.BatchV1Api().create_namespaced_job(namespace="default", body=job)
+        return job_name
+
+    @staticmethod
+    def _delete_import_job(job_name: str) -> None:
+        """Delete the importer GKE Job. Tests monkey-patch."""
+        from kubernetes import client as k8s_client, config as k8s_config
+
+        try:
+            k8s_config.load_incluster_config()
+        except k8s_config.ConfigException:
+            k8s_config.load_kube_config()
+        k8s_client.BatchV1Api().delete_namespaced_job(
+            name=job_name,
+            namespace="default",
+            propagation_policy="Background",
+        )
+
+    @staticmethod
+    async def start_import(
+        session: AsyncSession,
+        org_id: int,
+        user_id: int,
+        request: ReferenceImportRequest,
+    ) -> tuple[ReferenceDataset, str]:
+        """Create the dataset, progress row, and launch the importer GKE Job."""
+        # Up-front uniqueness check
+        existing = await session.execute(
+            select(ReferenceDataset.id).where(
+                ReferenceDataset.organization_id == org_id,
+                ReferenceDataset.name == request.name,
+                ReferenceDataset.version == request.version,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise ValueError(f"Reference '{request.name}' version '{request.version}' already exists")
+
+        bucket_name = await ReferenceDataService._get_references_bucket(session)
+        gcs_prefix = f"{request.category}/{_slugify(request.name)}/{_slugify(request.version)}/"
+
+        dataset = ReferenceDataset(
+            organization_id=org_id,
+            name=request.name,
+            category=request.category,
+            scope=request.scope,
+            version=request.version,
+            source_url=request.source_url,
+            gcs_prefix=gcs_prefix,
+            uploaded_by_user_id=user_id,
+            status="uploading",
+        )
+        session.add(dataset)
+        await session.flush()
+
+        job_id = ReferenceDataService._create_import_job(
+            reference_id=dataset.id,
+            source_url=request.source_url,
+            source_md5_url=request.source_md5_url,
+            gcs_prefix=gcs_prefix,
+            bucket_name=bucket_name,
+            extract=request.extract,
+            auth_header=request.auth_header,
+        )
+
+        progress = ReferenceImportProgress(
+            reference_id=dataset.id,
+            status="pending",
+            import_job_id=job_id,
+        )
+        session.add(progress)
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="reference_dataset",
+            entity_id=dataset.id,
+            action="import_started",
+            details={
+                "name": request.name,
+                "version": request.version,
+                "category": request.category,
+                "scope": request.scope,
+                "source_url": request.source_url,
+                "extract": request.extract,
+                "import_job_id": job_id,
+                "gcs_prefix": gcs_prefix,
+                "bucket": bucket_name,
+            },
+        )
+        await session.flush()
+        return dataset, job_id
+
+    @staticmethod
+    async def get_import_status(
+        session: AsyncSession,
+        reference_id: int,
+        org_id: int,
+    ) -> ReferenceImportStatusResponse:
+        """Read the import_progress row for a reference owned by org_id."""
+        # Make sure the dataset exists & is org-scoped before reading progress.
+        dataset = await session.execute(
+            select(ReferenceDataset.id).where(
+                ReferenceDataset.id == reference_id,
+                ReferenceDataset.organization_id == org_id,
+            )
+        )
+        if dataset.scalar_one_or_none() is None:
+            raise ValueError("Reference dataset not found")
+
+        result = await session.execute(
+            select(
+                ReferenceImportProgress.reference_id,
+                ReferenceImportProgress.status,
+                ReferenceImportProgress.progress_pct,
+                ReferenceImportProgress.bytes_downloaded,
+                ReferenceImportProgress.total_bytes,
+                ReferenceImportProgress.error_message,
+                ReferenceImportProgress.import_job_id,
+                ReferenceImportProgress.updated_at,
+            ).where(ReferenceImportProgress.reference_id == reference_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            raise ValueError("No import progress record for this reference")
+
+        return ReferenceImportStatusResponse(
+            reference_id=row.reference_id,
+            status=row.status,
+            progress_pct=row.progress_pct,
+            bytes_downloaded=row.bytes_downloaded,
+            total_bytes=row.total_bytes,
+            error_message=row.error_message,
+            import_job_id=row.import_job_id,
+            updated_at=row.updated_at,
+        )
+
+    @staticmethod
+    async def cancel_import(
+        session: AsyncSession,
+        reference_id: int,
+        org_id: int,
+        user_id: int,
+    ) -> None:
+        """Terminate the GKE job + abort the in-flight reference (purge + delete)."""
+        progress = await session.get(ReferenceImportProgress, reference_id)
+        if progress and progress.import_job_id:
+            try:
+                ReferenceDataService._delete_import_job(progress.import_job_id)
+            except Exception as e:
+                logger.warning("Failed to delete import job %s: %s", progress.import_job_id, e)
+
+        await ReferenceDataService.abort_upload(session, reference_id, org_id, user_id)
+
+    @staticmethod
+    async def record_import_progress(
+        session: AsyncSession,
+        reference_id: int,
+        *,
+        status: str,
+        progress_pct: int | None = None,
+        bytes_downloaded: int | None = None,
+        total_bytes: int | None = None,
+        error_message: str | None = None,
+    ) -> ReferenceImportProgress:
+        """Update the progress row. Called by the importer container's callback."""
+        progress = await session.get(ReferenceImportProgress, reference_id)
+        if not progress:
+            raise ValueError("No import progress record for this reference")
+
+        progress.status = status
+        if progress_pct is not None:
+            progress.progress_pct = progress_pct
+        if bytes_downloaded is not None:
+            progress.bytes_downloaded = bytes_downloaded
+        if total_bytes is not None:
+            progress.total_bytes = total_bytes
+        if error_message is not None:
+            progress.error_message = error_message
+
+        if status == "failed":
+            dataset = await session.get(ReferenceDataset, reference_id)
+            if dataset:
+                dataset.status = "failed"
+                dataset.deprecation_note = error_message or "Import failed"
+
+        await session.flush()
+        return progress

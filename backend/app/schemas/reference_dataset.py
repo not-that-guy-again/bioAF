@@ -93,6 +93,75 @@ class ReferenceUploadInitResponse(BaseModel):
     uploads: list[ReferenceUploadSlot]
 
 
+# --- Import-from-URL (GKE Job) schemas — spec §3 ---
+
+
+VALID_EXTRACT_MODES = ["none", "gzip", "tar", "tar.gz"]
+
+
+class ReferenceImportRequest(BaseModel):
+    name: str
+    category: str
+    scope: str
+    version: str
+    source_url: str
+    source_md5_url: str | None = None
+    auth_header: str | None = None
+    extract: str = "none"
+    expected_files: list[str] | None = None
+    description: str | None = None
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        if v not in REFERENCE_CATEGORIES:
+            raise ValueError(f"category must be one of: {', '.join(REFERENCE_CATEGORIES)}")
+        return v
+
+    @field_validator("scope")
+    @classmethod
+    def validate_scope(cls, v: str) -> str:
+        if v not in REFERENCE_SCOPES:
+            raise ValueError(f"scope must be one of: {', '.join(REFERENCE_SCOPES)}")
+        return v
+
+    @field_validator("extract")
+    @classmethod
+    def validate_extract(cls, v: str) -> str:
+        if v not in VALID_EXTRACT_MODES:
+            raise ValueError(f"extract must be one of: {', '.join(VALID_EXTRACT_MODES)}")
+        return v
+
+
+class ReferenceImportStartResponse(BaseModel):
+    reference_id: int
+    import_job_id: str
+    status: str
+
+
+class ReferenceImportStatusResponse(BaseModel):
+    reference_id: int
+    status: str
+    progress_pct: int | None = None
+    bytes_downloaded: int | None = None
+    total_bytes: int | None = None
+    error_message: str | None = None
+    import_job_id: str | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class ReferenceImportProgressUpdate(BaseModel):
+    """Internal callback body — written by the importer container."""
+
+    status: str
+    progress_pct: int | None = None
+    bytes_downloaded: int | None = None
+    total_bytes: int | None = None
+    error_message: str | None = None
+
+
 # --- Response schemas ---
 
 

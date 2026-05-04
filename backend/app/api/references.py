@@ -12,6 +12,9 @@ from app.schemas.reference_dataset import (
     ReferenceDatasetListResponse,
     ReferenceDatasetResponse,
     ReferenceDeprecateRequest,
+    ReferenceImportRequest,
+    ReferenceImportStartResponse,
+    ReferenceImportStatusResponse,
     ReferenceUploadInitRequest,
     ReferenceUploadInitResponse,
     ReferenceUploadSlot,
@@ -109,6 +112,64 @@ async def init_upload(
         gcs_prefix=dataset.gcs_prefix,
         uploads=[ReferenceUploadSlot(**u) for u in uploads],
     )
+
+
+@router.post("/import", response_model=ReferenceImportStartResponse)
+async def start_import(
+    payload: ReferenceImportRequest,
+    current_user: dict = require_permission("references", "upload"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Launch a per-import GKE Job to download a reference from a public URL."""
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+
+    try:
+        dataset, job_id = await ReferenceDataService.start_import(session, org_id, user_id, payload)
+        await session.commit()
+    except ValueError as e:
+        await session.rollback()
+        msg = str(e)
+        if "already exists" in msg:
+            raise HTTPException(409, msg)
+        if "not configured" in msg:
+            raise HTTPException(503, msg)
+        raise HTTPException(400, msg)
+
+    return ReferenceImportStartResponse(reference_id=dataset.id, import_job_id=job_id, status="pending")
+
+
+@router.get("/{reference_id}/import-status", response_model=ReferenceImportStatusResponse)
+async def get_import_status(
+    reference_id: int,
+    current_user: dict = require_permission("references", "view"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Read the in-flight import progress row."""
+    org_id = int(current_user["org_id"])
+    try:
+        return await ReferenceDataService.get_import_status(session, reference_id, org_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/{reference_id}/import-cancel", status_code=204)
+async def cancel_import(
+    reference_id: int,
+    current_user: dict = require_permission("references", "upload"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Terminate the GKE job and purge the in-flight reference."""
+    org_id = int(current_user["org_id"])
+    user_id = int(current_user["sub"])
+    try:
+        await ReferenceDataService.cancel_import(session, reference_id, org_id, user_id)
+        await session.commit()
+    except ValueError as e:
+        await session.rollback()
+        raise HTTPException(400, str(e))
+
+    return Response(status_code=204)
 
 
 @router.post("/{reference_id}/upload-complete", response_model=ReferenceDatasetDetailResponse)
