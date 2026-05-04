@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from types import ModuleType
 
-from app.services.qc.templates import custom, proteomics_maxquant, scrnaseq
+from app.services.qc.templates import bulk_rnaseq, custom, scrnaseq
 
 TEMPLATES: dict[str, ModuleType] = {
     "scrnaseq": scrnaseq,
-    "proteomics_maxquant": proteomics_maxquant,
+    "bulk_rnaseq": bulk_rnaseq,
     "custom": custom,
 }
 
