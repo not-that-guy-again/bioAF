@@ -848,6 +848,8 @@ export interface CustomPipelineVersion {
   created_by_user_id: number;
   created_at: string;
   variables: CustomPipelineVariable[];
+  qc_template: string | null;
+  qc_config_json: Record<string, unknown> | null;
 }
 
 export interface CustomPipeline {
@@ -909,6 +911,8 @@ export interface CustomPipelineVersionCreateRequest {
   memory_request?: string;
   log_file_path?: string | null;
   variables: CustomPipelineVariableDefinition[];
+  qc_template?: string | null;
+  qc_config_json?: Record<string, unknown> | null;
 }
 
 // Phase 5 — Data Management + Visualization
