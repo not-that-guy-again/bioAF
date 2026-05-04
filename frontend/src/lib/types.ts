@@ -1122,11 +1122,46 @@ export interface QCPlot {
   download_url?: string | null;
 }
 
+export interface QCMetricSpec {
+  label: string;
+  format?: string;
+  thresholds?: { good?: string; warn?: string };
+}
+
+export interface QCSection {
+  id: string;
+  title?: string | null;
+  layout?: string | null;
+  metrics: string[];
+}
+
+export interface QCChartSpec {
+  type: string;
+  metric_key?: string | null;
+  title?: string | null;
+}
+
+export interface QCPlotSpec {
+  file_glob: string;
+  title: string;
+  type: string;
+}
+
+export interface QCDashboardConfig {
+  template: string;
+  sections: QCSection[];
+  metrics: Record<string, QCMetricSpec>;
+  charts: QCChartSpec[];
+  plots: QCPlotSpec[];
+}
+
 export interface QCDashboardResponse {
   id: number;
   pipeline_run_id: number;
   experiment_id: number | null;
   metrics: QCMetrics;
+  raw_metrics: Record<string, unknown>;
+  qc_config: QCDashboardConfig;
   summary_text: string;
   plots: QCPlot[];
   status: string;
