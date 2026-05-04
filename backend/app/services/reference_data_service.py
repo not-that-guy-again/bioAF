@@ -497,6 +497,17 @@ class ReferenceDataService:
         expires_at = datetime.now(timezone.utc) + RESUMABLE_SESSION_TTL
         for spec in request.files:
             blob_path = f"{gcs_prefix}{spec.filename}"
+            # Persist skeleton file row so upload_complete can verify each
+            # declared file arrived. md5/size are filled in at finalize.
+            session.add(
+                ReferenceDatasetFile(
+                    reference_dataset_id=dataset.id,
+                    filename=spec.filename,
+                    gcs_uri=f"gs://{bucket_name}/{blob_path}",
+                    size_bytes=spec.size_bytes,
+                    md5_checksum=spec.md5_checksum,
+                )
+            )
             session_url = ReferenceDataService._create_resumable_session(
                 bucket_name=bucket_name,
                 blob_path=blob_path,
@@ -531,3 +542,153 @@ class ReferenceDataService:
         )
 
         return dataset, uploads
+
+    # --- Upload finalize / abort -----------------------------------------------
+
+    @staticmethod
+    def _list_uploaded_blobs(bucket_name: str, prefix: str, credentials=None):
+        """List blobs under `prefix`. Tests monkey-patch this."""
+        from google.cloud import storage as gcs_storage
+
+        client = gcs_storage.Client(credentials=credentials)
+        bucket = client.bucket(bucket_name)
+        return list(bucket.list_blobs(prefix=prefix))
+
+    @staticmethod
+    def _delete_blobs(bucket_name: str, prefix: str, credentials=None) -> None:
+        """Delete every blob under `prefix`. Tests monkey-patch this."""
+        from google.cloud import storage as gcs_storage
+
+        client = gcs_storage.Client(credentials=credentials)
+        bucket = client.bucket(bucket_name)
+        for blob in bucket.list_blobs(prefix=prefix):
+            try:
+                blob.delete()
+            except Exception as e:
+                logger.warning("Failed to delete blob %s: %s", blob.name, e)
+
+    @staticmethod
+    async def upload_complete(
+        session: AsyncSession,
+        reference_id: int,
+        org_id: int,
+        user_id: int,
+    ) -> ReferenceDataset:
+        """Finalize a resumable upload — list GCS, verify, persist files, flip status.
+
+        Lifecycle (spec §2):
+          - status='uploading' → 'active' (internal scope)
+          - status='uploading' → 'pending_approval' (public scope)
+          - status='uploading' → 'failed' on md5 mismatch (objects purged)
+        """
+        dataset = await ReferenceDataService.get_reference(session, reference_id, org_id)
+        if not dataset:
+            raise ValueError("Reference dataset not found")
+        if dataset.status != "uploading":
+            raise ValueError(f"Cannot finalize: status is '{dataset.status}', expected 'uploading'")
+
+        bucket_name = await ReferenceDataService._get_references_bucket(session)
+        from app.services.upload_service import UploadService
+
+        credentials = await UploadService._get_gcs_credentials(session)
+
+        blobs = ReferenceDataService._list_uploaded_blobs(bucket_name, dataset.gcs_prefix, credentials=credentials)
+        # Index blobs by their basename (relative to gcs_prefix)
+        blob_by_name: dict[str, object] = {}
+        for b in blobs:
+            base = b.name[len(dataset.gcs_prefix) :] if b.name.startswith(dataset.gcs_prefix) else b.name
+            blob_by_name[base] = b
+
+        expected = list(dataset.files)
+        missing = [f.filename for f in expected if f.filename not in blob_by_name]
+        if missing:
+            raise ValueError(f"Upload incomplete: missing files in GCS: {', '.join(missing)}")
+
+        # MD5 verification: compare client-supplied md5 (if any) to GCS metadata
+        manifest: dict[str, str] = {}
+        total_size = 0
+        for file_row in expected:
+            blob = blob_by_name[file_row.filename]
+            gcs_md5 = getattr(blob, "md5_hash", None)
+            gcs_size = int(getattr(blob, "size", 0) or 0)
+            if file_row.md5_checksum and gcs_md5 and file_row.md5_checksum != gcs_md5:
+                # Mark failed and purge objects, then raise.
+                dataset.status = "failed"
+                dataset.deprecation_note = (
+                    f"md5 mismatch for {file_row.filename}: declared {file_row.md5_checksum}, bucket reports {gcs_md5}"
+                )
+                await session.flush()
+                try:
+                    ReferenceDataService._delete_blobs(bucket_name, dataset.gcs_prefix, credentials=credentials)
+                except Exception as e:
+                    logger.warning("Failed to purge blobs for failed upload %s: %s", dataset.id, e)
+                await log_action(
+                    session,
+                    user_id=user_id,
+                    entity_type="reference_dataset",
+                    entity_id=dataset.id,
+                    action="upload_failed",
+                    details={"reason": "md5_mismatch", "filename": file_row.filename},
+                )
+                raise ValueError(dataset.deprecation_note)
+            file_row.md5_checksum = gcs_md5
+            file_row.size_bytes = gcs_size
+            if gcs_md5:
+                manifest[file_row.filename] = gcs_md5
+            total_size += gcs_size
+
+        dataset.md5_manifest_json = manifest
+        dataset.total_size_bytes = total_size
+        dataset.status = "pending_approval" if dataset.scope == "public" else "active"
+        await session.flush()
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="reference_dataset",
+            entity_id=dataset.id,
+            action="upload_completed",
+            details={
+                "name": dataset.name,
+                "version": dataset.version,
+                "scope": dataset.scope,
+                "file_count": len(expected),
+                "total_size_bytes": total_size,
+                "final_status": dataset.status,
+            },
+        )
+
+        return dataset
+
+    @staticmethod
+    async def abort_upload(
+        session: AsyncSession,
+        reference_id: int,
+        org_id: int,
+        user_id: int,
+    ) -> None:
+        """Idempotent abort: purge GCS objects under prefix and delete the row."""
+        dataset = await ReferenceDataService.get_reference(session, reference_id, org_id)
+        if not dataset:
+            return  # idempotent
+
+        bucket_name = await ReferenceDataService._get_references_bucket(session)
+        from app.services.upload_service import UploadService
+
+        credentials = await UploadService._get_gcs_credentials(session)
+        try:
+            ReferenceDataService._delete_blobs(bucket_name, dataset.gcs_prefix, credentials=credentials)
+        except Exception as e:
+            logger.warning("Failed to purge blobs while aborting %s: %s", reference_id, e)
+
+        await log_action(
+            session,
+            user_id=user_id,
+            entity_type="reference_dataset",
+            entity_id=dataset.id,
+            action="upload_aborted",
+            details={"name": dataset.name, "version": dataset.version},
+        )
+
+        await session.delete(dataset)
+        await session.flush()
