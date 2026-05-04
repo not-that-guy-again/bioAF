@@ -813,7 +813,15 @@ export interface PipelineAddRequest {
 // Custom Pipelines
 
 export type CustomPipelineCodeSource = "github_repo" | "code_blob" | "inline";
-export type CustomPipelineVariableType = "string" | "number" | "boolean";
+export type CustomPipelineVariableType = "string" | "number" | "boolean" | "reference";
+export type ReferenceParameterCategory =
+  | "genome"
+  | "annotation"
+  | "index"
+  | "atlas"
+  | "markers"
+  | "other"
+  | "any";
 export type CustomPipelineVersionStatus = "active" | "deprecated";
 export type CustomPipelineVersionTrigger = "user" | "environment_cascade";
 
@@ -822,6 +830,7 @@ export interface CustomPipelineVariable {
   variable_name: string;
   default_value: string | null;
   variable_type: CustomPipelineVariableType;
+  reference_category?: ReferenceParameterCategory | null;
   is_required: boolean;
 }
 
@@ -829,6 +838,7 @@ export interface CustomPipelineVariableDefinition {
   variable_name: string;
   default_value: string | null;
   variable_type: CustomPipelineVariableType;
+  reference_category?: ReferenceParameterCategory | null;
   is_required: boolean;
 }
 
