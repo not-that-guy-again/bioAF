@@ -162,6 +162,7 @@ async def test_generate_uses_custom_template_when_run_is_custom_pipeline(session
     ):
         dashboard = await QCDashboardService.generate_qc_dashboard(session, org_id, run.id)
 
+    assert dashboard.qc_config_json is not None
     assert dashboard.qc_config_json["template"] == "custom"
     assert dashboard.qc_config_json["sections"][0]["metrics"] == ["my_metric"]
     # custom template honors emitted quality_rating
