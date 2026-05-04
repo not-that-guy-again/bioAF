@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.11.0
+## v0.10.3
 
 Reference Data Ingest — completes the four user-facing capabilities of ADR-017 / ADR-047 (upload, import-from-URL, versioning, and pipeline linkage). Existing reference data CRUD is unchanged; this release adds everything around getting bytes into the registry and using them in pipelines.
 
