@@ -814,41 +814,18 @@ if [ "${finish_choice:-2}" = "1" ] && [ -n "$VM_IP" ] && [ -f "${PREFILL_LOCAL}"
     echo "  You'll see the bioAF setup output stream below; the script ends with a"
     echo "  one-time setup code and the wizard URL."
     echo ""
-
-    # Pick the branch the VM should clone. Priority:
-    #   1. $BIOAF_BRANCH env override (developer escape hatch)
-    #   2. The local repo's current branch, when install-gcp.sh was run from
-    #      a clone of bioAF (most common during development)
-    #   3. main (production / curl|bash users)
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -n "${BIOAF_BRANCH:-}" ]; then
-        REMOTE_BRANCH="${BIOAF_BRANCH}"
-    elif local_branch=$(git -C "${SCRIPT_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null) && \
-         [ -n "${local_branch}" ] && [ "${local_branch}" != "HEAD" ]; then
-        REMOTE_BRANCH="${local_branch}"
-    else
-        REMOTE_BRANCH="main"
-    fi
-    echo "  Remote will check out branch: ${REMOTE_BRANCH}"
-    echo ""
-
     # Run setup non-interactively. The remote command:
     #   - clones bioAF (idempotent: skip if already there)
-    #   - checks out the same branch the local installer is running from
     #   - runs ./bioaf setup --prefill ~/.bioaf-prefill.yaml
-    if gcloud compute ssh "${VM_NAME}" --zone="${ZONE}" --project="${PROJECT_ID}" \
-        --command="
+    if gcloud compute ssh "${VM_NAME}" --zone="${ZONE}" --project="${PROJECT_ID}" --command='
 set -euo pipefail
-BRANCH='${REMOTE_BRANCH}'
-if [ ! -d \"\$HOME/bioAF/.git\" ]; then
-    git clone https://github.com/not-that-guy-again/bioAF.git \"\$HOME/bioAF\"
+if [ ! -d "$HOME/bioAF/.git" ]; then
+    git clone https://github.com/not-that-guy-again/bioAF.git "$HOME/bioAF"
 fi
-cd \"\$HOME/bioAF\"
-git fetch origin \"\$BRANCH\"
-git checkout \"\$BRANCH\"
-git pull --ff-only origin \"\$BRANCH\" 2>/dev/null || true
-./bioaf setup --prefill \"\$HOME/.bioaf-prefill.yaml\"
-"; then
+cd "$HOME/bioAF"
+git pull --ff-only origin main 2>/dev/null || true
+./bioaf setup --prefill "$HOME/.bioaf-prefill.yaml"
+'; then
         REMOTE_SETUP_SUCCEEDED=true
     else
         red "  Remote setup failed. Falling back to the worksheet so you can run it yourself."
