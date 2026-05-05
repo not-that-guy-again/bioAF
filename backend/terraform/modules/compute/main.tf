@@ -164,3 +164,28 @@ resource "google_service_account_iam_member" "notebook_runner_workload_identity"
   role               = "roles/iam.workloadIdentityUser"
   member             = "serviceAccount:${var.project_id}.svc.id.goog[bioaf-notebooks/bioaf-notebook-runner]"
 }
+
+# --- SA hardening: bioaf-managed tag on the GKE cluster ---
+# bioaf-app's roles/container.admin binding is conditioned on
+# resource.matchTag("<PROJECT>/bioaf-managed", "true"). The cluster needs
+# the tag attached for that condition to evaluate true at runtime.
+# Bindings render only when bioaf_bootstrap_sa_email is supplied (skip in
+# dev plans against an uninitialised manifest).
+
+data "google_tags_tag_key" "bioaf_managed" {
+  count      = var.bioaf_bootstrap_sa_email != "" ? 1 : 0
+  parent     = "projects/${var.project_id}"
+  short_name = "bioaf-managed"
+}
+
+data "google_tags_tag_value" "bioaf_managed_true" {
+  count      = var.bioaf_bootstrap_sa_email != "" ? 1 : 0
+  parent     = "tagKeys/${data.google_tags_tag_key.bioaf_managed[0].name}"
+  short_name = "true"
+}
+
+resource "google_tags_tag_binding" "bioaf_cluster_managed" {
+  count     = var.bioaf_bootstrap_sa_email != "" ? 1 : 0
+  parent    = "//container.googleapis.com/${google_container_cluster.bioaf.id}"
+  tag_value = data.google_tags_tag_value.bioaf_managed_true[0].id
+}

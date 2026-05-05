@@ -907,6 +907,10 @@ class TerraformExecutor:
             from app.gcp_zones import zones_for_region
 
             tfvars["k8s_node_zones"] = zones_for_region(region)
+            # SA hardening: pass the bootstrap SA email so the module
+            # attaches the bioaf-managed Resource Manager tag to the GKE
+            # cluster (required for bioaf-app's tag-conditioned binding).
+            tfvars["bioaf_bootstrap_sa_email"] = config.get("gcp_bootstrap_sa_email") or ""
             # Cluster configuration from platform_config
             if config.get("k8s_pipeline_machine_type"):
                 tfvars["k8s_pipeline_machine_type"] = config["k8s_pipeline_machine_type"]
