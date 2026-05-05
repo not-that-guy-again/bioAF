@@ -35,20 +35,40 @@ function zonesForRegion(region: string): string[] {
   return GCP_ZONES[region] ?? [`${region}-b`, `${region}-c`, `${region}-d`];
 }
 
-const SETUP_RECOMMENDED_ROLES = [
+// SA hardening: bioaf-bootstrap holds the broad project-level roles;
+// bioaf-app holds a small set of scoped roles. The installer applies all
+// of this automatically. These lists exist for transparency.
+const SETUP_BOOTSTRAP_ROLES = [
   { role: "roles/storage.admin", description: "Storage Admin" },
   { role: "roles/pubsub.admin", description: "Pub/Sub Admin" },
   { role: "roles/container.admin", description: "Kubernetes Engine Admin" },
   { role: "roles/iam.serviceAccountUser", description: "Service Account User" },
-  { role: "roles/iam.serviceAccountKeyAdmin", description: "Service Account Key Admin" },
+  { role: "roles/iam.serviceAccountAdmin", description: "Service Account Admin" },
   { role: "roles/compute.admin", description: "Compute Admin" },
   { role: "roles/resourcemanager.projectIamAdmin", description: "Project IAM Admin" },
   { role: "roles/bigquery.dataEditor", description: "BigQuery Data Editor" },
   { role: "roles/artifactregistry.admin", description: "Artifact Registry Admin" },
   { role: "roles/cloudbuild.builds.editor", description: "Cloud Build Editor" },
+  { role: "roles/logging.logWriter", description: "Logs Writer" },
   { role: "roles/serviceusage.serviceUsageAdmin", description: "Service Usage Admin" },
   { role: "roles/viewer", description: "Viewer" },
 ];
+
+const SETUP_APP_ROLES = [
+  { role: "roles/storage.admin", description: "Storage Admin (scoped to bioaf-* buckets)" },
+  { role: "projects/<PROJECT>/roles/bioafSaManager", description: "Custom: list/delete bioaf-* SAs" },
+  { role: "roles/compute.instanceAdmin.v1", description: "Compute (scoped to bioaf-* VMs)" },
+  { role: "roles/container.admin", description: "Kubernetes Engine (scoped via bioaf-managed tag)" },
+  { role: "roles/logging.logWriter", description: "Logs Writer" },
+  { role: "roles/browser", description: "Project metadata read" },
+  { role: "roles/serviceusage.serviceUsageViewer", description: "Service Usage Viewer" },
+  { role: "roles/secretmanager.viewer", description: "Secret Manager metadata viewer" },
+  { role: "roles/bigquery.jobUser", description: "BigQuery Job User" },
+  { role: "roles/iam.serviceAccountTokenCreator", description: "Token Creator on bioaf-bootstrap only" },
+];
+
+// Legacy alias for any callers that still reference the single-list name.
+const SETUP_RECOMMENDED_ROLES = SETUP_BOOTSTRAP_ROLES;
 
 const SETUP_REQUIRED_APIS = [
   "cloudresourcemanager.googleapis.com",
@@ -102,6 +122,18 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     passed: boolean;
     checks: { name: string; passed: boolean; message: string }[];
     permission_details: { permission: string; granted: boolean; recommended_role: string }[];
+    app_probe: {
+      sa_email: string | null;
+      passed: boolean;
+      checks: { name: string; passed: boolean; message: string }[];
+      permission_details: { permission: string; granted: boolean; recommended_role: string }[];
+    } | null;
+    bootstrap_probe: {
+      sa_email: string | null;
+      passed: boolean;
+      checks: { name: string; passed: boolean; message: string }[];
+      permission_details: { permission: string; granted: boolean; recommended_role: string }[];
+    } | null;
   } | null>(null);
 
   // Step 4: SMTP
@@ -383,14 +415,29 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <summary className="cursor-pointer text-sm font-semibold text-gray-700 select-none">
               Prerequisites: IAM Roles &amp; APIs
               <span className="ml-1 text-xs font-normal text-gray-400">
-                ({SETUP_RECOMMENDED_ROLES.length} roles, {SETUP_REQUIRED_APIS.length} APIs)
+                (bioaf-bootstrap: {SETUP_BOOTSTRAP_ROLES.length} roles, bioaf-app: {SETUP_APP_ROLES.length}, {SETUP_REQUIRED_APIS.length} APIs)
               </span>
             </summary>
             <div className="mt-3 space-y-3">
+              <p className="text-xs text-gray-500">
+                The installer applies all of this automatically. Listed for transparency
+                and self-host overrides.
+              </p>
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-1">Required IAM roles for your service account:</p>
+                <p className="text-xs font-medium text-gray-600 mb-1">bioaf-bootstrap (impersonated for IAM/Terraform/Cloud Build):</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                  {SETUP_RECOMMENDED_ROLES.map(({ role, description }) => (
+                  {SETUP_BOOTSTRAP_ROLES.map(({ role, description }) => (
+                    <div key={role} className="flex items-center gap-1.5 text-xs">
+                      <code className="bg-white px-1 py-0.5 rounded text-gray-800 border">{role}</code>
+                      <span className="text-gray-400">{description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-1">bioaf-app (attached to the VM, scoped):</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {SETUP_APP_ROLES.map(({ role, description }) => (
                     <div key={role} className="flex items-center gap-1.5 text-xs">
                       <code className="bg-white px-1 py-0.5 rounded text-gray-800 border">{role}</code>
                       <span className="text-gray-400">{description}</span>
@@ -504,7 +551,42 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                   </div>
                 ))}
               </div>
-              {gcpValidation.permission_details.some((p) => !p.granted) && (
+              {gcpValidation.app_probe && gcpValidation.bootstrap_probe && (
+                <div className="p-3 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600">
+                      bioaf-app probe ({gcpValidation.app_probe.sa_email || "VM default"}):{" "}
+                      <span className={gcpValidation.app_probe.passed ? "text-green-600" : "text-red-600"}>
+                        {gcpValidation.app_probe.passed ? "\u2713 passed" : "\u2717 failed"}
+                      </span>
+                    </p>
+                    {gcpValidation.app_probe.permission_details.filter((p) => !p.granted).map((p) => (
+                      <div key={p.permission} className="flex items-center gap-2 text-xs ml-4 mt-1">
+                        <span className="text-red-600">{"\u2717"}</span>
+                        <code className="bg-red-50 px-1 rounded">{p.permission}</code>
+                        <span className="text-gray-400">(needs {p.recommended_role})</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-600">
+                      bioaf-bootstrap probe ({gcpValidation.bootstrap_probe.sa_email}):{" "}
+                      <span className={gcpValidation.bootstrap_probe.passed ? "text-green-600" : "text-red-600"}>
+                        {gcpValidation.bootstrap_probe.passed ? "\u2713 passed" : "\u2717 failed"}
+                      </span>
+                    </p>
+                    {gcpValidation.bootstrap_probe.permission_details.filter((p) => !p.granted).map((p) => (
+                      <div key={p.permission} className="flex items-center gap-2 text-xs ml-4 mt-1">
+                        <span className="text-red-600">{"\u2717"}</span>
+                        <code className="bg-red-50 px-1 rounded">{p.permission}</code>
+                        <span className="text-gray-400">(needs {p.recommended_role})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!(gcpValidation.app_probe && gcpValidation.bootstrap_probe) &&
+                gcpValidation.permission_details.some((p) => !p.granted) && (
                 <div className="p-3 space-y-1.5">
                   <p className="text-xs font-medium text-gray-600">Missing Permissions</p>
                   {gcpValidation.permission_details
