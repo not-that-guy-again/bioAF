@@ -891,6 +891,9 @@ class TerraformExecutor:
             if deploy_suffix:
                 tfvars["stack_uid"] = deploy_suffix
             tfvars["backend_service_account_email"] = config.get("backend_service_account_email") or ""
+            # SA hardening: pass the bioaf-app SA email through so the module
+            # creates per-subscription roles/pubsub.subscriber bindings.
+            tfvars["bioaf_app_sa_email"] = config.get("bioaf_app_sa_email") or ""
         elif module_name == "billing_export":
             tfvars["backend_service_account_email"] = config.get("backend_service_account_email") or ""
         elif module_name == "compute":
@@ -997,6 +1000,7 @@ class TerraformExecutor:
             "gcp_service_account_key",
             "gcp_service_account_email",
             "gcp_bootstrap_sa_email",
+            "bioaf_app_sa_email",
             "org_slug",
             "deploy_suffix",
             "terraform_initialized",
