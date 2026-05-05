@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
@@ -116,6 +116,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [gcpCredentialSource, setGcpCredentialSource] = useState<"vm_default" | "service_account_key">("vm_default");
   const [gcpServiceAccountKey, setGcpServiceAccountKey] = useState("");
   const [gcpServiceAccountEmail, setGcpServiceAccountEmail] = useState("");
+  // bioaf-bootstrap email; populated by either install-gcp.sh prefill or VM
+  // metadata read on backend startup. Display-only -- the wizard never
+  // overrides it.
+  const [gcpBootstrapSaEmail, setGcpBootstrapSaEmail] = useState("");
+  const [gcpPrefilled, setGcpPrefilled] = useState(false);
   const [gcpSaving, setGcpSaving] = useState(false);
   const [gcpConfigured, setGcpConfigured] = useState(false);
   const [gcpValidation, setGcpValidation] = useState<{
@@ -146,6 +151,59 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   // Step 6: Compute stack
   const [computeStack, setComputeStack] = useState("kubernetes");
   const [stackDeploying, setStackDeploying] = useState(false);
+
+  // Pre-populate GCP fields from platform_config once the user has
+  // authenticated (we have a token after step 1). install-gcp.sh's prefill
+  // path writes project/region/zone/credential-source/bootstrap-email to
+  // platform_config, and the metadata-server fallback writes the bootstrap
+  // email on first backend startup. Either way we want the wizard to mirror
+  // what the system already knows so the user doesn't re-type values.
+  useEffect(() => {
+    let cancelled = false;
+    if (step < 3) return;
+    (async () => {
+      try {
+        const cfg = await api.get<{
+          gcp_project_id: string | null;
+          gcp_region: string | null;
+          gcp_zone: string | null;
+          org_slug: string | null;
+          gcp_credential_source: string;
+          gcp_service_account_email: string | null;
+          gcp_bootstrap_sa_email: string | null;
+        }>("/api/v1/settings/gcp");
+        if (cancelled) return;
+        let prefilled = false;
+        if (cfg.gcp_project_id && !gcpProjectId) {
+          setGcpProjectId(cfg.gcp_project_id);
+          prefilled = true;
+        }
+        if (cfg.gcp_region) {
+          setGcpRegion(cfg.gcp_region);
+        }
+        if (cfg.gcp_zone) {
+          setGcpZone(cfg.gcp_zone);
+        }
+        if (cfg.org_slug && !gcpOrgSlug) {
+          setGcpOrgSlug(cfg.org_slug);
+        }
+        if (cfg.gcp_credential_source === "service_account_key" || cfg.gcp_credential_source === "vm_default") {
+          setGcpCredentialSource(cfg.gcp_credential_source);
+        }
+        if (cfg.gcp_bootstrap_sa_email) {
+          setGcpBootstrapSaEmail(cfg.gcp_bootstrap_sa_email);
+          prefilled = true;
+        }
+        if (prefilled) setGcpPrefilled(true);
+      } catch {
+        // Endpoint isn't reachable yet (e.g. first render before auth) -- ignore.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   // --- Handlers ---
 
@@ -456,6 +514,17 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
           </details>
 
+          {gcpPrefilled && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900">
+              <p className="font-medium mb-1">Pre-populated from install-gcp.sh</p>
+              <p>
+                We&apos;ve filled in the values from the GCP installer you just ran.
+                You can change anything here, but the defaults match the project,
+                region, and service accounts we just created.
+              </p>
+            </div>
+          )}
+
           <div>
             <label htmlFor="gcp-project-id" className="block text-sm font-medium text-gray-700 mb-1">GCP Project ID</label>
             <input id="gcp-project-id" type="text" value={gcpProjectId}
@@ -515,14 +584,35 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             )}
 
             {gcpCredentialSource === "vm_default" && (
-              <div className="mt-3">
-                <label htmlFor="gcp-sa-email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Service Account Email <span className="ml-1 text-gray-400 font-normal text-xs">(optional)</span>
-                </label>
-                <input id="gcp-sa-email" type="email" value={gcpServiceAccountEmail}
-                  onChange={(e) => setGcpServiceAccountEmail(e.target.value)}
-                  className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500"
-                  placeholder="bioaf-sa@my-project.iam.gserviceaccount.com" />
+              <div className="mt-3 space-y-3">
+                {gcpBootstrapSaEmail ? (
+                  <div className="bg-gray-50 border rounded p-3 text-xs">
+                    <p className="font-medium text-gray-700 mb-1">Service accounts (auto-detected)</p>
+                    <p className="text-gray-600 mb-2">
+                      bioAF uses two service accounts: <code className="bg-white px-1 rounded">bioaf-app</code> for
+                      runtime calls (attached to this VM) and <code className="bg-white px-1 rounded">bioaf-bootstrap</code> for
+                      privileged operations (impersonated by the backend, never attached to a VM). Both were created by
+                      install-gcp.sh; nothing to enter here.
+                    </p>
+                    <p className="text-gray-600">
+                      Bootstrap SA: <code className="bg-white px-1 rounded">{gcpBootstrapSaEmail}</code>
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label htmlFor="gcp-sa-email" className="block text-sm font-medium text-gray-700 mb-1">
+                      Bootstrap SA Email <span className="ml-1 text-gray-400 font-normal text-xs">(optional)</span>
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      The email of the bioaf-bootstrap service account. install-gcp.sh sets this automatically;
+                      only fill this in if you set GCP up manually.
+                    </p>
+                    <input id="gcp-sa-email" type="email" value={gcpServiceAccountEmail}
+                      onChange={(e) => setGcpServiceAccountEmail(e.target.value)}
+                      className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-bioaf-500"
+                      placeholder="bioaf-bootstrap@my-project.iam.gserviceaccount.com" />
+                  </div>
+                )}
               </div>
             )}
           </div>

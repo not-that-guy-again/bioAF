@@ -70,6 +70,7 @@ def _to_response(config: dict[str, str]) -> GCPConfigResponse:
         gcp_validation_status=config.get("gcp_validation_status") or None,
         gcp_credential_source=config.get("gcp_credential_source", "vm_default"),
         gcp_service_account_email=config.get("gcp_service_account_email") or None,
+        gcp_bootstrap_sa_email=config.get("gcp_bootstrap_sa_email") or None,
     )
 
 
