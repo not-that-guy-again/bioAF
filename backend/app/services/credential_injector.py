@@ -29,6 +29,15 @@ if TYPE_CHECKING:
 _GCP_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 
+def _impersonation_target(config: dict[str, Any]) -> str:
+    """Pick the SA email to impersonate in vm_default mode.
+
+    Prefers the new gcp_bootstrap_sa_email key; falls back to the legacy
+    gcp_service_account_email for installs that pre-date SA hardening.
+    """
+    return config.get("gcp_bootstrap_sa_email") or config.get("gcp_service_account_email") or ""
+
+
 def load_gcp_credentials(config: dict[str, Any]) -> "Credentials":
     """Load GCP credentials from a platform_config dict.
 
@@ -36,19 +45,19 @@ def load_gcp_credentials(config: dict[str, Any]) -> "Credentials":
     for passing to any GCP Python client (BigQuery, Storage, etc.).
     """
     credential_source = config.get("gcp_credential_source", "vm_default")
-    sa_email = config.get("gcp_service_account_email", "")
 
     if credential_source == "service_account_key":
         key_json = config.get("gcp_service_account_key", "")
         key_data = json.loads(key_json)
         return service_account.Credentials.from_service_account_info(key_data, scopes=_GCP_SCOPES)
 
-    # vm_default: use ADC, optionally impersonating a target SA
+    # vm_default: use ADC, optionally impersonating bioaf-bootstrap.
     source_creds, _ = _google_auth.default(scopes=_GCP_SCOPES)
-    if sa_email:
+    target = _impersonation_target(config)
+    if target:
         return _impersonated_credentials.Credentials(
             source_credentials=source_creds,
-            target_principal=sa_email,
+            target_principal=target,
             target_scopes=_GCP_SCOPES,
         )
     return source_creds
