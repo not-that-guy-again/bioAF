@@ -515,11 +515,23 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --condition='expression=resource.name.extract("/instances/{name}").startsWith("bioaf-"),title=bioaf_worknodes_only,description=bioaf_worknodes_only' \
     --quiet >/dev/null
 
+# container.admin tag condition: the matchTag() expression contains a
+# literal comma between its two string args, which gcloud's --condition
+# parser treats as a key/value delimiter. Use --condition-from-file with
+# a temp file so the comma is preserved verbatim.
+TAG_COND_TMP="$(mktemp -t bioaf-tag-cond-XXXXXX)"
+cat >"${TAG_COND_TMP}" <<EOF
+expression: resource.matchTag("${PROJECT_ID}/${BIOAF_TAG_KEY}", "${BIOAF_TAG_VALUE}")
+title: bioaf_managed_clusters_only
+description: bioaf_managed_clusters_only
+EOF
+
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${APP_SA_EMAIL}" \
     --role="roles/container.admin" \
-    --condition="expression=resource.matchTag(\"${PROJECT_ID}/${BIOAF_TAG_KEY}\", \"${BIOAF_TAG_VALUE}\"),title=bioaf_managed_clusters_only,description=bioaf_managed_clusters_only" \
+    --condition-from-file="${TAG_COND_TMP}" \
     --quiet >/dev/null
+rm -f "${TAG_COND_TMP}"
 
 # 8. Resource-scoped tokenCreator on bioaf-bootstrap only.
 gcloud iam service-accounts add-iam-policy-binding "${BOOTSTRAP_SA_EMAIL}" \
