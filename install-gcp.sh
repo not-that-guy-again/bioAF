@@ -706,53 +706,18 @@ fi
 # ---------------------------------------------------------------------------
 if [ -n "$VM_IP" ]; then
     echo ""
-    bold "Waiting for VM to be ready..."
+    bold "Waiting for VM to finish booting..."
     echo ""
-
-    # Phase 1: wait for SSH (port 22)
-    printf "  Waiting for SSH"
-    ssh_retries=30
-    while [ $ssh_retries -gt 0 ]; do
-        if gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" \
-            --command="echo ok" --quiet --ssh-flag="-o ConnectTimeout=5" \
-            --ssh-flag="-o StrictHostKeyChecking=no" 2>/dev/null | grep -q "ok"; then
-            break
-        fi
-        printf "."
-        sleep 5
-        ssh_retries=$((ssh_retries - 1))
-    done
-    echo ""
-
-    if [ $ssh_retries -eq 0 ]; then
-        yellow "  SSH did not become ready within the timeout."
-        yellow "  The VM may still be booting. Try connecting manually."
-    else
-        green "  SSH is ready."
-
-        # Phase 2: wait for Docker Compose to be installed by the startup script
-        printf "  Waiting for Docker"
-        docker_retries=30
-        while [ $docker_retries -gt 0 ]; do
-            if gcloud compute ssh "$VM_NAME" --zone="$ZONE" --project="$PROJECT_ID" \
-                --command="docker compose version" --quiet \
-                --ssh-flag="-o ConnectTimeout=5" \
-                --ssh-flag="-o StrictHostKeyChecking=no" 2>/dev/null | grep -q "Docker Compose"; then
-                break
-            fi
-            printf "."
-            sleep 5
-            docker_retries=$((docker_retries - 1))
-        done
-        echo ""
-
-        if [ $docker_retries -eq 0 ]; then
-            yellow "  Docker did not finish installing within the timeout."
-            yellow "  It may still be running. Check after connecting."
-        else
-            green "  Docker is ready."
-        fi
-    fi
+    # Fixed 2-minute wait. The previous SSH/Docker liveness probes each
+    # forked a fresh ssh process and prompted for the user's
+    # ~/.ssh/google_compute_engine passphrase up to three times. A flat
+    # sleep is generous enough for both sshd and the Docker startup-script
+    # to come up on an e2-medium and avoids the prompts entirely.
+    echo "  Sleeping 120s to let sshd start and the Docker startup script run."
+    echo "  (If you've already added your GCE SSH key to ssh-agent, you can"
+    echo "  Ctrl-C this wait and connect immediately.)"
+    sleep 120
+    green "  VM should be ready."
 fi
 
 # ---------------------------------------------------------------------------
