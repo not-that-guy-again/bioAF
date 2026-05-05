@@ -9,8 +9,6 @@ Covers:
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services import sheets_reader_sa_service
 
 
@@ -25,16 +23,11 @@ def test_load_primary_credentials_prefers_bootstrap_sa_email():
     fake_source = MagicMock(name="adc")
     with (
         patch("google.auth.default", return_value=(fake_source, "my-project")),
-        patch(
-            "google.auth.impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("google.auth.impersonated_credentials.Credentials") as imp_cls,
     ):
         sheets_reader_sa_service._load_primary_credentials(config)
         imp_cls.assert_called_once()
-        assert (
-            imp_cls.call_args.kwargs["target_principal"]
-            == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
-        )
+        assert imp_cls.call_args.kwargs["target_principal"] == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
 
 
 def test_load_primary_credentials_falls_back_to_service_account_email():
@@ -47,15 +40,10 @@ def test_load_primary_credentials_falls_back_to_service_account_email():
     fake_source = MagicMock(name="adc")
     with (
         patch("google.auth.default", return_value=(fake_source, "my-project")),
-        patch(
-            "google.auth.impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("google.auth.impersonated_credentials.Credentials") as imp_cls,
     ):
         sheets_reader_sa_service._load_primary_credentials(config)
-        assert (
-            imp_cls.call_args.kwargs["target_principal"]
-            == "legacy-sa@my-project.iam.gserviceaccount.com"
-        )
+        assert imp_cls.call_args.kwargs["target_principal"] == "legacy-sa@my-project.iam.gserviceaccount.com"
 
 
 def test_load_primary_credentials_raw_adc_when_no_email():
@@ -66,9 +54,7 @@ def test_load_primary_credentials_raw_adc_when_no_email():
     fake_source = MagicMock(name="adc")
     with (
         patch("google.auth.default", return_value=(fake_source, "my-project")),
-        patch(
-            "google.auth.impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("google.auth.impersonated_credentials.Credentials") as imp_cls,
     ):
         creds, project = sheets_reader_sa_service._load_primary_credentials(config)
         imp_cls.assert_not_called()

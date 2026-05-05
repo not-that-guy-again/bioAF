@@ -18,10 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("bioaf.bootstrap_metadata")
 
-_METADATA_URL = (
-    "http://metadata.google.internal/computeMetadata/v1/instance/attributes/"
-    "bioaf_bootstrap_sa_email"
-)
+_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/bioaf_bootstrap_sa_email"
 _METADATA_TIMEOUT_SECONDS = 2.0
 
 
@@ -45,9 +42,7 @@ async def persist_bootstrap_sa_from_metadata(session: AsyncSession) -> bool:
     Idempotent: leaves an existing row untouched.
     """
     existing = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'")
-        )
+        await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'"))
     ).scalar()
     if existing:
         return True

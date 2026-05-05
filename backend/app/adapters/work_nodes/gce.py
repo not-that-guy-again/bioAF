@@ -349,14 +349,10 @@ class GCEWorkNodeProvider(WorkNodeProvider):
         # gcp_service_account_email field is now used for bioaf-bootstrap
         # impersonation, NOT for VM identity, so it is intentionally not
         # consulted here.
-        sa_email = (
-            vm_spec.get("service_account_email")
-            or cfg.get("notebook_runner_sa_email", "")
-        )
+        sa_email = vm_spec.get("service_account_email") or cfg.get("notebook_runner_sa_email", "")
         if not sa_email:
             raise ValueError(
-                "No service account configured for work node -- "
-                "set notebook_runner_sa_email in admin settings"
+                "No service account configured for work node -- set notebook_runner_sa_email in admin settings"
             )
 
         credentials = self._get_gcp_credentials()

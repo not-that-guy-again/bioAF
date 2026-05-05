@@ -55,7 +55,7 @@ def _bucket_blocks(text: str) -> list[str]:
     return blocks
 
 
-_NAME_RE = re.compile(r'^\s*name\s*=\s*(.+?)\s*$', re.MULTILINE)
+_NAME_RE = re.compile(r"^\s*name\s*=\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _bucket_name_literal(block: str) -> str | None:
@@ -99,9 +99,8 @@ def test_every_google_storage_bucket_name_starts_with_bioaf():
             elif "bioaf" not in stripped:
                 failures.append((path, literal))
 
-    assert not failures, (
-        "google_storage_bucket resources missing the bioaf- prefix:\n"
-        + "\n".join(f"  {p}: {n}" for p, n in failures)
+    assert not failures, "google_storage_bucket resources missing the bioaf- prefix:\n" + "\n".join(
+        f"  {p}: {n}" for p, n in failures
     )
 
 

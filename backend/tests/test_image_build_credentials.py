@@ -45,10 +45,7 @@ async def test_notebook_image_get_credentials_uses_injector(session):
     mock_loader.assert_called_once()
     call_config = mock_loader.call_args.args[0]
     assert call_config["gcp_credential_source"] == "vm_default"
-    assert (
-        call_config["gcp_bootstrap_sa_email"]
-        == "bioaf-bootstrap@test.iam.gserviceaccount.com"
-    )
+    assert call_config["gcp_bootstrap_sa_email"] == "bioaf-bootstrap@test.iam.gserviceaccount.com"
 
 
 @pytest.mark.asyncio
@@ -73,10 +70,7 @@ async def test_notebook_image_get_credentials_passes_legacy_fallback(session):
 async def test_cellxgene_image_uses_notebook_image_credentials(session):
     """cellxgene_image_service reuses the notebook helper rather than duplicating it."""
     # The function should be the same object (re-exported import)
-    assert (
-        cellxgene_image_service._get_credentials
-        is notebook_image_service._get_credentials
-    )
+    assert cellxgene_image_service._get_credentials is notebook_image_service._get_credentials
 
 
 @pytest.mark.asyncio
@@ -84,7 +78,4 @@ async def test_environment_build_inherits_credentials_fix(session):
     """environment_build_service imports _get_credentials from notebook_image_service."""
     from app.services import environment_build_service
 
-    assert (
-        environment_build_service._get_credentials
-        is notebook_image_service._get_credentials
-    )
+    assert environment_build_service._get_credentials is notebook_image_service._get_credentials

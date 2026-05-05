@@ -79,32 +79,44 @@ _PROBE_SPLIT = _MANIFEST.get("probe_split", {}) or {}
 
 # Permission ownership for the dual-SA probe. Defaults preserve behavior if
 # the manifest is missing in test environments that don't ship the file.
-_APP_PERMS: list[str] = list(_PROBE_SPLIT.get("app", []) or [
-    "iam.serviceAccounts.actAs",
-    "compute.instances.create",
-    "bigquery.jobs.create",
-    "logging.logEntries.create",
-])
-_BOOTSTRAP_PERMS: list[str] = list(_PROBE_SPLIT.get("bootstrap", []) or [
-    "pubsub.topics.create",
-    "pubsub.topics.getIamPolicy",
-    "pubsub.topics.setIamPolicy",
-    "container.clusters.create",
-    "iam.serviceAccounts.create",
-    "iam.serviceAccounts.setIamPolicy",
-    "resourcemanager.projects.setIamPolicy",
-    "artifactregistry.repositories.create",
-    "cloudbuild.builds.create",
-    "serviceusage.services.enable",
-])
-_SHARED_PERMS: list[str] = list(_PROBE_SPLIT.get("shared", []) or [
-    "storage.buckets.create",
-    "resourcemanager.projects.getIamPolicy",
-])
-_DROPPED_PERMS: list[str] = list(_MANIFEST.get("dropped", []) or [
-    "iam.serviceAccountKeys.create",
-    "bigquery.datasets.create",
-])
+_APP_PERMS: list[str] = list(
+    _PROBE_SPLIT.get("app", [])
+    or [
+        "iam.serviceAccounts.actAs",
+        "compute.instances.create",
+        "bigquery.jobs.create",
+        "logging.logEntries.create",
+    ]
+)
+_BOOTSTRAP_PERMS: list[str] = list(
+    _PROBE_SPLIT.get("bootstrap", [])
+    or [
+        "pubsub.topics.create",
+        "pubsub.topics.getIamPolicy",
+        "pubsub.topics.setIamPolicy",
+        "container.clusters.create",
+        "iam.serviceAccounts.create",
+        "iam.serviceAccounts.setIamPolicy",
+        "resourcemanager.projects.setIamPolicy",
+        "artifactregistry.repositories.create",
+        "cloudbuild.builds.create",
+        "serviceusage.services.enable",
+    ]
+)
+_SHARED_PERMS: list[str] = list(
+    _PROBE_SPLIT.get("shared", [])
+    or [
+        "storage.buckets.create",
+        "resourcemanager.projects.getIamPolicy",
+    ]
+)
+_DROPPED_PERMS: list[str] = list(
+    _MANIFEST.get("dropped", [])
+    or [
+        "iam.serviceAccountKeys.create",
+        "bigquery.datasets.create",
+    ]
+)
 
 # Per-SA role lists for UI guidance.
 BOOTSTRAP_ROLES: list[str] = [r["role"] for r in (_MANIFEST.get("bootstrap") or [])] or [
@@ -136,9 +148,7 @@ APP_ROLES: list[str] = [a["role"] for a in (_MANIFEST.get("app") or [])] or [
 
 # Backwards-compatible deduplicated list of all roles used by the legacy
 # single-SA path. Frontend code that expects a single list keeps working.
-RECOMMENDED_ROLES: list[str] = list(
-    dict.fromkeys([*_PERMISSION_ROLE_MAP.values(), "roles/viewer"])
-)
+RECOMMENDED_ROLES: list[str] = list(dict.fromkeys([*_PERMISSION_ROLE_MAP.values(), "roles/viewer"]))
 
 _SKIP_CREDS = "Skipped: credentials failed to load"
 _SKIP_PROJECT = "Skipped: project not accessible"
@@ -226,9 +236,7 @@ def validate_gcp_credentials(
     try:
         if credential_source == "service_account_key":
             key_data = json.loads(service_account_key or "")
-            legacy_creds = service_account.Credentials.from_service_account_info(
-                key_data, scopes=_GCP_SCOPES
-            )
+            legacy_creds = service_account.Credentials.from_service_account_info(key_data, scopes=_GCP_SCOPES)
             primary_creds = legacy_creds
             msg = "Credentials loaded successfully"
         else:
@@ -369,9 +377,7 @@ def validate_gcp_credentials(
         bootstrap_perms = _BOOTSTRAP_PERMS + _SHARED_PERMS
 
         granted_app, app_details, app_err = _probe_permissions(app_creds, project_id, app_perms)
-        granted_boot, boot_details, boot_err = _probe_permissions(
-            bootstrap_creds, project_id, bootstrap_perms
-        )
+        granted_boot, boot_details, boot_err = _probe_permissions(bootstrap_creds, project_id, bootstrap_perms)
 
         app_missing = [p for p in app_perms if p not in granted_app]
         boot_missing = [p for p in bootstrap_perms if p not in granted_boot]
@@ -426,9 +432,7 @@ def validate_gcp_credentials(
             if not app_probe.passed:
                 parts.append(f"bioaf-app: {app_err or 'missing ' + ', '.join(app_missing)}")
             if not bootstrap_probe.passed:
-                parts.append(
-                    f"bioaf-bootstrap: {boot_err or 'missing ' + ', '.join(boot_missing)}"
-                )
+                parts.append(f"bioaf-bootstrap: {boot_err or 'missing ' + ', '.join(boot_missing)}")
             checks.append(
                 GCPValidationCheck(
                     name="iam_permissions",
@@ -444,9 +448,7 @@ def validate_gcp_credentials(
         permission_details = details
         missing = [p for p in all_perms if p not in granted]
         if err:
-            checks.append(
-                GCPValidationCheck(name="iam_permissions", passed=False, message=err)
-            )
+            checks.append(GCPValidationCheck(name="iam_permissions", passed=False, message=err))
         elif missing:
             checks.append(
                 GCPValidationCheck(

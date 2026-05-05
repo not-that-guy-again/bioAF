@@ -1337,10 +1337,7 @@ async def test_read_gcp_config_includes_bootstrap_sa_email(session):
     await session.commit()
 
     config = await TerraformExecutor._read_gcp_config(session)
-    assert (
-        config.get("gcp_bootstrap_sa_email")
-        == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
-    )
+    assert config.get("gcp_bootstrap_sa_email") == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
 
 
 @pytest.mark.asyncio
@@ -1371,7 +1368,6 @@ async def test_run_plan_passes_bootstrap_sa_email_to_build_env(session):
         return _mock_subprocess_run(_make_plan_output(1))
 
     captured_configs: list[dict] = []
-    real_build_env = TerraformExecutor.__dict__  # placeholder to satisfy linter
 
     async def spy_build_env(config):
         captured_configs.append(dict(config))
@@ -1398,7 +1394,4 @@ async def test_run_plan_passes_bootstrap_sa_email_to_build_env(session):
     assert captured_configs, "build_env should have been called at least once"
     cfg = captured_configs[0]
     assert cfg.get("gcp_credential_source") == "vm_default"
-    assert (
-        cfg.get("gcp_bootstrap_sa_email")
-        == "bioaf-bootstrap@test-project.iam.gserviceaccount.com"
-    )
+    assert cfg.get("gcp_bootstrap_sa_email") == "bioaf-bootstrap@test-project.iam.gserviceaccount.com"

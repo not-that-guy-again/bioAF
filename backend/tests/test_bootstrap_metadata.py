@@ -21,11 +21,7 @@ async def test_persist_skipped_when_metadata_unreachable(session):
     ):
         ok = await persist_bootstrap_sa_from_metadata(session)
     assert ok is False
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'")
-        )
-    ).scalar()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'"))).scalar()
     assert row is None
 
 
@@ -38,11 +34,7 @@ async def test_persist_writes_value_from_metadata(session):
     ):
         ok = await persist_bootstrap_sa_from_metadata(session)
     assert ok is True
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'")
-        )
-    ).scalar()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'"))).scalar()
     assert row == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
 
 
@@ -66,9 +58,5 @@ async def test_persist_does_not_overwrite_existing_value(session):
     # Reader is not invoked because the row already exists.
     mock_reader.assert_not_called()
     assert ok is True
-    row = (
-        await session.execute(
-            text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'")
-        )
-    ).scalar()
+    row = (await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_bootstrap_sa_email'"))).scalar()
     assert row == "manual-override@my-project.iam.gserviceaccount.com"

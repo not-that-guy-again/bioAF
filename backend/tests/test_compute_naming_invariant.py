@@ -47,9 +47,8 @@ def test_every_compute_instance_name_assignment_starts_with_bioaf():
             if not _value_starts_with_bioaf(m.group("value")):
                 failures.append((path, m.group(0)))
 
-    assert not failures, (
-        "Compute instance names must start with 'bioaf-':\n"
-        + "\n".join(f"  {p}: {line}" for p, line in failures)
+    assert not failures, "Compute instance names must start with 'bioaf-':\n" + "\n".join(
+        f"  {p}: {line}" for p, line in failures
     )
 
 

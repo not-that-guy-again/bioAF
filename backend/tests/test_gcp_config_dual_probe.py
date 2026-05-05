@@ -97,14 +97,12 @@ def test_vm_default_dual_probe_both_pass(
 
     mock_rm.ProjectsClient.return_value.get_project.return_value = MagicMock()
     # testIamPermissions echoes back whatever permissions were asked.
-    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = (
-        lambda resource, permissions: _mock_iam_response(list(permissions))
+    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = lambda resource, permissions: (
+        _mock_iam_response(list(permissions))
     )
     mock_storage.Client.return_value.list_buckets.return_value = []
     mock_gke.ClusterManagerClient.return_value.list_clusters.return_value = MagicMock()
-    mock_su.ServiceUsageClient.return_value.list_services.return_value = (
-        _mock_enabled_services(ALL_REQUIRED_APIS)
-    )
+    mock_su.ServiceUsageClient.return_value.list_services.return_value = _mock_enabled_services(ALL_REQUIRED_APIS)
 
     result = validate_gcp_credentials(
         project_id="my-project",
@@ -155,14 +153,10 @@ def test_vm_default_dual_probe_app_missing_permission(
         return _mock_iam_response(perms)
 
     mock_rm.ProjectsClient.return_value.get_project.return_value = MagicMock()
-    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = (
-        fake_test_iam_permissions
-    )
+    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = fake_test_iam_permissions
     mock_storage.Client.return_value.list_buckets.return_value = []
     mock_gke.ClusterManagerClient.return_value.list_clusters.return_value = MagicMock()
-    mock_su.ServiceUsageClient.return_value.list_services.return_value = (
-        _mock_enabled_services(ALL_REQUIRED_APIS)
-    )
+    mock_su.ServiceUsageClient.return_value.list_services.return_value = _mock_enabled_services(ALL_REQUIRED_APIS)
 
     result = validate_gcp_credentials(
         project_id="my-project",
@@ -206,14 +200,10 @@ def test_vm_default_dual_probe_bootstrap_missing_permission(
         return _mock_iam_response(perms)
 
     mock_rm.ProjectsClient.return_value.get_project.return_value = MagicMock()
-    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = (
-        fake_test_iam_permissions
-    )
+    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = fake_test_iam_permissions
     mock_storage.Client.return_value.list_buckets.return_value = []
     mock_gke.ClusterManagerClient.return_value.list_clusters.return_value = MagicMock()
-    mock_su.ServiceUsageClient.return_value.list_services.return_value = (
-        _mock_enabled_services(ALL_REQUIRED_APIS)
-    )
+    mock_su.ServiceUsageClient.return_value.list_services.return_value = _mock_enabled_services(ALL_REQUIRED_APIS)
 
     result = validate_gcp_credentials(
         project_id="my-project",
@@ -234,21 +224,17 @@ def test_vm_default_dual_probe_bootstrap_missing_permission(
 @patch("app.services.gcp_config.storage")
 @patch("app.services.gcp_config.resourcemanager_v3")
 @patch("app.services.gcp_config.service_account")
-def test_service_account_key_mode_skips_dual_probe(
-    mock_sa, mock_rm, mock_storage, mock_gke, mock_su
-):
+def test_service_account_key_mode_skips_dual_probe(mock_sa, mock_rm, mock_storage, mock_gke, mock_su):
     """Legacy key mode keeps the single-probe code path; probe sub-results stay None."""
     mock_creds = MagicMock()
     mock_sa.Credentials.from_service_account_info.return_value = mock_creds
     mock_rm.ProjectsClient.return_value.get_project.return_value = MagicMock()
-    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = (
-        lambda resource, permissions: _mock_iam_response(list(permissions))
+    mock_rm.ProjectsClient.return_value.test_iam_permissions.side_effect = lambda resource, permissions: (
+        _mock_iam_response(list(permissions))
     )
     mock_storage.Client.return_value.list_buckets.return_value = []
     mock_gke.ClusterManagerClient.return_value.list_clusters.return_value = MagicMock()
-    mock_su.ServiceUsageClient.return_value.list_services.return_value = (
-        _mock_enabled_services(ALL_REQUIRED_APIS)
-    )
+    mock_su.ServiceUsageClient.return_value.list_services.return_value = _mock_enabled_services(ALL_REQUIRED_APIS)
 
     import json as _json
 

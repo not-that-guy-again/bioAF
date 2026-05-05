@@ -142,9 +142,7 @@ async def validate_gcp_config(
 
     credential_source = config.get("gcp_credential_source", "vm_default")
     # Prefer the new bootstrap key; fall back to legacy email for backward compat.
-    impersonation_target = (
-        config.get("gcp_bootstrap_sa_email") or config.get("gcp_service_account_email") or ""
-    )
+    impersonation_target = config.get("gcp_bootstrap_sa_email") or config.get("gcp_service_account_email") or ""
 
     sa_key_row = (
         await session.execute(text("SELECT value FROM platform_config WHERE key='gcp_service_account_key'"))

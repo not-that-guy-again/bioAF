@@ -87,11 +87,7 @@ def test_work_node_sa_resolution_drops_legacy_email_fallback():
     }
     vm_spec: dict = {}
 
-    sa_email = (
-        vm_spec.get("service_account_email")
-        or cfg.get("notebook_runner_sa_email")
-        or None
-    )
+    sa_email = vm_spec.get("service_account_email") or cfg.get("notebook_runner_sa_email") or None
     # Helper mirrors the adapter logic; the regression check is that the
     # third fallback (gcp_service_account_email) is NOT consulted.
     assert sa_email is None

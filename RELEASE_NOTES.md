@@ -20,8 +20,8 @@ unchanged. The full design is in
   Impersonated by Terraform, Sheets reader provisioning, and the
   notebook/cellxgene/environment image-build services.
 - New `bioaf-app` SA is attached to the GCE VM and holds a small set of
-  scoped roles: `roles/storage.admin` (bioaf-* buckets only),
-  `compute.instanceAdmin.v1` (bioaf-* VMs only), `container.admin`
+  scoped roles: `roles/storage.admin` (`bioaf-*` buckets only),
+  `compute.instanceAdmin.v1` (`bioaf-*` VMs only), `container.admin`
   (resources tagged `bioaf-managed=true`), the project-scoped custom
   role `bioafSaManager`, plus `roles/iam.serviceAccountTokenCreator`
   resource-scoped to `bioaf-bootstrap` only.

@@ -138,9 +138,7 @@ def test_load_gcp_credentials_vm_default_uses_bootstrap_sa_email():
             "app.services.credential_injector._google_auth.default",
             return_value=(fake_source, "my-project"),
         ),
-        patch(
-            "app.services.credential_injector._impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("app.services.credential_injector._impersonated_credentials.Credentials") as imp_cls,
     ):
         load_gcp_credentials(config)
         imp_cls.assert_called_once()
@@ -161,16 +159,11 @@ def test_load_gcp_credentials_vm_default_falls_back_to_service_account_email():
             "app.services.credential_injector._google_auth.default",
             return_value=(fake_source, "my-project"),
         ),
-        patch(
-            "app.services.credential_injector._impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("app.services.credential_injector._impersonated_credentials.Credentials") as imp_cls,
     ):
         load_gcp_credentials(config)
         imp_cls.assert_called_once()
-        assert (
-            imp_cls.call_args.kwargs["target_principal"]
-            == "legacy-sa@my-project.iam.gserviceaccount.com"
-        )
+        assert imp_cls.call_args.kwargs["target_principal"] == "legacy-sa@my-project.iam.gserviceaccount.com"
 
 
 def test_load_gcp_credentials_vm_default_prefers_bootstrap_over_legacy():
@@ -186,15 +179,10 @@ def test_load_gcp_credentials_vm_default_prefers_bootstrap_over_legacy():
             "app.services.credential_injector._google_auth.default",
             return_value=(fake_source, "my-project"),
         ),
-        patch(
-            "app.services.credential_injector._impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("app.services.credential_injector._impersonated_credentials.Credentials") as imp_cls,
     ):
         load_gcp_credentials(config)
-        assert (
-            imp_cls.call_args.kwargs["target_principal"]
-            == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
-        )
+        assert imp_cls.call_args.kwargs["target_principal"] == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
 
 
 def test_load_gcp_credentials_vm_default_no_emails_returns_raw_adc():
@@ -206,9 +194,7 @@ def test_load_gcp_credentials_vm_default_no_emails_returns_raw_adc():
             "app.services.credential_injector._google_auth.default",
             return_value=(fake_source, "my-project"),
         ),
-        patch(
-            "app.services.credential_injector._impersonated_credentials.Credentials"
-        ) as imp_cls,
+        patch("app.services.credential_injector._impersonated_credentials.Credentials") as imp_cls,
     ):
         result = load_gcp_credentials(config)
         imp_cls.assert_not_called()
