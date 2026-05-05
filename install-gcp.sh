@@ -229,6 +229,24 @@ fi
 echo ""
 bold "Step 2: Google Cloud Authentication"
 
+# A "current account" only means a row exists in the auth list; the access
+# and refresh tokens may still be expired. Verify both, and force a fresh
+# login on failure -- this is much friendlier than letting a downstream
+# gcloud command die with "Reauthentication failed".
+verify_credentials_or_relogin() {
+    local label="$1"
+    if gcloud auth print-access-token --quiet >/dev/null 2>&1; then
+        return 0
+    fi
+    yellow "  ${label} -- credentials appear expired."
+    echo "  Opening browser to re-authenticate..."
+    gcloud auth login
+    if ! gcloud auth print-access-token --quiet >/dev/null 2>&1; then
+        red "  Re-authentication did not produce a working token. Aborting."
+        exit 1
+    fi
+}
+
 # Check if already authenticated
 current_account=$(gcloud config get-value account 2>/dev/null || true)
 if [ -n "$current_account" ] && [ "$current_account" != "(unset)" ]; then
@@ -242,6 +260,7 @@ else
     echo "  Opening browser for Google sign-in..."
     gcloud auth login
 fi
+verify_credentials_or_relogin "Cached login for $(gcloud config get-value account 2>/dev/null)"
 green "  Authenticated as: $(gcloud config get-value account 2>/dev/null)"
 
 # ---------------------------------------------------------------------------
@@ -252,7 +271,10 @@ bold "Step 3: Select GCP Project"
 echo ""
 echo "  Your available projects:"
 echo ""
-gcloud projects list --format="table(projectId, name)" 2>/dev/null || true
+if ! gcloud projects list --format="table(projectId, name)"; then
+    red "  Failed to list projects. The auth token may have expired."
+    exit 1
+fi
 echo ""
 
 current_project=$(gcloud config get-value project 2>/dev/null || true)
@@ -273,7 +295,10 @@ if [ -z "$PROJECT_ID" ]; then
     exit 1
 fi
 
-gcloud config set project "$PROJECT_ID" 2>/dev/null
+if ! gcloud config set project "$PROJECT_ID"; then
+    red "  Failed to set project to $PROJECT_ID."
+    exit 1
+fi
 green "  Using project: $PROJECT_ID"
 
 # Verify billing is enabled
