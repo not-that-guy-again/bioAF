@@ -34,7 +34,27 @@ _GCP_KEYS = [
     "gcp_credential_source",
     "gcp_service_account_key",
     "gcp_service_account_email",
+    "gcp_bootstrap_sa_email",
 ]
+
+
+def _format_keys_create_error(exc: BaseException) -> str:
+    """Translate keys.create failures into a human-friendly message.
+
+    The org policy `iam.disableServiceAccountKeyCreation` is the default on
+    new GCP projects. When it is enforced, key creation fails with a
+    FailedPrecondition mentioning that constraint. Surface a clear message
+    instead of leaking the raw stack trace into the UI.
+    """
+    raw = str(exc)
+    needle = "iam.disableServiceAccountKeyCreation"
+    if needle in raw or "FailedPrecondition" in raw and "Key creation" in raw:
+        return (
+            "Sheets integration is not available on this project because the "
+            "org policy disables service account key creation "
+            f"({needle}). See documentation for the keyless workaround."
+        )
+    return raw
 
 
 async def _upsert(session: AsyncSession, key: str, value: str) -> None:
@@ -84,7 +104,7 @@ def _load_primary_credentials(config: dict[str, str]) -> tuple[object, str]:
         import google.auth as _google_auth
 
         creds, _ = _google_auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        sa_email = config.get("gcp_service_account_email")
+        sa_email = config.get("gcp_bootstrap_sa_email") or config.get("gcp_service_account_email")
         if sa_email:
             from google.auth import impersonated_credentials
 
@@ -165,7 +185,7 @@ async def create_reader_sa(session: AsyncSession) -> dict[str, str]:
             if attempt < 4 and ("404" in str(exc) or "does not exist" in str(exc).lower()):
                 time.sleep(2 * (attempt + 1))
                 continue
-            raise
+            raise RuntimeError(_format_keys_create_error(exc)) from exc
 
     if key_response is None:
         raise RuntimeError(f"Failed to create key for {sa_email} after retries")
