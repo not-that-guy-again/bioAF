@@ -14,9 +14,10 @@
 #   3. Selects or creates a GCP project
 #   4. Enables required APIs
 #   5. Creates a firewall rule for web traffic (ports 80, 443)
-#   6. Creates a VM to host bioAF
-#   7. Optionally creates a service account and JSON key
-#   8. Prints the SSH command and next steps
+#   6. Creates the bioaf-managed Resource Manager tag and a custom IAM role
+#   7. Creates the bioaf-bootstrap and bioaf-app service accounts (no keys)
+#   8. Creates a VM with bioaf-app attached and the bootstrap email in metadata
+#   9. Prints the SSH command and next steps
 #
 # What this script does NOT do:
 #   - Store any passwords or credentials
@@ -93,15 +94,27 @@ REQUIRED_APIS=(
     "logging.googleapis.com"
 )
 
-# Service account roles required by the bioAF setup wizard.
-# Must match RECOMMENDED_ROLES in backend/app/services/gcp_config.py.
-SA_ROLES=(
+# SA hardening (see documentation/sa-hardening/03-consolidated-plan.md):
+# - bioaf-bootstrap holds the broad project-level roles. Impersonated by
+#   bioaf-app via roles/iam.serviceAccountTokenCreator on bioaf-bootstrap only.
+# - bioaf-app is attached to the GCE VM and holds a small set of scoped
+#   roles. Storage / SAs / compute scoping uses IAM Conditions on resource
+#   names; container.admin uses a Resource Manager tag; pubsub.subscriber
+#   and secretmanager.secretAccessor use per-resource bindings created by
+#   Terraform.
+# Must match installer/roles_manifest.yaml.
+BOOTSTRAP_SA_NAME="bioaf-bootstrap"
+APP_SA_NAME="bioaf-app"
+BIOAF_TAG_KEY="bioaf-managed"
+BIOAF_TAG_VALUE="true"
+BIOAFSAMANAGER_ROLE_ID="bioafSaManager"
+
+BOOTSTRAP_ROLES=(
     "roles/storage.admin"
     "roles/pubsub.admin"
     "roles/container.admin"
     "roles/iam.serviceAccountUser"
     "roles/iam.serviceAccountAdmin"
-    "roles/iam.serviceAccountKeyAdmin"
     "roles/compute.admin"
     "roles/resourcemanager.projectIamAdmin"
     "roles/bigquery.dataEditor"
@@ -110,6 +123,15 @@ SA_ROLES=(
     "roles/logging.logWriter"
     "roles/serviceusage.serviceUsageAdmin"
     "roles/viewer"
+)
+
+# bioaf-app: unconditioned bindings (low blast radius / read-only).
+APP_UNCONDITIONED_ROLES=(
+    "roles/logging.logWriter"
+    "roles/browser"
+    "roles/serviceusage.serviceUsageViewer"
+    "roles/secretmanager.viewer"
+    "roles/bigquery.jobUser"
 )
 
 # ---------------------------------------------------------------------------
@@ -128,8 +150,8 @@ echo "  2. Authenticate your Google account"
 echo "  3. Select your GCP project"
 echo "  4. Enable required GCP APIs"
 echo "  5. Create a firewall rule for web traffic (ports 80, 443)"
-echo "  6. Create an e2-medium VM with Ubuntu 22.04 (30GB disk)"
-echo "  7. Optionally create a service account for bioAF"
+echo "  6. Create two scoped service accounts (no JSON keys are downloaded)"
+echo "  7. Create an e2-medium VM with Ubuntu 22.04 (30GB disk)"
 echo ""
 echo "Estimated monthly cost: ~\$27/month for the VM + disk."
 echo "You can stop the VM at any time to pause billing."
@@ -330,6 +352,143 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Step 7a: Service accounts (bioaf-bootstrap + bioaf-app) and tag
+# ---------------------------------------------------------------------------
+echo ""
+bold "Step 7a: Service accounts and tag"
+echo ""
+echo "  Creating two scoped SAs (no JSON keys are generated):"
+echo "    - bioaf-app:       attached to the VM as the runtime data plane"
+echo "    - bioaf-bootstrap: impersonated for IAM/Terraform/Cloud Build"
+echo ""
+
+BOOTSTRAP_SA_EMAIL="${BOOTSTRAP_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+APP_SA_EMAIL="${APP_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+# 1. Resource Manager tag (project-scoped). Idempotent.
+if ! gcloud resource-manager tags keys describe "${PROJECT_ID}/${BIOAF_TAG_KEY}" \
+        --quiet >/dev/null 2>&1; then
+    echo "  Creating tag key ${BIOAF_TAG_KEY}..."
+    gcloud resource-manager tags keys create "${BIOAF_TAG_KEY}" \
+        --parent="projects/${PROJECT_ID}" \
+        --description="Marks resources managed by bioAF" \
+        --quiet || yellow "  Tag key creation returned non-zero (may already exist)."
+fi
+
+if ! gcloud resource-manager tags values describe "${PROJECT_ID}/${BIOAF_TAG_KEY}/${BIOAF_TAG_VALUE}" \
+        --quiet >/dev/null 2>&1; then
+    echo "  Creating tag value ${BIOAF_TAG_VALUE}..."
+    gcloud resource-manager tags values create "${BIOAF_TAG_VALUE}" \
+        --parent="${PROJECT_ID}/${BIOAF_TAG_KEY}" \
+        --description="bioAF-owned resource" \
+        --quiet || yellow "  Tag value creation returned non-zero (may already exist)."
+fi
+
+# 2. Custom IAM role bioafSaManager (project-scoped). Idempotent.
+if gcloud iam roles describe "${BIOAFSAMANAGER_ROLE_ID}" --project="${PROJECT_ID}" \
+        --quiet >/dev/null 2>&1; then
+    echo "  Custom role ${BIOAFSAMANAGER_ROLE_ID} already exists."
+else
+    echo "  Creating custom role ${BIOAFSAMANAGER_ROLE_ID}..."
+    gcloud iam roles create "${BIOAFSAMANAGER_ROLE_ID}" \
+        --project="${PROJECT_ID}" \
+        --title="bioAF SA Manager" \
+        --description="Lookup/list/delete bioAF-prefixed service accounts" \
+        --permissions="iam.serviceAccounts.get,iam.serviceAccounts.list,iam.serviceAccounts.delete" \
+        --stage=GA \
+        --quiet
+fi
+
+# 3. Create bioaf-bootstrap (idempotent).
+if gcloud iam service-accounts describe "${BOOTSTRAP_SA_EMAIL}" \
+        --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+    echo "  ${BOOTSTRAP_SA_NAME} already exists."
+else
+    gcloud iam service-accounts create "${BOOTSTRAP_SA_NAME}" \
+        --project="${PROJECT_ID}" \
+        --display-name="bioAF Bootstrap" \
+        --description="Impersonated by bioAF backend for IAM/Terraform/Cloud Build" \
+        --quiet
+    green "  Created ${BOOTSTRAP_SA_NAME}."
+fi
+
+# 4. Create bioaf-app (idempotent).
+if gcloud iam service-accounts describe "${APP_SA_EMAIL}" \
+        --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+    echo "  ${APP_SA_NAME} already exists."
+else
+    gcloud iam service-accounts create "${APP_SA_NAME}" \
+        --project="${PROJECT_ID}" \
+        --display-name="bioAF Application" \
+        --description="Attached to the bioAF VM; runtime data-plane SA" \
+        --quiet
+    green "  Created ${APP_SA_NAME}."
+fi
+
+# 5. Grant the broad set to bioaf-bootstrap.
+echo "  Granting project roles to ${BOOTSTRAP_SA_NAME}..."
+for role in "${BOOTSTRAP_ROLES[@]}"; do
+    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+        --member="serviceAccount:${BOOTSTRAP_SA_EMAIL}" \
+        --role="${role}" \
+        --condition=None \
+        --quiet >/dev/null
+done
+
+# 6. Grant the unconditioned bindings to bioaf-app.
+echo "  Granting unconditioned project roles to ${APP_SA_NAME}..."
+for role in "${APP_UNCONDITIONED_ROLES[@]}"; do
+    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+        --member="serviceAccount:${APP_SA_EMAIL}" \
+        --role="${role}" \
+        --condition=None \
+        --quiet >/dev/null
+done
+
+# 7. Conditioned bindings for bioaf-app.
+echo "  Granting scoped (conditioned) project roles to ${APP_SA_NAME}..."
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${APP_SA_EMAIL}" \
+    --role="roles/storage.admin" \
+    --condition='expression=resource.name.startsWith("projects/_/buckets/bioaf-"),title=bioaf_buckets_only,description=bioaf_buckets_only' \
+    --quiet >/dev/null
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${APP_SA_EMAIL}" \
+    --role="projects/${PROJECT_ID}/roles/${BIOAFSAMANAGER_ROLE_ID}" \
+    --condition="expression=resource.name.startsWith(\"projects/${PROJECT_ID}/serviceAccounts/bioaf-\"),title=bioaf_sas_only,description=bioaf_sas_only" \
+    --quiet >/dev/null
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${APP_SA_EMAIL}" \
+    --role="roles/compute.instanceAdmin.v1" \
+    --condition="expression=resource.name.matches(\"^projects/${PROJECT_ID}/zones/[^/]+/instances/bioaf-\"),title=bioaf_worknodes_only,description=bioaf_worknodes_only" \
+    --quiet >/dev/null
+
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${APP_SA_EMAIL}" \
+    --role="roles/container.admin" \
+    --condition="expression=resource.matchTag(\"${PROJECT_ID}/${BIOAF_TAG_KEY}\", \"${BIOAF_TAG_VALUE}\"),title=bioaf_managed_clusters_only,description=bioaf_managed_clusters_only" \
+    --quiet >/dev/null
+
+# 8. Resource-scoped tokenCreator on bioaf-bootstrap only.
+gcloud iam service-accounts add-iam-policy-binding "${BOOTSTRAP_SA_EMAIL}" \
+    --project="${PROJECT_ID}" \
+    --member="serviceAccount:${APP_SA_EMAIL}" \
+    --role="roles/iam.serviceAccountTokenCreator" \
+    --quiet >/dev/null
+
+# 9. tagUser on the bioaf-managed tag VALUE for bioaf-bootstrap so Terraform
+#    can attach the tag to GKE resources it creates.
+gcloud resource-manager tags values add-iam-policy-binding \
+    "${PROJECT_ID}/${BIOAF_TAG_KEY}/${BIOAF_TAG_VALUE}" \
+    --member="serviceAccount:${BOOTSTRAP_SA_EMAIL}" \
+    --role="roles/resourcemanager.tagUser" \
+    --quiet >/dev/null
+
+green "  Service accounts, tag, and IAM bindings ready."
+
+# ---------------------------------------------------------------------------
 # Step 7: Create VM
 # ---------------------------------------------------------------------------
 echo ""
@@ -405,15 +564,21 @@ else
                 --boot-disk-type=pd-ssd
                 --tags="$NETWORK_TAG"
                 --scopes=cloud-platform
+                --service-account="${APP_SA_EMAIL}"
             )
 
             if [ "$USE_PUBLIC_IP" = false ]; then
                 create_args+=(--no-address)
             fi
 
-            if gcloud compute instances create "$VM_NAME" \
-                "${create_args[@]}" \
-                --metadata=startup-script='#!/bin/bash
+            # Two metadata attributes: the Docker startup script, and the
+            # bioaf-bootstrap SA email so the backend can persist it to
+            # platform_config on first startup. The startup script is
+            # multi-line so we materialise it to a temp file and pass via
+            # --metadata-from-file alongside the inline --metadata key.
+            STARTUP_TMP="$(mktemp -t bioaf-startup-XXXXXX)"
+            cat >"${STARTUP_TMP}" <<'BIOAF_STARTUP_EOF'
+#!/bin/bash
 # Install Docker on first boot
 if ! command -v docker &>/dev/null; then
     apt-get update -qq
@@ -425,13 +590,21 @@ if ! command -v docker &>/dev/null; then
     apt-get update -qq
     apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     usermod -aG docker $(ls /home/ | head -1)
-fi' \
+fi
+BIOAF_STARTUP_EOF
+
+            if gcloud compute instances create "$VM_NAME" \
+                "${create_args[@]}" \
+                --metadata="bioaf_bootstrap_sa_email=${BOOTSTRAP_SA_EMAIL}" \
+                --metadata-from-file="startup-script=${STARTUP_TMP}" \
                 --quiet 2>&1; then
+                rm -f "${STARTUP_TMP}"
                 ZONE="$try_zone"
                 vm_created=true
                 green "  VM created in $ZONE."
                 break
             else
+                rm -f "${STARTUP_TMP}"
                 yellow "  Could not create VM in $try_zone. Trying next zone..."
             fi
         done
@@ -464,65 +637,6 @@ else
         --zone="$ZONE" \
         --project="$PROJECT_ID" \
         --format="value(networkInterfaces[0].networkIP)" 2>/dev/null || echo "")
-fi
-
-# ---------------------------------------------------------------------------
-# Step 8: Service account (optional)
-# ---------------------------------------------------------------------------
-echo ""
-bold "Step 8: Service Account (optional)"
-echo ""
-echo "  bioAF can use a GCP service account to access Cloud Storage"
-echo "  and Cloud Logging. This creates a service account and downloads"
-echo "  a JSON key file that you will upload during bioAF setup."
-echo ""
-read -rp "  Create a service account for bioAF? [Y/n] " create_sa
-
-SA_KEY_PATH=""
-if [ "$create_sa" != "n" ] && [ "$create_sa" != "N" ]; then
-    SA_SUFFIX=$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 6)
-    SA_NAME="${SA_NAME_PREFIX}-${SA_SUFFIX}"
-    SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-
-    echo "  Creating service account..."
-    gcloud iam service-accounts create "$SA_NAME" \
-        --project="$PROJECT_ID" \
-        --display-name="$SA_DISPLAY_NAME" \
-        --description="Service account for bioAF application" \
-        --quiet
-    green "  Service account created: $SA_EMAIL"
-
-    # Grant roles and verify each one took effect
-    echo "  Granting permissions..."
-    grant_failures=0
-    for role in "${SA_ROLES[@]}"; do
-        if ! gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-            --member="serviceAccount:$SA_EMAIL" \
-            --role="$role" \
-            --quiet >/dev/null 2>&1; then
-            red "  Failed to grant $role"
-            grant_failures=$((grant_failures + 1))
-        fi
-    done
-
-    if [ "$grant_failures" -gt 0 ]; then
-        red "  $grant_failures role(s) failed to grant. The service account may not"
-        red "  have all required permissions. Check the GCP console."
-    else
-        green "  All permissions granted."
-    fi
-
-    # Generate key
-    SA_KEY_PATH="$HOME/Desktop/bioaf-sa-key.json"
-    echo "  Generating JSON key..."
-    gcloud iam service-accounts keys create "$SA_KEY_PATH" \
-        --iam-account="$SA_EMAIL" \
-        --project="$PROJECT_ID" \
-        --quiet
-    green "  Key saved to: $SA_KEY_PATH"
-    echo ""
-    yellow "  Keep this file safe. You will upload it during bioAF setup."
-    yellow "  Do not share it or commit it to version control."
 fi
 
 # ---------------------------------------------------------------------------
@@ -631,15 +745,14 @@ echo "  2. GCP Region:"
 echo ""
 green "     $REGION"
 
-if [ -n "$SA_KEY_PATH" ] && [ -f "$SA_KEY_PATH" ]; then
-    echo ""
-    echo "  3. Your Service Account JSON key:"
-    echo "     During setup, the wizard will ask for this."
-    echo "     Select the JSON option and paste everything in green."
-    echo ""
-    green "$(cat "$SA_KEY_PATH")"
-    echo ""
-    dim "  (This key is also saved at $SA_KEY_PATH)"
-fi
+echo ""
+echo "  3. Service accounts created (no JSON key needed):"
+echo ""
+green "     bioaf-app:       ${APP_SA_EMAIL}"
+green "     bioaf-bootstrap: ${BOOTSTRAP_SA_EMAIL}"
+echo ""
+dim "  The setup wizard will detect the VM's attached identity and skip the"
+dim "  key-upload step. The bioaf-bootstrap email is read from VM metadata"
+dim "  on first startup."
 
 echo ""
