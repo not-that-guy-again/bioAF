@@ -995,6 +995,8 @@ class TerraformExecutor:
             "gcp_region",
             "gcp_zone",
             "gcp_service_account_key",
+            "gcp_service_account_email",
+            "gcp_bootstrap_sa_email",
             "org_slug",
             "deploy_suffix",
             "terraform_initialized",
@@ -1011,7 +1013,15 @@ class TerraformExecutor:
                 text("SELECT key, value FROM platform_config WHERE key = ANY(:keys)").bindparams(keys=keys)
             )
         ).fetchall()
-        return {r[0]: r[1] for r in rows}
+        config = {r[0]: r[1] for r in rows}
+        # vm_default mode: ensure the credential injector sees the bootstrap
+        # impersonation target. Falls back to the legacy email field for
+        # installs that pre-date SA hardening.
+        if config.get("gcp_credential_source", "vm_default") == "vm_default":
+            target = config.get("gcp_bootstrap_sa_email") or config.get("gcp_service_account_email")
+            if target:
+                config["gcp_bootstrap_sa_email"] = target
+        return config
 
     @staticmethod
     async def _auto_cleanup_lock(session: AsyncSession, module_name: str) -> None:
