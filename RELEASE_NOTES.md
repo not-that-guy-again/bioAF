@@ -1,5 +1,115 @@
 # Release Notes
 
+## v0.11.0
+
+Service-account hardening for greenfield installs. Eliminates the JSON
+service-account key, splits the broad single-SA into a scoped runtime SA
+(`bioaf-app`, attached to the VM) and an impersonated bootstrap SA
+(`bioaf-bootstrap`, used only for IAM/Terraform/Cloud Build), and bounds
+the runtime SA's blast radius to bioAF-managed resources only via IAM
+Conditions, Resource Manager tags, and per-resource bindings.
+
+Existing installs are not migrated -- they keep their JSON-key code path
+unchanged. The full design is in
+`documentation/sa-hardening/03-consolidated-plan.md`.
+
+### Architecture (greenfield only)
+
+- New `bioaf-bootstrap` SA holds the broad project-level roles formerly
+  given to the single SA, minus `roles/iam.serviceAccountKeyAdmin`.
+  Impersonated by Terraform, Sheets reader provisioning, and the
+  notebook/cellxgene/environment image-build services.
+- New `bioaf-app` SA is attached to the GCE VM and holds a small set of
+  scoped roles: `roles/storage.admin` (bioaf-* buckets only),
+  `compute.instanceAdmin.v1` (bioaf-* VMs only), `container.admin`
+  (resources tagged `bioaf-managed=true`), the project-scoped custom
+  role `bioafSaManager`, plus `roles/iam.serviceAccountTokenCreator`
+  resource-scoped to `bioaf-bootstrap` only.
+- Project-scoped Resource Manager tag `bioaf-managed=true` attached to
+  bioAF-managed GKE clusters; per-secret and per-subscription bindings
+  for `bioaf-app` rendered by Terraform.
+- New platform_config key `gcp_bootstrap_sa_email`, persisted at startup
+  from VM instance metadata (`bioaf_bootstrap_sa_email`). The
+  credential injector and image-build services prefer it over the
+  legacy `gcp_service_account_email` so existing keyed installs keep
+  working.
+
+### Installer
+
+- `install-gcp.sh` creates both SAs, the `bioaf-managed` tag, the
+  custom IAM role, the conditioned bindings, and the resource-scoped
+  tokenCreator binding. Attaches `bioaf-app` to the VM and writes the
+  bootstrap email into VM metadata.
+- The legacy "create SA + JSON key + paste worksheet" step is removed.
+- New file: `installer/roles_manifest.yaml` -- single source of truth
+  for both SAs' permissions, read by both the installer and the
+  backend validation probe.
+
+### Backend
+
+- `credential_injector.load_gcp_credentials` reads `gcp_bootstrap_sa_email`
+  first and falls back to the legacy email field.
+- `notebook_image_service`, `cellxgene_image_service`, and (transitively)
+  `environment_build_service` now obtain credentials via the injector
+  so impersonation reaches Cloud Build / Artifact Registry.
+- `terraform_executor` injects the bootstrap email into the env dict
+  before `build_env`. The Terraform tfvars writer plumbs
+  `bioaf_app_sa_email` and `bioaf_bootstrap_sa_email` through to the
+  storage and compute modules.
+- `gce.py` work-node adapter routes credentials through the injector
+  (no more "no JSON key" hard error on greenfield) and drops the
+  legacy `gcp_service_account_email` fallback for the VM-attached SA.
+- `gcp_config.validate_gcp_credentials` runs a dual-SA probe in
+  `vm_default` mode: bioaf-app via raw ADC, bioaf-bootstrap via
+  impersonation. Merged result requires both. New
+  `app_probe`/`bootstrap_probe` fields on `GCPValidationResult`.
+- `sheets_reader_sa_service` surfaces a clear error when `keys.create`
+  fails because the project enforces
+  `iam.disableServiceAccountKeyCreation`.
+- `main.py` lifespan reads `bioaf_bootstrap_sa_email` from VM metadata
+  and persists it on first startup (idempotent; skipped outside GCE).
+
+### Terraform
+
+- Per-secret `roles/secretmanager.secretAccessor` bindings for
+  bioaf-app (gated on `bioaf_app_sa_email`).
+- Per-subscription `roles/pubsub.subscriber` bindings for bioaf-app on
+  the ingest worker + dead-letter subscriptions.
+- `bioaf-managed=true` tag binding attached to the GKE cluster in both
+  the legacy top-level module and the backend `compute` module.
+
+### Frontend
+
+- Setup wizard and GCP settings page replace the hardcoded 14-role
+  list with two adjacent panels: bioaf-bootstrap roles (broad) and
+  bioaf-app roles (scoped). Validation result shows per-SA pass/fail
+  cards when the new probe fields are present; falls back to the
+  legacy single list for keyed installs.
+
+### Tests
+
+- `test_credential_injector` extended with three vm_default impersonation
+  cases (new key, legacy fallback, neither set).
+- `test_terraform_executor` extended to verify `_read_gcp_config`
+  selects `gcp_bootstrap_sa_email` and `run_plan` passes it through.
+- New: `test_sheets_reader_sa_service`,
+  `test_image_build_credentials`, `test_gce_adapter`,
+  `test_gcp_config_dual_probe`, `test_bootstrap_metadata`,
+  `test_roles_manifest`.
+- New CI invariants: `test_bucket_naming_invariant` (every
+  `google_storage_bucket` starts with `bioaf-`),
+  `test_compute_naming_invariant` (every Python `instance_name = '...'`
+  starts with `bioaf-`), `test_gke_tag_invariant` (every
+  `google_container_cluster` file declares a sibling
+  `google_tags_tag_binding`).
+
+### Documented limitation
+
+- Sheets integration cannot be enabled on projects that enforce
+  `iam.disableServiceAccountKeyCreation` because the Sheets reader SA
+  still requires `keys.create`. The setup wizard now surfaces a clear
+  message on enable rather than a stack trace.
+
 ## v0.10.3
 
 Reference Data Ingest — completes the four user-facing capabilities of ADR-017 / ADR-047 (upload, import-from-URL, versioning, and pipeline linkage). Existing reference data CRUD is unchanged; this release adds everything around getting bytes into the registry and using them in pipelines.
