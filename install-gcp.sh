@@ -512,7 +512,7 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member="serviceAccount:${APP_SA_EMAIL}" \
     --role="roles/compute.instanceAdmin.v1" \
-    --condition="expression=resource.name.matches(\"^projects/${PROJECT_ID}/zones/[^/]+/instances/bioaf-\"),title=bioaf_worknodes_only,description=bioaf_worknodes_only" \
+    --condition='expression=resource.name.extract("/instances/{name}").startsWith("bioaf-"),title=bioaf_worknodes_only,description=bioaf_worknodes_only' \
     --quiet >/dev/null
 
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \

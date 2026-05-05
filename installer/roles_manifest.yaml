@@ -38,7 +38,7 @@ app:
     title: bioaf_sas_only
   - role: roles/compute.instanceAdmin.v1
     scope: project
-    condition: 'resource.name.matches("^projects/<PROJECT_ID>/zones/[^/]+/instances/bioaf-")'
+    condition: 'resource.name.extract("/instances/{name}").startsWith("bioaf-")'
     title: bioaf_worknodes_only
   - role: roles/container.admin
     scope: project
