@@ -146,10 +146,10 @@ def test_vm_default_dual_probe_app_missing_permission(
     # checks the requested permissions against _APP_PERMS to decide.
     def fake_test_iam_permissions(resource, permissions):
         perms = list(permissions)
-        # If this request includes a permission unique to the app probe,
-        # drop one to simulate missing access.
-        if "compute.instances.create" in perms:
-            return _mock_iam_response([p for p in perms if p != "compute.instances.create"])
+        # logging.logEntries.create is in the app probe set; drop it to
+        # simulate missing access from bioaf-app while bootstrap stays full.
+        if "logging.logEntries.create" in perms:
+            return _mock_iam_response([p for p in perms if p != "logging.logEntries.create"])
         return _mock_iam_response(perms)
 
     mock_rm.ProjectsClient.return_value.get_project.return_value = MagicMock()

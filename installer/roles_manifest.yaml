@@ -77,22 +77,32 @@ dropped:
 
 probe_split:
   # Permission ownership for the dual-SA validation probe.
+  #
+  # Important: testIamPermissions runs against the PROJECT resource. Conditioned
+  # bindings (storage.admin/bioaf-, compute.instanceAdmin.v1/bioaf-,
+  # container.admin/bioaf-managed) cannot match at the project level because
+  # the condition's `resource.name` is the project, not a bucket/instance/cluster.
+  # Per-SA bindings (iam.serviceAccountUser on notebook-runner) are likewise
+  # invisible to a project-level probe. So the bioaf-app probe tests ONLY
+  # bioaf-app's unconditioned project grants. Everything else moves to the
+  # bootstrap probe, which has the broad project-level grants and can answer
+  # all of the conditioned/per-SA permissions on the project resource.
   app:
-    - iam.serviceAccounts.actAs
-    - compute.instances.create
     - bigquery.jobs.create
     - logging.logEntries.create
   bootstrap:
+    - storage.buckets.create
     - pubsub.topics.create
     - pubsub.topics.getIamPolicy
     - pubsub.topics.setIamPolicy
     - container.clusters.create
+    - iam.serviceAccounts.actAs
     - iam.serviceAccounts.create
     - iam.serviceAccounts.setIamPolicy
+    - compute.instances.create
+    - resourcemanager.projects.getIamPolicy
     - resourcemanager.projects.setIamPolicy
     - artifactregistry.repositories.create
     - cloudbuild.builds.create
     - serviceusage.services.enable
-  shared:
-    - storage.buckets.create
-    - resourcemanager.projects.getIamPolicy
+  shared: []

@@ -82,8 +82,6 @@ _PROBE_SPLIT = _MANIFEST.get("probe_split", {}) or {}
 _APP_PERMS: list[str] = list(
     _PROBE_SPLIT.get("app", [])
     or [
-        "iam.serviceAccounts.actAs",
-        "compute.instances.create",
         "bigquery.jobs.create",
         "logging.logEntries.create",
     ]
@@ -91,25 +89,23 @@ _APP_PERMS: list[str] = list(
 _BOOTSTRAP_PERMS: list[str] = list(
     _PROBE_SPLIT.get("bootstrap", [])
     or [
+        "storage.buckets.create",
         "pubsub.topics.create",
         "pubsub.topics.getIamPolicy",
         "pubsub.topics.setIamPolicy",
         "container.clusters.create",
+        "iam.serviceAccounts.actAs",
         "iam.serviceAccounts.create",
         "iam.serviceAccounts.setIamPolicy",
+        "compute.instances.create",
+        "resourcemanager.projects.getIamPolicy",
         "resourcemanager.projects.setIamPolicy",
         "artifactregistry.repositories.create",
         "cloudbuild.builds.create",
         "serviceusage.services.enable",
     ]
 )
-_SHARED_PERMS: list[str] = list(
-    _PROBE_SPLIT.get("shared", [])
-    or [
-        "storage.buckets.create",
-        "resourcemanager.projects.getIamPolicy",
-    ]
-)
+_SHARED_PERMS: list[str] = list(_PROBE_SPLIT.get("shared", []) or [])
 _DROPPED_PERMS: list[str] = list(
     _MANIFEST.get("dropped", [])
     or [
