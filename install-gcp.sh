@@ -221,6 +221,37 @@ else
         exit 1
     fi
     green "  gcloud CLI installed."
+
+    # Pre-generate the GCE SSH key so we control whether it has a
+    # passphrase. If we don't, gcloud creates one lazily on the first
+    # `gcloud compute ssh` call and prompts interactively, which the
+    # later VM-readiness wait can't influence. We only do this when we
+    # just installed gcloud -- existing installs keep their key untouched.
+    GCE_SSH_KEY="$HOME/.ssh/google_compute_engine"
+    if [ ! -f "$GCE_SSH_KEY" ]; then
+        echo ""
+        bold "  GCE SSH key"
+        echo ""
+        echo "  This key is used to SSH into your bioAF VM (and any other GCE"
+        echo "  VM). You can protect it with a passphrase or leave it unprotected:"
+        echo ""
+        echo "    With passphrase:    you'll be prompted on each SSH connection"
+        echo "                        unless ssh-agent caches it. Stronger"
+        echo "                        protection if your laptop is compromised."
+        echo "    Without passphrase: zero prompts, equivalent to your old laptop"
+        echo "                        if you never set one there."
+        echo ""
+        read -rp "  Protect the GCE SSH key with a passphrase? [y/N] " add_pass
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh"
+        sa_account="$(gcloud config get-value account 2>/dev/null || whoami)"
+        if [ "$add_pass" = "y" ] || [ "$add_pass" = "Y" ]; then
+            ssh-keygen -t rsa -b 4096 -f "$GCE_SSH_KEY" -C "$sa_account"
+        else
+            ssh-keygen -t rsa -b 4096 -f "$GCE_SSH_KEY" -N "" -C "$sa_account"
+        fi
+        green "  GCE SSH key generated at $GCE_SSH_KEY."
+    fi
 fi
 
 # ---------------------------------------------------------------------------
