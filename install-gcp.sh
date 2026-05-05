@@ -399,6 +399,29 @@ else
         --quiet
 fi
 
+# Wait for an SA to be globally visible to IAM before granting roles. Newly
+# created SAs can take 5-30 seconds to propagate; until then,
+# `add-iam-policy-binding` returns "Service account ... does not exist".
+wait_for_sa() {
+    local sa_email="$1"
+    local attempts=20
+    local delay=3
+    for ((i=1; i<=attempts; i++)); do
+        if gcloud iam service-accounts describe "${sa_email}" \
+                --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+            # Probe a getIamPolicy call -- describe sometimes succeeds before
+            # IAM policy operations on the SA do.
+            if gcloud iam service-accounts get-iam-policy "${sa_email}" \
+                    --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+        sleep "${delay}"
+    done
+    red "  Timed out waiting for ${sa_email} to propagate."
+    return 1
+}
+
 # 3. Create bioaf-bootstrap (idempotent).
 if gcloud iam service-accounts describe "${BOOTSTRAP_SA_EMAIL}" \
         --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
@@ -411,6 +434,7 @@ else
         --quiet
     green "  Created ${BOOTSTRAP_SA_NAME}."
 fi
+wait_for_sa "${BOOTSTRAP_SA_EMAIL}"
 
 # 4. Create bioaf-app (idempotent).
 if gcloud iam service-accounts describe "${APP_SA_EMAIL}" \
@@ -424,6 +448,7 @@ else
         --quiet
     green "  Created ${APP_SA_NAME}."
 fi
+wait_for_sa "${APP_SA_EMAIL}"
 
 # 5. Grant the broad set to bioaf-bootstrap.
 echo "  Granting project roles to ${BOOTSTRAP_SA_NAME}..."
