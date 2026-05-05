@@ -42,8 +42,8 @@ app:
     title: bioaf_worknodes_only
   - role: roles/container.admin
     scope: project
-    condition: 'resource.matchTag("<PROJECT_ID>/bioaf-managed", "true")'
-    title: bioaf_managed_clusters_only
+    condition: 'resource.name.extract("/clusters/{name}").startsWith("bioaf-")'
+    title: bioaf_clusters_only
   - role: roles/logging.logWriter
     scope: project
   - role: roles/browser
