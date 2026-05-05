@@ -214,3 +214,55 @@ async def test_build_env_vm_default_does_not_set_credentials_file():
     env, cleanup = await GCPCredentialInjector.build_env(config=config)
     assert "GOOGLE_APPLICATION_CREDENTIALS" not in env
     await cleanup()
+
+
+@pytest.mark.asyncio
+async def test_build_env_vm_default_sets_impersonation_env_var_for_terraform():
+    """build_env must set GOOGLE_IMPERSONATE_SERVICE_ACCOUNT in vm_default mode
+    when a bootstrap SA email is configured. Terraform's google provider reads
+    this variable to impersonate the target SA -- without it, terraform apply
+    runs as the VM's attached identity (bioaf-app) and lacks the broad
+    permissions required for pubsub/iam/build operations.
+    """
+    config = {
+        "gcp_credential_source": "vm_default",
+        "gcp_project_id": "my-project",
+        "gcp_region": "us-central1",
+        "gcp_zone": "us-central1-a",
+        "gcp_bootstrap_sa_email": "bioaf-bootstrap@my-project.iam.gserviceaccount.com",
+    }
+    env, cleanup = await GCPCredentialInjector.build_env(config=config)
+    assert env.get("GOOGLE_IMPERSONATE_SERVICE_ACCOUNT") == "bioaf-bootstrap@my-project.iam.gserviceaccount.com"
+    await cleanup()
+
+
+@pytest.mark.asyncio
+async def test_build_env_vm_default_falls_back_to_legacy_email_for_impersonation():
+    """build_env honours the legacy gcp_service_account_email when no
+    bootstrap email is set, matching load_gcp_credentials' precedence."""
+    config = {
+        "gcp_credential_source": "vm_default",
+        "gcp_project_id": "my-project",
+        "gcp_region": "us-central1",
+        "gcp_zone": "us-central1-a",
+        "gcp_service_account_email": "legacy@my-project.iam.gserviceaccount.com",
+    }
+    env, cleanup = await GCPCredentialInjector.build_env(config=config)
+    assert env.get("GOOGLE_IMPERSONATE_SERVICE_ACCOUNT") == "legacy@my-project.iam.gserviceaccount.com"
+    await cleanup()
+
+
+@pytest.mark.asyncio
+async def test_build_env_vm_default_no_impersonation_when_no_email():
+    """No impersonation env var when neither key is set -- terraform runs as
+    the VM-attached identity (bioaf-app) directly, which is the right
+    behaviour for legacy installs that never set a bootstrap email."""
+    config = {
+        "gcp_credential_source": "vm_default",
+        "gcp_project_id": "my-project",
+        "gcp_region": "us-central1",
+        "gcp_zone": "us-central1-a",
+    }
+    env, cleanup = await GCPCredentialInjector.build_env(config=config)
+    assert "GOOGLE_IMPERSONATE_SERVICE_ACCOUNT" not in env
+    await cleanup()

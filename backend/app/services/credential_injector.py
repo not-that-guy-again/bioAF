@@ -119,7 +119,18 @@ class GCPCredentialInjector:
             return env, _cleanup_sa
 
         else:
-            # vm_default: ADC picks up VM's service account automatically
+            # vm_default: ADC picks up the VM's attached SA (bioaf-app)
+            # automatically. If a bootstrap impersonation target is
+            # configured, ask the Google Terraform provider to impersonate
+            # it via the standard env var; without this, `terraform apply`
+            # runs under bioaf-app's narrow scoped permissions and fails on
+            # any operation that needs the broad bootstrap grants
+            # (pubsub.topics.create, iam.serviceAccounts.create,
+            # cloudbuild.builds.create, etc.).
+            target = _impersonation_target(config)
+            if target:
+                env["GOOGLE_IMPERSONATE_SERVICE_ACCOUNT"] = target
+
             async def _noop_cleanup() -> None:
                 pass
 
