@@ -5,11 +5,11 @@ Mode is controlled by the BIOAF_COMPUTE_MODE environment variable.
 
 When running outside the cluster (e.g., Docker Compose on a VM), the adapter
 builds a K8s client from platform_config credentials (gke_cluster_endpoint,
-gke_cluster_ca_cert, GCP service account key).
+gke_cluster_ca_cert) and a GCP access token from credential_injector
+(impersonated bootstrap on vm_default installs, JSON key on legacy installs).
 """
 
 import base64
-import json as _json
 import logging
 import os
 import tempfile
@@ -24,22 +24,36 @@ from app.adapters.base import ComputeProvider
 logger = logging.getLogger("bioaf.adapters.compute.k8s")
 
 
-def _get_gcp_credentials(service_account_key_json: str):
-    """Build GCP credentials from a service account key JSON string."""
-    from google.oauth2 import service_account
+def _resolve_cfg(cfg: dict, key: str, env_key: str, default: str = "") -> str:
+    """Read a config value, treating the literal "null" sentinel as missing.
 
-    key_data = _json.loads(service_account_key_json)
-    return service_account.Credentials.from_service_account_info(
-        key_data,
-        scopes=["https://www.googleapis.com/auth/cloud-platform"],
-    )
+    Some platform_config rows are written as the string "null" when their
+    upstream Terraform output was empty (see stack_deployment._set_config).
+    This helper normalizes those back to "" so callers can use truthy checks.
+    """
+    val = cfg.get(key) or os.environ.get(env_key, "") or default
+    if val == "null":
+        return default
+    return val
 
 
-def _get_gcp_token(service_account_key_json: str) -> str:
-    """Exchange a GCP service account key for an access token."""
+def _load_gcp_credentials(cfg: dict):
+    """Return GCP credentials for the given platform_config dict.
+
+    Routes through credential_injector so vm_default installs get
+    impersonated bootstrap credentials and legacy installs get
+    service_account.Credentials from the stored JSON key.
+    """
+    from app.services import credential_injector
+
+    return credential_injector.load_gcp_credentials(cfg)
+
+
+def _get_gcp_token(cfg: dict) -> str:
+    """Mint a GCP access token via credential_injector."""
     import google.auth.transport.requests
 
-    credentials = _get_gcp_credentials(service_account_key_json)
+    credentials = _load_gcp_credentials(cfg)
     credentials.refresh(google.auth.transport.requests.Request())
     return credentials.token
 
@@ -300,6 +314,7 @@ class KubernetesComputeProvider(ComputeProvider):
                     "WHERE key IN ("
                     "  'gke_cluster_endpoint', 'gke_cluster_ca_cert',"
                     "  'gcp_credential_source', 'gcp_service_account_key',"
+                    "  'gcp_service_account_email', 'gcp_bootstrap_sa_email',"
                     "  'gke_cluster_name', 'gcp_project_id', 'gcp_region',"
                     "  'raw_bucket_name', 'k8s_pipeline_machine_type'"
                     ")"
@@ -323,7 +338,6 @@ class KubernetesComputeProvider(ComputeProvider):
 
         endpoint = cfg.get("gke_cluster_endpoint", "")
         ca_cert_b64 = cfg.get("gke_cluster_ca_cert", "")
-        sa_key = cfg.get("gcp_service_account_key", "")
 
         if not endpoint or endpoint == "null":
             raise RuntimeError("No GKE cluster endpoint in platform_config. Deploy the compute stack first.")
@@ -333,7 +347,7 @@ class KubernetesComputeProvider(ComputeProvider):
             endpoint = f"https://{endpoint}"
 
         # Get a GCP access token for K8s API auth
-        token = _get_gcp_token(sa_key)
+        token = _get_gcp_token(cfg)
 
         # Write CA cert to a temp file for the K8s client
         ca_cert_bytes = base64.b64decode(ca_cert_b64)
@@ -511,13 +525,11 @@ class KubernetesComputeProvider(ComputeProvider):
         from google.cloud import container_v1
 
         cfg = self._cluster_config or {}
-        sa_key = cfg.get("gcp_service_account_key", "")
-
-        if sa_key:
-            credentials = _get_gcp_credentials(sa_key)
-            return container_v1.ClusterManagerClient(credentials=credentials)
-
-        return container_v1.ClusterManagerClient()
+        try:
+            credentials = _load_gcp_credentials(cfg)
+        except Exception:
+            return container_v1.ClusterManagerClient()
+        return container_v1.ClusterManagerClient(credentials=credentials)
 
     NEXTFLOW_IMAGE = "nextflow/nextflow:25.10.4"
 
@@ -1165,11 +1177,10 @@ class KubernetesComputeProvider(ComputeProvider):
         try:
             from google.cloud import storage as gcs_storage
 
-            sa_key = cfg.get("gcp_service_account_key", "")
-            if sa_key:
-                credentials = _get_gcp_credentials(sa_key)
+            try:
+                credentials = _load_gcp_credentials(cfg)
                 storage_client = gcs_storage.Client(credentials=credentials)
-            else:
+            except Exception:
                 storage_client = gcs_storage.Client()
 
             bucket = storage_client.bucket(raw_bucket)
@@ -1188,16 +1199,15 @@ class KubernetesComputeProvider(ComputeProvider):
         if not raw_bucket:
             return None
 
-        sa_key = cfg.get("gcp_service_account_key", "")
         log_path = f"nextflow-traces/{job_id}/pipeline.log"
 
         try:
             from google.cloud import storage as gcs_storage
 
-            if sa_key:
-                credentials = _get_gcp_credentials(sa_key)
+            try:
+                credentials = _load_gcp_credentials(cfg)
                 storage_client = gcs_storage.Client(credentials=credentials)
-            else:
+            except Exception:
                 storage_client = gcs_storage.Client()
 
             bucket = storage_client.bucket(raw_bucket)
@@ -1218,16 +1228,15 @@ class KubernetesComputeProvider(ComputeProvider):
         if not raw_bucket:
             return ""
 
-        sa_key = cfg.get("gcp_service_account_key", "")
         report_path = f"nextflow-reports/{job_id}/report.html"
 
         try:
             from google.cloud import storage as gcs_storage
 
-            if sa_key:
-                credentials = _get_gcp_credentials(sa_key)
+            try:
+                credentials = _load_gcp_credentials(cfg)
                 storage_client = gcs_storage.Client(credentials=credentials)
-            else:
+            except Exception:
                 storage_client = gcs_storage.Client()
 
             bucket = storage_client.bucket(raw_bucket)
@@ -1253,15 +1262,13 @@ class KubernetesComputeProvider(ComputeProvider):
         if not project_id:
             return None
 
-        sa_key = cfg.get("gcp_service_account_key", "")
-
         try:
             import google.cloud.logging
 
-            if sa_key:
-                credentials = _get_gcp_credentials(sa_key)
+            try:
+                credentials = _load_gcp_credentials(cfg)
                 log_client = google.cloud.logging.Client(project=project_id, credentials=credentials)
-            else:
+            except Exception:
                 log_client = google.cloud.logging.Client(project=project_id)
 
             log_filter = (
@@ -1299,16 +1306,15 @@ class KubernetesComputeProvider(ComputeProvider):
         if not raw_bucket:
             return {"percent_complete": 0.0, "processes": []}
 
-        sa_key = cfg.get("gcp_service_account_key", "")
         trace_path = f"nextflow-traces/{job_id}/trace.tsv"
 
         try:
             from google.cloud import storage as gcs_storage
 
-            if sa_key:
-                credentials = _get_gcp_credentials(sa_key)
+            try:
+                credentials = _load_gcp_credentials(cfg)
                 storage_client = gcs_storage.Client(credentials=credentials)
-            else:
+            except Exception:
                 storage_client = gcs_storage.Client()
 
             bucket = storage_client.bucket(raw_bucket)
@@ -1443,9 +1449,15 @@ class KubernetesComputeProvider(ComputeProvider):
         """Query GKE API for real cluster status."""
         await self.load_cluster_config()
         cfg = self._cluster_config or {}
-        cluster_name = cfg.get("gke_cluster_name") or os.environ.get("GKE_CLUSTER_NAME", "")
-        project_id = cfg.get("gcp_project_id") or os.environ.get("GCP_PROJECT_ID", "")
-        region = cfg.get("gcp_region") or os.environ.get("GCP_REGION", "us-central1")
+        cluster_name = _resolve_cfg(cfg, "gke_cluster_name", "GKE_CLUSTER_NAME")
+        project_id = _resolve_cfg(cfg, "gcp_project_id", "GCP_PROJECT_ID")
+        region = _resolve_cfg(cfg, "gcp_region", "GCP_REGION", default="us-central1")
+
+        if not cluster_name or not project_id:
+            raise RuntimeError(
+                "GKE cluster identity not configured (gke_cluster_name / gcp_project_id missing). "
+                "Re-run compute deploy to populate platform_config."
+            )
 
         gke_client = self._get_gke_client()
         cluster = gke_client.get_cluster(name=f"projects/{project_id}/locations/{region}/clusters/{cluster_name}")
@@ -1522,9 +1534,9 @@ class KubernetesComputeProvider(ComputeProvider):
         """
         await self.load_cluster_config()
         cfg = self._cluster_config or {}
-        cluster_name = cfg.get("gke_cluster_name") or os.environ.get("GKE_CLUSTER_NAME", "")
-        project_id = cfg.get("gcp_project_id") or os.environ.get("GCP_PROJECT_ID", "")
-        region = cfg.get("gcp_region") or os.environ.get("GCP_REGION", "us-central1")
+        cluster_name = _resolve_cfg(cfg, "gke_cluster_name", "GKE_CLUSTER_NAME")
+        project_id = _resolve_cfg(cfg, "gcp_project_id", "GCP_PROJECT_ID")
+        region = _resolve_cfg(cfg, "gcp_region", "GCP_REGION", default="us-central1")
 
         _fallback = {
             "cpu_utilization_pct": 0.0,

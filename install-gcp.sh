@@ -129,6 +129,7 @@ BOOTSTRAP_ROLES=(
 # bioaf-app: unconditioned bindings (low blast radius / read-only).
 APP_UNCONDITIONED_ROLES=(
     "roles/logging.logWriter"
+    "roles/monitoring.metricWriter"
     "roles/browser"
     "roles/serviceusage.serviceUsageViewer"
     "roles/secretmanager.viewer"

@@ -46,6 +46,8 @@ app:
     title: bioaf_clusters_only
   - role: roles/logging.logWriter
     scope: project
+  - role: roles/monitoring.metricWriter
+    scope: project
   - role: roles/browser
     scope: project
   - role: roles/serviceusage.serviceUsageViewer

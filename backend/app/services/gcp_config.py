@@ -135,6 +135,7 @@ APP_ROLES: list[str] = [a["role"] for a in (_MANIFEST.get("app") or [])] or [
     "roles/compute.instanceAdmin.v1",
     "roles/container.admin",
     "roles/logging.logWriter",
+    "roles/monitoring.metricWriter",
     "roles/browser",
     "roles/serviceusage.serviceUsageViewer",
     "roles/secretmanager.viewer",
