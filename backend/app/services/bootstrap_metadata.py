@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger("bioaf.bootstrap_metadata")
 
 _METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/instance/attributes/bioaf_bootstrap_sa_email"
+_ATTACHED_SA_URL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
 _METADATA_TIMEOUT_SECONDS = 2.0
 
 
@@ -30,6 +31,11 @@ def _read_metadata_attribute(url: str = _METADATA_URL) -> str | None:
             return resp.read().decode().strip()
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
         return None
+
+
+async def get_attached_sa_email() -> str | None:
+    """Return the email of the SA attached to this VM, or None when off-GCE."""
+    return await asyncio.to_thread(_read_metadata_attribute, _ATTACHED_SA_URL)
 
 
 async def persist_bootstrap_sa_from_metadata(session: AsyncSession) -> bool:

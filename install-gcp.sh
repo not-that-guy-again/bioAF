@@ -105,6 +105,7 @@ REQUIRED_APIS=(
 # Must match installer/roles_manifest.yaml.
 BOOTSTRAP_SA_NAME="bioaf-bootstrap"
 APP_SA_NAME="bioaf-app"
+READER_SA_NAME="bioaf-reader"
 BIOAF_TAG_KEY="bioaf-managed"
 BIOAF_TAG_VALUE="true"
 BIOAFSAMANAGER_ROLE_ID="bioafSaManager"
@@ -565,6 +566,44 @@ gcloud iam service-accounts add-iam-policy-binding "${BOOTSTRAP_SA_EMAIL}" \
     --role="roles/iam.serviceAccountTokenCreator" \
     --quiet >/dev/null
 
+# 8a. Sheets reader SA (keyless). bioaf-app impersonates this SA to read
+#     Google Sheets the user has shared with READER_SA_EMAIL. No JSON key
+#     is created; the SA is reachable via short-lived impersonated tokens.
+READER_SA_EMAIL="${READER_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+SHEETS_READER_PROVISIONED=false
+
+if gcloud iam service-accounts describe "${READER_SA_EMAIL}" \
+        --project="${PROJECT_ID}" --quiet >/dev/null 2>&1; then
+    echo "  ${READER_SA_NAME} already exists."
+    SHEETS_READER_PROVISIONED=true
+else
+    gcloud iam service-accounts create "${READER_SA_NAME}" \
+        --project="${PROJECT_ID}" \
+        --display-name="bioAF Sheets Reader" \
+        --description="Read-only access to Google Sheets shared with this email" \
+        --quiet
+    green "  Created ${READER_SA_NAME}."
+    SHEETS_READER_PROVISIONED=true
+fi
+
+if [ "${SHEETS_READER_PROVISIONED}" = true ]; then
+    wait_for_sa "${READER_SA_EMAIL}"
+
+    # Grant bioaf-app tokenCreator on bioaf-reader so the runtime can mint
+    # impersonated tokens for it. Resource-scoped to this SA only.
+    gcloud iam service-accounts add-iam-policy-binding "${READER_SA_EMAIL}" \
+        --project="${PROJECT_ID}" \
+        --member="serviceAccount:${APP_SA_EMAIL}" \
+        --role="roles/iam.serviceAccountTokenCreator" \
+        --quiet >/dev/null
+
+    # Enable the Sheets API so impersonated calls succeed.
+    gcloud services enable sheets.googleapis.com \
+        --project="${PROJECT_ID}" \
+        --quiet >/dev/null 2>&1 || \
+        yellow "  Could not enable sheets.googleapis.com automatically; enable it later if needed."
+fi
+
 # 9. tagUser on the bioaf-managed tag VALUE for bioaf-bootstrap so Terraform
 #    can attach the tag to GKE resources it creates.
 gcloud resource-manager tags values add-iam-policy-binding \
@@ -759,6 +798,13 @@ gcp_zone: ${ZONE}
 gcp_credential_source: vm_default
 gcp_bootstrap_sa_email: ${BOOTSTRAP_SA_EMAIL}
 EOF
+
+if [ "${SHEETS_READER_PROVISIONED}" = true ]; then
+    cat >>"${PREFILL_LOCAL}" <<EOF
+sheets_reader_sa_email: ${READER_SA_EMAIL}
+sheets_reader_sa_created: "true"
+EOF
+fi
 
 # ---------------------------------------------------------------------------
 # Offer to finish the setup automatically: SCP the prefill, SSH in, clone

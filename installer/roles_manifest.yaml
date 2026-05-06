@@ -72,7 +72,7 @@ dropped:
   # Permissions formerly required by the single-SA model that are not
   # granted to any SA in this design. validate_gcp_credentials must NOT
   # test these against either probe.
-  - iam.serviceAccountKeys.create   # Sheets reader keys.create -- accepted limitation
+  - iam.serviceAccountKeys.create   # not needed -- reader SA uses keyless impersonation
   - bigquery.datasets.create        # cost queries are read-only
 
 probe_split:
