@@ -1,5 +1,126 @@
 # Release Notes
 
+## v0.11.1
+
+Bug-fix point release for the v0.11.0 SA hardening work. Resolves the
+issues found while testing v0.11.0 end-to-end on a fresh greenfield
+install. No new features; no schema changes; no migration required.
+Existing installs are unaffected (they continue to use the legacy
+`service_account_key` code path).
+
+### Sheets reader SA: now keyless
+
+The v0.11.0 plan filed Breakage 6 ("Sheets reader needs `keys.create`,
+which the org policy blocks") as a documented limitation. That
+limitation was unnecessary -- Google's permission check is
+identity-based, so a doc shared with `bioaf-reader@...` accepts an
+impersonated token authenticating as that principal exactly the same
+way it accepts a token from a stored JSON key.
+
+- `install-gcp.sh` creates the `bioaf-reader` SA, enables
+  `sheets.googleapis.com`, grants `bioaf-app`
+  `roles/iam.serviceAccountTokenCreator` on the reader SA, and
+  embeds the email in the prefill YAML.
+- `get_reader_credentials` returns
+  `impersonated_credentials.Credentials` in `vm_default` mode (signs
+  via the IAM `SignBlob` API). Legacy
+  `service_account_key` installs still use the stored JSON key.
+- `create_reader_sa` (in-app fallback) drops `keys.create` entirely
+  and writes a `tokenCreator` binding on the new SA.
+- `sheets_reader_sa_key` is no longer written to `platform_config`
+  on new installs.
+
+Works on policy-enforced projects (`iam.disableServiceAccountKeyCreation`)
+because that constraint only blocks `keys.create`, not
+`serviceAccounts.create` or `serviceAccounts.getAccessToken`.
+
+### K8s adapters and GCS clients routed through `credential_injector`
+
+The original audit missed three adapters (notebook, compute, cellxgene)
+and two GCS-client paths (upload signed URLs, storage stats) that had
+their own `_get_gcp_credentials`/`_get_gcs_credentials` helpers calling
+`json.loads` on `gcp_service_account_key`. Under SA hardening that row
+is empty, so they raised `JSONDecodeError` on first use, blocking
+notebook session launch and file upload, and 403'ing the storage stats
+query.
+
+- `adapters/{notebooks,compute,cellxgene}/kubernetes.py` now route
+  through `credential_injector.load_gcp_credentials(cfg)`.
+- `upload_service._get_gcs_credentials` and
+  `gcs_storage.GcsStorageService.get_credentials` route through the
+  same. v4 signed URLs work because impersonated credentials sign via
+  the IAM `SignBlob` API and `tokenCreator` includes `signBlob`.
+- `storage_service._query_gcs_buckets` /
+  `get_lifecycle_policies` use impersonated bootstrap credentials
+  (which have unconditioned `roles/storage.admin`) for project-level
+  list operations.
+
+### `gke_cluster_name = "null"` sentinel handling
+
+`stack_deployment.py` writes the literal string `"null"` to
+`platform_config` when a Terraform output is empty. The compute
+adapter's GKE-metrics call forwarded `"null"` to the GKE API
+verbatim and spammed Cloud Logging with `clusters/null`
+PERMISSION_DENIED entries. New `_resolve_cfg` helper in
+`compute/kubernetes.py` treats the sentinel as missing.
+`_k8s_get_cluster_status` raises a clear error;
+`_k8s_get_cluster_metrics` returns the safe-zero fallback.
+
+### Pipeline launch reload of cluster_config
+
+A backend that started before compute deploy completed could not
+launch pipelines after deploy finished -- it failed with "No GKE
+cluster endpoint in platform_config" because the sync K8s helpers
+used by `ensure_pipeline_namespace` did not reload config from
+`platform_config`. New `_ensure_cluster_config_fresh()` helper is
+awaited from every async public entry point in the compute adapter
+that uses sync K8s helpers downstream (`_k8s_submit_job`,
+`_k8s_cancel_job`, `_k8s_get_job_status`, `_k8s_list_jobs`,
+`_k8s_get_job_logs`, `_k8s_persist_job_logs`).
+
+### `roles/monitoring.metricWriter` for the Ops Agent
+
+Added to `bioaf-app`'s unconditioned project bindings in
+`install-gcp.sh`, `installer/roles_manifest.yaml`, the backend
+`APP_ROLES` fallback, and the frontend role-panel guidance. Same
+low-risk profile as `roles/logging.logWriter` (write-only,
+cost-only). Stops the Ops Agent's
+`MonApiPermissionErr: missing roles/monitoring.metricWriter`
+log spam.
+
+### Tests
+
+- 2086 backend tests pass (was 2067 in v0.11.0).
+- New `test_k8s_adapter_sa_hardening.py` (6 tests) covers
+  credential-injector routing across all three K8s adapters, the
+  `"null"` sentinel, and the cluster-config reload guard.
+- New `test_upload_credentials_sa_hardening.py` (5 tests) covers
+  signed-URL credentials, storage-stats credentials, and graceful
+  fallback when credentials are unavailable.
+- Existing tests that patched the removed `_get_gcp_credentials`
+  helper updated to patch `_load_gcp_credentials` instead.
+
+### Known follow-ups (not in this release)
+
+- Large-file upload UX: the v4 single-PUT signed-URL flow shows "0%"
+  for several minutes on large files before progress starts moving.
+  Root cause is browser-side `xhr.upload.onprogress` throttling on
+  large request bodies. Fix is to switch to chunked resumable
+  uploads (the protocol `resumableUpload.ts` already implements for
+  reference data).
+- Compute Terraform output capture: `gke_cluster_name = "null"` is
+  written to `platform_config` even though `outputs.tf` declares
+  the output. Read-side normalization stops the spammy errors but
+  the upstream capture path needs investigation.
+- Cellxgene Workload Identity: cellxgene pods can't authenticate to
+  GCS under SA hardening because `_ensure_gcp_secret` writes an
+  empty key into a K8s Secret. Proper fix is Workload Identity for
+  the cellxgene SA.
+- Quota-request UX: pipeline launches fail to schedule on
+  CPU-quota-constrained projects with no useful in-app message. The
+  pod sits Pending until the user manually requests a CPU quota
+  increase in the Cloud Console. Captured for a future feature.
+
 ## v0.11.0
 
 Service-account hardening for greenfield installs. Eliminates the JSON
