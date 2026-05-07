@@ -285,6 +285,19 @@ class KubernetesComputeProvider(ComputeProvider):
 
     # -- K8s client helpers --
 
+    async def _ensure_cluster_config_fresh(self) -> None:
+        """Reload cluster config from platform_config when possible.
+
+        Called from async public entry points before they invoke sync K8s
+        helpers (which use the sync _get_api_client and don't reload config
+        themselves). No-op when _session_factory is missing (test contexts
+        where the caller has explicitly seeded _cluster_config) so seeded
+        values aren't clobbered.
+        """
+        if self._session_factory is None:
+            return
+        await self.load_cluster_config(force=True)
+
     async def load_cluster_config(self, force: bool = False) -> dict:
         """Read GKE cluster config from platform_config.
 
@@ -761,6 +774,13 @@ class KubernetesComputeProvider(ComputeProvider):
 
     async def _k8s_submit_job(self, job_spec: dict) -> dict:
         """Submit a real Kubernetes Job to the GKE cluster."""
+        # Force-reload cluster config. The sync _get_api_client() used by
+        # downstream sync K8s helpers does not itself reload config, so
+        # without this call a backend that started before compute deploy
+        # will fail with "No GKE cluster endpoint in platform_config"
+        # even after deploy finishes.
+        await self._ensure_cluster_config_fresh()
+
         run_id = job_spec.get("run_id", 0)
         pipeline_name = job_spec.get("pipeline_name", "unknown")
         namespace = job_spec.get("namespace", "bioaf-pipelines")
@@ -1003,6 +1023,7 @@ class KubernetesComputeProvider(ComputeProvider):
 
     async def _k8s_cancel_job(self, job_id: str) -> dict:
         """Delete a Kubernetes Job with background propagation."""
+        await self._ensure_cluster_config_fresh()
         batch_client = self._get_k8s_batch_client()
         namespace = "bioaf-pipelines"
         batch_client.delete_namespaced_job(
@@ -1018,6 +1039,7 @@ class KubernetesComputeProvider(ComputeProvider):
 
     async def _k8s_get_job_status(self, job_id: str) -> dict:
         """Query the K8s API for Job status and translate to normalized model."""
+        await self._ensure_cluster_config_fresh()
         batch_client = self._get_k8s_batch_client()
         core_client = self._get_k8s_core_client()
         namespace = "bioaf-pipelines"
@@ -1072,6 +1094,7 @@ class KubernetesComputeProvider(ComputeProvider):
 
     async def _k8s_list_jobs(self, filters: dict | None = None) -> list[dict]:
         """List K8s Jobs in the pipeline namespace."""
+        await self._ensure_cluster_config_fresh()
         batch_client = self._get_k8s_batch_client()
         namespace = "bioaf-pipelines"
 
@@ -1099,6 +1122,7 @@ class KubernetesComputeProvider(ComputeProvider):
         Tries the live pod first, then the persisted log in GCS (uploaded
         at pipeline exit), then pod termination status as a last resort.
         """
+        await self._ensure_cluster_config_fresh()
         core_client = self._get_k8s_core_client()
         namespace = "bioaf-pipelines"
 
@@ -1144,6 +1168,7 @@ class KubernetesComputeProvider(ComputeProvider):
         (ttlSecondsAfterFinished gives a 1-hour window). Returns True
         if the log was successfully persisted.
         """
+        await self._ensure_cluster_config_fresh()
         cfg = self._cluster_config or {}
         raw_bucket = cfg.get("raw_bucket_name", "")
         if not raw_bucket:
