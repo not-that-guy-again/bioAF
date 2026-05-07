@@ -202,6 +202,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Default pipeline environment seed failed: %s", e)
 
+    # Seed default notebook environment if none exists
+    from app.services.environment_service import ensure_default_notebook_environment
+
+    try:
+        async with notif_session_factory() as nb_seed_session:
+            await ensure_default_notebook_environment(nb_seed_session)
+            await nb_seed_session.commit()
+    except Exception as e:
+        logger.warning("Default notebook environment seed failed: %s", e)
+
     # Resolve any pending upgrades from before the restart
     from app.services.upgrade_service import UpgradeService
 

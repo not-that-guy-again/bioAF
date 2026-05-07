@@ -541,3 +541,61 @@ async def test_build_logs_endpoint(client, admin_token):
     data = response.json()
     assert data["status"] == "draft"
     assert data["build_id"] is None
+
+
+# --- Default-environment seeder tests ---
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_notebook_environment_seeds(session, admin_user):
+    """Seeder creates a draft notebook environment when none exists."""
+    from sqlalchemy import select
+
+    from app.models.environment import Environment
+    from app.models.environment_version import EnvironmentVersion
+    from app.services.environment_service import ensure_default_notebook_environment
+
+    await ensure_default_notebook_environment(session)
+    await session.commit()
+
+    result = await session.execute(
+        select(Environment).where(
+            Environment.organization_id == admin_user.organization_id,
+            Environment.environment_type == "notebook",
+        )
+    )
+    envs = list(result.scalars().all())
+    assert len(envs) == 1, "exactly one default notebook env should be seeded"
+    env = envs[0]
+    assert env.visibility == "organization"
+
+    versions = list(
+        (await session.execute(select(EnvironmentVersion).where(EnvironmentVersion.environment_id == env.id))).scalars()
+    )
+    assert len(versions) == 1
+    v = versions[0]
+    assert v.status == "draft"
+    assert v.definition_format == "conda"
+    assert "python=3.11" in v.definition_content
+
+
+@pytest.mark.asyncio
+async def test_ensure_default_notebook_environment_idempotent(session, admin_user):
+    """Running the notebook seeder twice does not create duplicates."""
+    from sqlalchemy import select
+
+    from app.models.environment import Environment
+    from app.services.environment_service import ensure_default_notebook_environment
+
+    await ensure_default_notebook_environment(session)
+    await ensure_default_notebook_environment(session)
+    await session.commit()
+
+    result = await session.execute(
+        select(Environment).where(
+            Environment.organization_id == admin_user.organization_id,
+            Environment.environment_type == "notebook",
+        )
+    )
+    envs = list(result.scalars().all())
+    assert len(envs) == 1
