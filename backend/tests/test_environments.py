@@ -543,6 +543,49 @@ async def test_build_logs_endpoint(client, admin_token):
     assert data["build_id"] is None
 
 
+# --- Build error surfacing tests ---
+
+
+@pytest.mark.asyncio
+async def test_trigger_build_surfaces_real_error_message(monkeypatch, client, admin_token):
+    """When the build pipeline raises a non-ValueError (e.g. GCP API
+    failure), the endpoint should return a structured error with a
+    useful message instead of bubbling up as a 500 with no body --
+    which the frontend renders as a meaningless "Unknown error"."""
+    from app.services import environment_build_service
+
+    create_resp = await client.post(
+        "/api/v1/environments",
+        json={"name": "fail-build-env", "environment_type": "work_node"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    env_id = create_resp.json()["id"]
+
+    ver_resp = await client.post(
+        f"/api/v1/environments/{env_id}/versions",
+        json={"definition_format": "conda", "definition_content": "name: x\ndependencies: []\n"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    ver_id = ver_resp.json()["id"]
+
+    async def explode(*args, **kwargs):
+        raise RuntimeError("packer step failed: permission denied on bucket")
+
+    monkeypatch.setattr(environment_build_service.EnvironmentBuildService, "build_version", explode)
+
+    response = await client.post(
+        f"/api/v1/environments/{env_id}/versions/{ver_id}/build",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    detail = body.get("detail", "")
+    assert "packer step failed" in detail or "permission denied" in detail, (
+        f"Build endpoint should surface the underlying error message, got: {body!r}"
+    )
+
+
 # --- Default-environment seeder tests ---
 
 
