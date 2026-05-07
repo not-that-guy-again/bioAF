@@ -66,9 +66,24 @@ export default function EnvironmentsPage() {
   async function loadEnvironments(type?: string) {
     try {
       const filterType = type ?? typeFilter;
-      const query = filterType !== "all" ? `?type=${filterType}` : "";
-      const data = await api.get<EnvironmentListResponse>(`/api/v1/environments${query}`);
-      setEnvironments(data.environments);
+      // The Workbench env page only manages notebook and work_node envs.
+      // Pipeline envs live under Pipelines > Environments and would be
+      // unusable here, so "all" must fetch both notebook and work_node
+      // explicitly rather than calling the unfiltered list endpoint.
+      let envs: EnvironmentResponse[];
+      if (filterType === "all") {
+        const [nb, wn] = await Promise.all([
+          api.get<EnvironmentListResponse>("/api/v1/environments?type=notebook"),
+          api.get<EnvironmentListResponse>("/api/v1/environments?type=work_node"),
+        ]);
+        envs = [...nb.environments, ...wn.environments].sort(
+          (a, b) => +new Date(b.created_at) - +new Date(a.created_at)
+        );
+      } else {
+        const data = await api.get<EnvironmentListResponse>(`/api/v1/environments?type=${filterType}`);
+        envs = data.environments;
+      }
+      setEnvironments(envs);
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load environments");
