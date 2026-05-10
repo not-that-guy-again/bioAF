@@ -1,3 +1,11 @@
+> ## This repository has moved
+>
+> **All new development of bioAF has moved to [github.com/bioAF/bioAF](https://github.com/bioAF/bioAF).**
+>
+> This repository is preserved for historical reference only. Issues, pull requests, and updates should be directed to the new repository. The documentation below is retained as-is and may be out of date.
+
+---
+
 <p align="center">
   <img src="assets/mascot.png" alt="bioAF" width="200" />
 </p>
